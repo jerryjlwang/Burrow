@@ -1,0 +1,46 @@
+{
+  "name": "pip-learning-companion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pip: a tiny animated AI learning companion that lives in the corner of the browser (Chrome MV3 extension + local voice/agent server).",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n server,extension -c cyan,magenta \"npm:dev:server\" \"npm:dev:extension\"",
+    "dev:server": "tsx watch server/src/index.ts",
+    "dev:extension": "node extension/build.mjs --watch",
+    "build": "npm run build:extension",
+    "build:extension": "node extension/build.mjs",
+    "start": "tsx server/src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "node e2e/smoke.mjs",
+    "icons": "node scripts/make-icons.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.127.0",
+    "@deepgram/sdk": "^5.11.0",
+    "dotenv": "^18.0.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "ws": "^8.21.3",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.3.0",
+    "@types/node": "^26.6.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/ws": "^8.18.1",
+    "concurrently": "^10.0.5",
+    "esbuild": "^0.28.2",
+    "jsdom": "^29.1.1",
+    "playwright": "^1.63.0",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  }
+}
