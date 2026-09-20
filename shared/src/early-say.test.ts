@@ -46,3 +46,23 @@ describe("speakableEarly", () => {
     expect(speakableEarly(`{"action":"speak","say":"${"a".repeat(900)}",`)).toHaveLength(400);
   });
 });
+
+describe("pointing hints", () => {
+  it("speaks once the target element is known, not before", () => {
+    expect(speakableEarly('{"action":"point_to","say":"Right here.",')).toBeNull();
+    expect(speakableEarly('{"action":"point_to","say":"Right here.","elementId":1')).toBeNull(); // "1" may still become "12"
+    expect(speakableEarly('{"action":"point_to","say":"Right here.","elementId":12,')).toBe("Right here.");
+    expect(speakableEarly('{"action":"highlight","say":"This part.","elementId":0,"text":null')).toBe("This part.");
+    expect(speakableEarly('{"action":"scroll_to","say":"Down here.","elementId":7,')).toBe("Down here.");
+  });
+
+  it("stays silent when there is no element target (a quote or a point comes much later, and may be invalid)", () => {
+    expect(speakableEarly('{"action":"point_to","say":"Right here.","elementId":null,"text":null,')).toBeNull();
+    expect(speakableEarly('{"action":"point_to","say":"Right here.","elementId":-1,')).toBeNull();
+  });
+
+  it("still never speaks early for actions that can be gated", () => {
+    expect(speakableEarly('{"action":"click","say":"On it.","elementId":4,')).toBeNull();
+    expect(speakableEarly('{"action":"type","say":"Sure.","elementId":4,')).toBeNull();
+  });
+});

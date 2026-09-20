@@ -609,6 +609,33 @@ try {
     await rp.close();
   }
 
+  // Reading below a video scrolls the player off screen; the loop brings it back by itself (the
+  // model reliably forgets to). Pointing holds the return until the pointer has finished.
+  {
+    const vp = await context.newPage();
+    await vp.goto(`http://localhost:${PORT}/demo/video-chapters.html`, { waitUntil: "load" });
+    await vp.locator("#pip-companion-host").waitFor({ state: "attached", timeout: 10000 });
+    await new Promise((r) => setTimeout(r, 1500));
+    const playerOnScreen = () => vp.evaluate(() => { const r = document.getElementById("lesson").getBoundingClientRect(); return r.bottom > 80 && r.top < innerHeight - 80; });
+    await vp.evaluate(() => document.getElementById("pip-companion-host").shadowRoot.querySelector(".pip-char-btn")?.click());
+    await vp.locator(".pip-panel").waitFor({ timeout: 5000 });
+    await vp.locator(".pip-input").fill('Point at "The sign mistake, and how to catch it"');
+    await vp.locator(".pip-send").click();
+    let left = false;
+    for (const t0 = Date.now(); Date.now() - t0 < 6000 && !left; ) {
+      left = !(await playerOnScreen());
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    check("pointing at a chapter below the video takes the player off screen (setup)", left);
+    let back = false;
+    for (const t0 = Date.now(); Date.now() - t0 < 12000 && !back; ) {
+      back = await playerOnScreen();
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    check("the page returns to the video once the pointer is done", left && back);
+    await vp.close();
+  }
+
   // Consequential action asks for confirmation.
   await page.goto(`http://localhost:${PORT}/demo/quiz.html`, { waitUntil: "load" });
   await page.locator("#pip-companion-host").waitFor({ state: "attached", timeout: 10000 });

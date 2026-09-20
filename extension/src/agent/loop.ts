@@ -63,6 +63,9 @@ export interface LoopDeps {
   getVideo?: () => { context: VideoContext; frame: () => string | null } | null;
   /** A learning hint was just given on the problem on screen. */
   onHint?: () => void;
+  /** Is the page's video on screen, and bring it back if not. */
+  videoInView?: () => boolean;
+  returnToVideo?: () => void;
 }
 
 export interface RunOptions {
@@ -150,6 +153,7 @@ export class AgentLoop {
     const learner = formatDiagnostics(diagnose(session.graph, Date.now()));
     if (opts.resume?.lastReferencedElementName) this.lastReferencedElementName = opts.resume.lastReferencedElementName;
     const taskType = classifyTask(utterance, store.getState().page);
+    const videoWasInView = this.deps.videoInView?.() ?? false;
     let firstStep = true;
     session.updateStudent({ currentGoal: goal });
     store.setState({ busy: true, characterState: "thinking", status: "Thinking…", debug: { ...store.getState().debug, goal, loopStep: step, lastTranscript: utterance } });
@@ -355,6 +359,7 @@ export class AgentLoop {
         }
       }
       if (opts.resume) await session.setPendingLoop(null);
+      this.bringVideoBack(videoWasInView, taskType, history[history.length - 1]?.decision.action ?? null);
     } catch (e) {
       if (e instanceof Cancelled) {
         logger.debug("loop cancelled");
@@ -371,6 +376,26 @@ export class AgentLoop {
         this.deps.onIdle?.();
       }
     }
+  }
+
+  /**
+   * Reading a video's description or chapters means scrolling the player off screen, and the model
+   * reliably forgets to scroll back. So it isn't asked to: if this run took the video out of view,
+   * the loop returns to it when the run ends. Two exceptions — the student asked to go somewhere
+   * ("scroll to the comments"), and the rabbit is pointing at something down there, in which case
+   * the return waits for the pointer to finish and is abandoned if the student scrolls or speaks.
+   */
+  private bringVideoBack(wasInView: boolean, taskType: string | null, lastAction: string | null): void {
+    if (!wasInView || taskType === "navigation" || this.deps.videoInView?.() !== false) return;
+    if (lastAction !== "point_to" && lastAction !== "highlight") {
+      this.deps.returnToVideo?.();
+      return;
+    }
+    const run = this.runCount;
+    const y = window.scrollY;
+    window.setTimeout(() => {
+      if (this.runCount === run && Math.abs(window.scrollY - y) < 60 && this.deps.videoInView?.() === false) this.deps.returnToVideo?.();
+    }, 7000);
   }
 
   /** A resource opened for a path suggestion is remembered against its concept, so later attempts can say whether it helped. */
@@ -458,7 +483,8 @@ export class AgentLoop {
    * otherwise it is discarded unseen. This only computes — it never speaks, acts or records.
    */
   speculate(utterance: string): void {
-    if (this.running || !utterance.trim()) return;
+    // A pause two words in ("The most…") is not the end of a thought; a guess there is a wasted model call.
+    if (this.running || utterance.trim().split(/\s+/).length < 3) return;
     const { session } = this.deps;
     const page = this.deps.observe();
     const taskType = classifyTask(utterance, page);
@@ -480,11 +506,6 @@ export class AgentLoop {
     logger.debug("speculating", { utterance });
     const requestId = this.newRequestId();
     this.speculator.start(speculationKey(utterance, page.url), () => this.decide(input, new AbortController().signal, requestId), requestId);
-  }
-
-  /** The student kept talking: whatever was guessed is about the wrong sentence. */
-  dropSpeculation(): void {
-    this.speculator.drop();
   }
 
   private newRequestId(): string {
