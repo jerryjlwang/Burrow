@@ -7,3 +7,4 @@ extension/dist/
 e2e/.profile/
 e2e/screenshots/
 coverage/
+__pycache__/

@@ -10,10 +10,11 @@ Updated: 2026-09-19
 - Generator output path fixed so `python tools/sprites/rabbit_px.py` writes into `extension/public/characters/rabbit`.
 - `web_accessible_resources` added for `characters/*` so the content script can load sprites with `chrome.runtime.getURL`.
 - Product renamed to Wonderland in front end files: manifest, package.json, popup, onboarding, debug panel. Default character name is White Rabbit. Backend-owned files still say Pip, see `BACKEND_REQUESTS.md`.
+- Task 1, thinking eyes: the glance no longer shifts the eye blocks. Both eye shapes stay in place and only the shine moves down and right (`LOOK_SHINE` in `rabbit_px.py`). Checked at 8x on light and dark with `tools/sprites/contact_sheet.py`.
 
 ## In progress
 
-- Nothing.
+- Task 2, thought bubble for `thinking`.
 
 ## Blocked
 
@@ -21,11 +22,12 @@ Updated: 2026-09-19
 
 ## Next three tasks
 
-1. Thinking animation: keep both eye shapes in place and move only the shine. Verify at 8x on light and dark.
-2. Replace the three thinking dots with a hand-placed thought bubble with animated contents.
-3. Transition frames between states and a state graph in the character manifest.
+1. Task 2: replace the three thinking dots with a hand-placed thought bubble with animated contents.
+2. Task 3: transition frames between states and a state graph in the character manifest.
+3. Task 4: anticipation, settle and secondary motion, plus random idle variety.
 
 ## Notes
 
+- `python tools/sprites/contact_sheet.py --states idle,thinking --scale 8 --out sheet.png` renders any states at any scale on light and dark. Nothing in it writes to the shipped strips.
 - Typecheck, build and unit tests pass on the `frontend` branch as of this update.
 - The onboarding page still renders the old CSS/SVG mascot. It switches to the rabbit once the sprite player exists.

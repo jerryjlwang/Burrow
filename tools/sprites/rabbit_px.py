@@ -108,6 +108,7 @@ EYES = {
     "closed": {24: [(4, 4, "o"), (7, 7, "o")], 25: [(5, 6, "o")]},
     "happy": {23: [(5, 6, "o")], 24: [(4, 4, "o"), (7, 7, "o")]},
 }
+LOOK_SHINE = (2, 1)
 SHINE = {"open": [(23, 17), (23, 29)], "wide": [(22, 17), (23, 17), (22, 29), (23, 29)],
          "half": [], "closed": [], "happy": []}
 MOUTHS = {
@@ -174,15 +175,12 @@ def rabbit(ear_l="up", ear_r="up", eyes="open", mouth="smile", look=False, perk=
     for r, c in SHINE[eyes]:
         g[r][c] = "h"
     if look:
-        for c0 in (16, 28):
-            block = [[g[r][c] for c in range(c0, c0 + 4)] for r in range(22, 27)]
-            for r in range(22, 27):
-                for c in range(c0, c0 + 4):
-                    g[r][c] = "w"
-            for i, r in enumerate(range(23, 28)):
-                for j, c in enumerate(range(c0 + 1, c0 + 5)):
-                    if block[i][j] != "w":
-                        g[r][c] = block[i][j]
+        # Glance down toward the watch. Both eye shapes stay where they are so the
+        # face keeps its symmetry; only the shine moves, by LOOK_SHINE (rows, cols).
+        for r, c in SHINE[eyes]:
+            g[r][c] = "e"
+        for r, c in SHINE[eyes]:
+            g[r + LOOK_SHINE[0]][c + LOOK_SHINE[1]] = "h"
     clear_region(g, range(28, 31), 0, 3)
     g[31][23] = g[31][24] = "w"
     paint(g, MOUTHS[mouth])
@@ -378,14 +376,26 @@ def export(S, out=OUT):
         strip = Image.new("RGBA", (W * len(st["frames"]), H))
         for i, f in enumerate(st["frames"]):
             strip.paste(image(f), (i * W, 0))
-        strip.save(os.path.join(out, f"rabbit_{name}.png"))
+        path = os.path.join(out, f"rabbit_{name}.png")
+        if not same_pixels(path, strip):
+            strip.save(path)
         entry = {"file": f"rabbit_{name}.png", "frames": len(st["frames"]), "fps": st["fps"], "loop": st["loop"],
                  "notes": NOTES[name]}
         if "head_dy" in st:
             entry["head_dy"] = st["head_dy"]
         man["states"][name] = entry
-    json.dump(man, open(os.path.join(out, "manifest.json"), "w"), indent=2)
+    with open(os.path.join(out, "manifest.json"), "w", newline="\n") as fh:
+        json.dump(man, fh, indent=2)
+        fh.write("\n")
     return man
+
+
+def same_pixels(path, im):
+    """True when the PNG at path already holds exactly these pixels, so git does not see a re-encoded file."""
+    if not os.path.exists(path):
+        return False
+    old = Image.open(path).convert("RGBA")
+    return old.size == im.size and old.tobytes() == im.tobytes()
 
 
 if __name__ == "__main__":
