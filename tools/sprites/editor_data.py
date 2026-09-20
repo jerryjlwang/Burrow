@@ -18,7 +18,7 @@ import rabbit_px  # noqa: E402
 from PIL import Image  # noqa: E402
 
 EDITOR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sprite-editor.html")
-KEY = "wonderland-rabbit-v4-edits"
+KEY = "burrow-rabbit-v4-edits"
 
 # How each frame was built from the base drawing, so a stroke on one frame lands in the right
 # place on the others. n: unchanged. b: the one pixel breath (rows 1 to 41 shift down one).

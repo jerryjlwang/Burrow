@@ -2,11 +2,11 @@
 
 Things the front end needs from backend-owned code. Anything not done yet is mocked on the front end so work is not blocked.
 
-## 1. Finish the rename from Pip to Wonderland
+## 1. Finish the rename from Pip to Burrow
 
 Status: open. Requested 2026-09-19.
 
-Front end files now say Wonderland, and the default character name is White Rabbit. These strings live in backend-owned files:
+Front end files now say Burrow, and the default character name is White Rabbit. These strings live in backend-owned files:
 
 - `server/src/agent/prompt.ts`: the persona still tells the model it is Pip. The pet should be the White Rabbit: curious, a little naive, asks the kid questions, forgets on a schedule and asks to be re-taught.
 - `extension/src/background/index.ts`: context menu titles "Pip", "Explain this with Pip", "Summarize this with Pip".

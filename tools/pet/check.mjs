@@ -170,6 +170,18 @@ try {
     await wait(300);
     check(`${theme}: escape closes the panel`, (await page.locator(".pip-panel").count()) === 0);
 
+    // The speech bubble with its pixel frame, tail and buttons.
+    await btn("show bubble").click();
+    await page.locator(".pip-bubble").waitFor({ timeout: 3000 });
+    await wait(400);
+    const bubbleBox = await page.locator(".pip-bubble").boundingBox();
+    const hitB = await hitBox();
+    check(`${theme}: bubble sits above the rabbit with whole-pixel frame width`, bubbleBox && hitB && bubbleBox.y + bubbleBox.height <= hitB.y + 30 && Math.round(bubbleBox.width) % 3 === 0, JSON.stringify({ bubbleBox, hitB }));
+    await shot("29-bubble");
+    await btn("hide bubble").click();
+    await wait(300);
+    check(`${theme}: bubble can be cleared`, (await page.locator(".pip-bubble").count()) === 0);
+
     // Drag: pointer capture on the body, dragged strip while moving, no panel toggle on release.
     // Slow moves so the release is a drop, not a throw.
     const h0 = await hitBox();

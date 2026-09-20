@@ -1,8 +1,8 @@
 {
-  "name": "wonderland",
+  "name": "burrow",
   "version": "0.1.0",
   "private": true,
-  "description": "Wonderland: an Alice in Wonderland themed AI learning pet for kids (Chrome MV3 extension + local voice/agent server).",
+  "description": "Burrow: an Alice in Burrow themed AI learning pet for kids (Chrome MV3 extension + local voice/agent server).",
   "type": "module",
   "scripts": {
     "dev": "concurrently -n server,extension -c cyan,magenta \"npm:dev:server\" \"npm:dev:extension\"",

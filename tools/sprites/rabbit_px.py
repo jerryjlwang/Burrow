@@ -1,5 +1,5 @@
 """
-Wonderland OS: the White Rabbit, hand-placed pixels (v3).
+Burrow: the White Rabbit, hand-placed pixels (v3).
 
 Nothing here is rasterized from curves. Every outline run, every shade pixel and
 every patch is placed by hand in the specs below, the way you would in Aseprite.

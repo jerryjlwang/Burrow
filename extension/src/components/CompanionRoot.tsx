@@ -12,6 +12,44 @@ import { DebugPanel } from "./DebugPanel";
 const DOCK_EDGE = 18;
 const DOCK_GAP = 10;
 const PANEL_WIDTH = 350;
+/** A press shorter than this is a tap: it leaves voice on until the next tap. */
+const TAP_MS = 350;
+/** After a held press ends, wait this long before stopping so the last words land. */
+const RELEASE_GRACE_MS = 800;
+
+function assetUrl(path: string): string {
+  try {
+    if (typeof chrome !== "undefined" && chrome.runtime?.getURL) return chrome.runtime.getURL(path);
+  } catch {
+    /* not an extension context */
+  }
+  return path;
+}
+
+/** The pixel UI pieces, handed to the stylesheet as url() variables. */
+const UI_VARS = {
+  "--ui-bubble": `url("${assetUrl("ui/bubble.png")}")`,
+  "--ui-bubble-teal": `url("${assetUrl("ui/bubble_teal.png")}")`,
+  "--ui-tail": `url("${assetUrl("ui/bubble_tail.png")}")`,
+  "--ui-btn": `url("${assetUrl("ui/button.png")}")`,
+  "--ui-btn-primary": `url("${assetUrl("ui/button_primary.png")}")`,
+  "--ui-btn-quiet": `url("${assetUrl("ui/button_quiet.png")}")`,
+  "--ui-btn-alert": `url("${assetUrl("ui/button_alert.png")}")`,
+  "--ui-ear": `url("${assetUrl("ui/ear.png")}")`,
+} as React.CSSProperties;
+
+let fontRequested = false;
+/** Loads the kid font through the FontFace API. @font-face does not work inside a shadow root, and this path is not subject to page CSP. */
+function loadKidFont(): void {
+  if (fontRequested || typeof FontFace === "undefined" || !document.fonts) return;
+  fontRequested = true;
+  try {
+    const face = new FontFace("Burrow Pixel", `url("${assetUrl("fonts/PixelifySans.ttf")}")`, { weight: "400 700", display: "swap" });
+    face.load().then((f) => document.fonts.add(f)).catch(() => undefined);
+  } catch {
+    /* font stays on the fallback */
+  }
+}
 
 export function CompanionRoot({ controller }: { controller: CompanionController }) {
   const characterState = useStore((s) => s.characterState);
@@ -44,6 +82,43 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
 
   // Nothing going on: the pet may wander now and then.
   const quiet = !panelOpen && !bubble && characterState === "idle" && voice.mode === "off";
+
+  useEffect(() => loadKidFont(), []);
+
+  // Hold to talk. A tap turns voice on (or off when it was on); a hold listens until release plus a grace period.
+  const press = useRef<{ at: number; wasOn: boolean } | null>(null);
+  const stopTimer = useRef<number | null>(null);
+  const clearStop = () => {
+    if (stopTimer.current !== null) window.clearTimeout(stopTimer.current);
+    stopTimer.current = null;
+  };
+  const onTalkDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    clearStop();
+    const mode = store.getState().voice.mode;
+    const wasOn = mode === "listening" || mode === "starting";
+    press.current = { at: Date.now(), wasOn };
+    if (!wasOn) void controller.toggleVoice();
+  };
+  const onTalkUp = () => {
+    const p = press.current;
+    press.current = null;
+    if (!p) return;
+    const held = Date.now() - p.at;
+    const stopIfOn = () => {
+      const mode = store.getState().voice.mode;
+      if (mode === "listening" || mode === "starting") void controller.toggleVoice();
+    };
+    if (p.wasOn) {
+      if (held < TAP_MS) stopIfOn();
+      return;
+    }
+    if (held >= TAP_MS) stopTimer.current = window.setTimeout(stopIfOn, RELEASE_GRACE_MS);
+  };
+  const talkRight = !!petBox && petBox.left < 90;
+  const listening = voice.mode === "listening";
 
   // When a new "point" highlight appears while the panel is closed, go stand beside it.
   const seenPoints = useRef(new Set<string>());
@@ -83,7 +158,7 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
 
   if (minimized) {
     return (
-      <div className="pip-root">
+      <div className="pip-root" style={UI_VARS}>
         <button type="button" className="pip-mini" onClick={() => controller.restore()} aria-label={`Show ${settings.characterName}`} title={`Show ${settings.characterName}`}>
           <span className="pip-mini-dot" />
         </button>
@@ -111,7 +186,7 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
   }
 
   return (
-    <div className={`pip-root${reduced ? " reduced" : ""}`}>
+    <div className={`pip-root${reduced ? " reduced" : ""}`} style={UI_VARS}>
       <Overlay />
       {settings.debugMode && <DebugPanel pet={petRef} />}
       <div className={`pip-dock${below ? " below" : ""}`} style={dockStyle}>
@@ -121,6 +196,20 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
           {panelOpen && <Panel controller={controller} />}
         </div>
         <div className="pip-char-wrap">
+          <button
+            type="button"
+            className={`pip-talk${listening ? " on" : ""}${voice.mode === "starting" ? " starting" : ""}${talkRight ? " right" : ""}`}
+            aria-label={listening ? "Listening. Let go or tap to stop." : "Hold to talk"}
+            aria-pressed={listening}
+            onPointerDown={onTalkDown}
+            onPointerUp={onTalkUp}
+            onPointerCancel={onTalkUp}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            <span className="pip-talk-meter" style={{ height: listening ? Math.round(level * 14) * 3 : 0 }} aria-hidden="true" />
+            <span className="pip-talk-ear" aria-hidden="true" />
+            <span className="pip-talk-label" aria-hidden="true">{listening ? "Listening" : "Hold to talk"}</span>
+          </button>
           {voice.mode === "listening" && <span className="pip-mic-badge" title="Microphone is on" aria-hidden="true" />}
           {unread > 0 && !panelOpen && <span className="pip-unread" aria-hidden="true">{unread}</span>}
           <button type="button" className={`pip-char-btn${busy ? " busy" : ""}`} onClick={() => controller.togglePanel()} aria-label={label} aria-expanded={panelOpen} title={panelOpen ? "Close" : `Talk to ${settings.characterName}`}>

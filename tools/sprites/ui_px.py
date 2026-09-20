@@ -1,5 +1,5 @@
 """
-Wonderland OS: hand-placed pixel UI frames in the rabbit's palette.
+Burrow: hand-placed pixel UI frames in the rabbit's palette.
 
 Writes 9-slice frames and small pieces into extension/public/ui/. The kid and parent UI draw
 them with CSS border-image at a whole-number scale, so they stay as crisp as the rabbit.
@@ -59,11 +59,25 @@ BUTTON = [
 # Where a button's bottom edge shows its shadow line (one pixel darker), so it reads as raised.
 PIECES = {
     "bubble": (FRAME, {}, 5),
+    "bubble_teal": (FRAME, {"R": "t"}, 5),
     "button": (BUTTON, {"X": "g"}, 4),
     "button_primary": (BUTTON, {"X": "t"}, 4),
     "button_quiet": (BUTTON, {"X": "R"}, 4),
     "button_alert": (BUTTON, {"X": "c"}, 4),
 }
+
+
+# The rabbit's left ear on its own, for the hold to talk button. Rows and runs come from rabbit_px.
+def ear_rows():
+    from rabbit_px import EAR_UP
+    rows = []
+    for r in range(3, 16):
+        line = ["."] * 8
+        for a, b, ch in EAR_UP[r]:
+            for d in range(a, b + 1):
+                line[1 + 8 - d] = ch
+        rows.append("".join(line))
+    return [".." * 4] + rows + [".." * 4]
 
 
 def image(rows, sub=None):
@@ -94,6 +108,11 @@ def export(out=OUT):
         if not same_pixels(path, im):
             im.save(path)
         man["pieces"][name] = {"file": f"{name}.png", "size": list(im.size), "slice": slice_px}
+    ear = image(ear_rows())
+    path = os.path.join(out, "ear.png")
+    if not same_pixels(path, ear):
+        ear.save(path)
+    man["pieces"]["ear"] = {"file": "ear.png", "size": list(ear.size), "slice": 0, "note": "Icon for the hold to talk button."}
     tail = image(TAIL)
     path = os.path.join(out, "bubble_tail.png")
     if not same_pixels(path, tail):

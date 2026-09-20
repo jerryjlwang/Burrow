@@ -60,6 +60,25 @@ function PetControls({ pet }: { pet?: RefObject<PetController | null> }) {
         <button type="button" onClick={() => void pet?.current?.jumpOut()}>jump out</button>
         <button type="button" onClick={jumpIn}>jump in (1.5 s)</button>
         <button type="button" onClick={() => pet?.current?.play("wave")}>wave</button>
+        <button
+          type="button"
+          onClick={() =>
+            store.setState({
+              bubble: {
+                id: `debug-${Date.now()}`,
+                text: "So a moat is a ditch full of water around a castle? Did I get that right?",
+                kind: "offer",
+                actions: [
+                  { label: "Yes!", value: "accept", primary: true },
+                  { label: "Not quite", value: "decline" },
+                ],
+              },
+            })
+          }
+        >
+          show bubble
+        </button>
+        <button type="button" onClick={() => store.setState({ bubble: null })}>hide bubble</button>
       </div>
       <div className="pip-debug-pet">
         <button type="button" onClick={() => hopBy(-150)}>hop left</button>
@@ -87,7 +106,7 @@ export function DebugPanel({ pet }: { pet?: RefObject<PetController | null> }) {
   const offline = useStore((s) => s.offline);
   return (
     <aside className="pip-debug" aria-label="Developer panel">
-      <h4>Wonderland dev</h4>
+      <h4>Burrow dev</h4>
       <div className="pip-debug-grid">
         <span>character</span><b>{characterState}</b>
         <span>voice</span><b>{voice.mode}{voice.ttsPlaying ? " · tts" : ""}{voice.serverOk === false || offline ? " · server ✗" : voice.serverOk ? " · server ✓" : ""}</b>

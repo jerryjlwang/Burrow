@@ -9,7 +9,7 @@ Updated: 2026-09-19
 - Sprite tools moved to `tools/sprites/rabbit_px.py`, `tools/sprites/README.md` and `tools/sprite-editor.html`. The two reference players stay in `tools/reference`.
 - Generator output path fixed so `python tools/sprites/rabbit_px.py` writes into `extension/public/characters/rabbit`.
 - `web_accessible_resources` added for `characters/*` so the content script can load sprites with `chrome.runtime.getURL`.
-- Product renamed to Wonderland in front end files: manifest, package.json, popup, onboarding, debug panel. Default character name is White Rabbit. Backend-owned files still say Pip, see `BACKEND_REQUESTS.md`.
+- Product renamed to Burrow in front end files: manifest, package.json, popup, onboarding, debug panel. Default character name is White Rabbit. Backend-owned files still say Pip, see `BACKEND_REQUESTS.md`.
 - Task 1, thinking eyes: the glance no longer shifts the eye blocks. Both eye shapes stay in place and only the shine moves down and right (`LOOK_SHINE` in `rabbit_px.py`). Checked at 8x on light and dark with `tools/sprites/contact_sheet.py`.
 - Task 2, thought bubble: the cell is now 64 x 58 for every state (the rabbit did not move; 8 transparent columns were added on each side and verified pixel for pixel). `thinking` shows a hand-placed cream bubble with a brown outline, two trailing circles and a pocket watch whose hand ticks. New state `aha` plays once when the answer is ready: unlit bulb, lit bulb, sparks, then idle frame 0. Sprite editor refreshed for the new cell with `tools/sprites/editor_data.py`. Checked at 8x, 10x and 12x on light and dark.
 
@@ -26,6 +26,8 @@ Updated: 2026-09-19
 
 - Movement round, player: `extension/src/components/pet/travel.ts` holds the pure movement rules (hop or hole choice, hop planning, wander gate with a hard minimum gap, where to stand beside a pointed element, throw physics, release velocity). The player accumulates `move` per frame; `SpritePet` applies it in whole multiples of the scale, flies thrown drags with gravity and one bounce, wanders only while quiet and never more than once per `wander_gap[0]` seconds, resizes 2x to 6x through the hole with the feet fixed, and hop trips end with the calm `settle` state while throws end with `land`. `CompanionRoot` sends him beside a newly pointed element when the panel is closed. Debug buttons: hop left and right, throw, go to headline, wander now, grow 4x, shrink 2x, normal 3x. `panic` art exists for the "I'm late" vignette but is not wired yet. Checked with `tools/pet/check.mjs`: 52 of 52 on light and dark, screenshots viewed. 107 unit tests pass.
 
+- Kid UI restyle: the bubble, panel, messages, input, buttons, badges and the minimized tab now use the hand-placed 9-slice frames at 15px (5 source pixels at 3x) with `border-image` and `repeat`, the Burrow palette (cream, brown, teal, gold, red) and Pixelify Sans loaded through the FontFace API (page CSP cannot block it, and `@font-face` does not work inside a shadow root). The bubble has a pixel tail that flips when the bubble hangs below the pet. A hold to talk button with the rabbit's ear sits at his feet: tap turns voice on, tap again turns it off, a hold listens until release plus a short grace. Product renamed to Burrow in front end files. Checked with `tools/pet/check.mjs`: 56 of 56 on light and dark, bubble and panel screenshots viewed.
+
 ## In progress
 
 - Nothing.
@@ -36,7 +38,7 @@ Updated: 2026-09-19
 
 ## Next three tasks
 
-1. Kid UI restyle with the pixel frames and font: bubble, hold to talk, panel.
+1. Decide the direction for the extension's own pages (new tab, onboarding, parent view), see the proposal to Micah.
 2. Wire the "I'm late" vignette (panic, then a hole trip) as a rare idle event, and peeking from the edge.
 3. Parent UI, then wire `jumpOut` and `jumpIn` to the real handoff.
 

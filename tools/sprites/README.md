@@ -1,4 +1,4 @@
-# Wonderland OS: the White Rabbit (v4, hand-placed pixels)
+# Burrow: the White Rabbit (v4, hand-placed pixels)
 
 Original design from public domain book details: white fur, checked jacket, waistcoat, bow tie, pocket watch on a chain. Not the Disney rabbit.
 

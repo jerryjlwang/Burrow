@@ -1,27 +1,26 @@
-/* All companion UI lives inside a shadow root; nothing here leaks to the host page. */
+/* All companion UI lives inside a shadow root; nothing here leaks to the host page.
+   Frames are hand-placed 9-slice pieces from extension/public/ui drawn with border-image at a
+   whole-number scale (3x on the page), so they stay as crisp as the rabbit. The url() values
+   come in as CSS variables set by CompanionRoot from chrome.runtime.getURL. */
 :host, .pip-root {
-  --pip-accent: #7c5cff;
-  --pip-accent-2: #ff9a78;
-  --pip-bg: rgba(255, 255, 255, 0.94);
-  --pip-bg-solid: #ffffff;
-  --pip-fg: #1c1a2e;
-  --pip-muted: #6b6884;
-  --pip-border: rgba(28, 26, 46, 0.08);
-  --pip-shadow: 0 18px 48px rgba(30, 20, 70, 0.22), 0 2px 6px rgba(0, 0, 0, 0.06);
-  --pip-user: #eeeaff;
-  --pip-radius: 18px;
-  --pip-font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-}
-@media (prefers-color-scheme: dark) {
-  :host, .pip-root {
-    --pip-bg: rgba(30, 27, 48, 0.94);
-    --pip-bg-solid: #1e1b30;
-    --pip-fg: #f3f0ff;
-    --pip-muted: #b3adcc;
-    --pip-border: rgba(255, 255, 255, 0.1);
-    --pip-user: #35305a;
-    --pip-shadow: 0 18px 48px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
-  }
+  --ink: #3b2a23;
+  --cream: #fff8e7;
+  --paper: #fffdf5;
+  --teal: #2f8f83;
+  --teal-deep: #236e65;
+  --gold: #f2c14e;
+  --gold-deep: #b57f2c;
+  --red: #d9534f;
+  --pip-accent: var(--teal);
+  --pip-accent-2: var(--gold);
+  --pip-fg: var(--ink);
+  --pip-muted: #7a6458;
+  --pip-bg-solid: var(--paper);
+  --pip-font: "Burrow Pixel", "Pixelify Sans", "Segoe UI", system-ui, sans-serif;
+  --pip-font-plain: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --frame: 15px;
+  --btn-frame: 12px;
+  --shadow: 3px 3px 0 rgba(59, 42, 35, 0.25);
 }
 
 .pip-root {
@@ -30,15 +29,35 @@
   pointer-events: none;
   z-index: 2147483646;
   font-family: var(--pip-font);
-  font-size: 14px;
-  line-height: 1.45;
-  color: var(--pip-fg);
-  -webkit-font-smoothing: antialiased;
+  font-size: 17px;
+  line-height: 1.3;
+  color: var(--ink);
   text-align: left;
 }
 .pip-root *, .pip-root *::before, .pip-root *::after { box-sizing: border-box; }
 .pip-root button { font-family: inherit; }
-.pip-root :focus-visible { outline: 3px solid var(--pip-accent); outline-offset: 2px; border-radius: 8px; }
+.pip-root :focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+
+/* Cream frame: 5 source pixels of border, fill from the same image. */
+.px-frame, .pip-bubble, .pip-panel, .pip-msg.companion, .pip-msg.user, .pip-input {
+  border: var(--frame) solid transparent;
+  border-image: var(--ui-bubble) 5 fill / var(--frame) repeat;
+  image-rendering: pixelated;
+  background: none;
+  border-radius: 0;
+}
+/* Gold button frame: 4 source pixels of border. */
+.pip-btn, .pip-mic, .pip-send, .pip-talk {
+  border: var(--btn-frame) solid transparent;
+  border-image: var(--ui-btn) 4 fill / var(--btn-frame) repeat;
+  image-rendering: pixelated;
+  background: none;
+  border-radius: 0;
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.2);
+}
+.pip-btn:active, .pip-mic:active, .pip-send:active:not(:disabled), .pip-talk:active { transform: translate(3px, 3px); box-shadow: none; }
 
 /* ---------- Dock (bottom-right) ---------- */
 .pip-dock {
@@ -57,8 +76,6 @@
 .pip-dock-stack:empty { display: none; }
 /* When the pet sits high on the page the stack hangs below it and the dock is anchored by its top. */
 .pip-dock.below, .pip-dock.below .pip-dock-stack { flex-direction: column-reverse; }
-.pip-dock.below .pip-bubble { border-radius: 16px 4px 16px 16px; }
-.pip-dock.below .pip-panel { transform-origin: top right; }
 /* Only the pet's body box takes clicks; the wrap and button are transparent to the page. */
 .pip-char-wrap { position: relative; pointer-events: none; }
 .pip-char-btn {
@@ -66,27 +83,42 @@
   background: transparent;
   padding: 0;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: 0;
   display: block;
   pointer-events: none;
 }
 .pip-mic-badge {
-  position: absolute; left: -2px; top: 4px; width: 14px; height: 14px; border-radius: 50%;
-  background: #22c55e; border: 2px solid var(--pip-bg-solid); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6);
-  animation: pip-mic-pulse 1.6s ease-out infinite; z-index: 2;
+  position: absolute; left: -3px; top: 3px; width: 15px; height: 15px;
+  background: var(--teal); border: 3px solid var(--ink); z-index: 2;
+  animation: pip-blink 1.2s steps(2) infinite;
 }
-@keyframes pip-mic-pulse { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,.55); } 100% { box-shadow: 0 0 0 10px rgba(34,197,94,0); } }
 .pip-unread {
-  position: absolute; right: -2px; top: 2px; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px;
-  background: var(--pip-accent); color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center;
-  border: 2px solid var(--pip-bg-solid); z-index: 2;
+  position: absolute; right: -3px; top: 0; min-width: 21px; height: 21px; padding: 0 6px;
+  background: var(--red); color: var(--paper); font: 15px/1 var(--pip-font); display: grid; place-items: center;
+  border: 3px solid var(--ink); z-index: 2;
 }
 .pip-mini {
-  position: fixed; right: 0; bottom: 80px; width: 22px; height: 44px; border: 0; border-radius: 12px 0 0 12px;
-  background: linear-gradient(135deg, var(--pip-accent-2), var(--pip-accent)); cursor: pointer; pointer-events: auto;
-  box-shadow: var(--pip-shadow); display: grid; place-items: center;
+  position: fixed; right: 0; bottom: 80px; width: 24px; height: 45px; border: 3px solid var(--ink); border-right: 0;
+  background: var(--gold); cursor: pointer; pointer-events: auto; box-shadow: var(--shadow); display: grid; place-items: center; padding: 0;
 }
-.pip-mini-dot { width: 8px; height: 8px; border-radius: 50%; background: #fff; }
+.pip-mini-dot { width: 9px; height: 9px; background: var(--ink); }
+
+/* ---------- Hold to talk: a big ear button at the rabbit's feet ---------- */
+.pip-talk {
+  position: absolute; right: 100%; bottom: 12px; margin-right: 9px; width: 66px; height: 66px;
+  pointer-events: auto; padding: 0; display: grid; place-items: center; touch-action: none;
+  -webkit-user-select: none; user-select: none; overflow: hidden;
+}
+.pip-talk.right { right: auto; left: 100%; margin-right: 0; margin-left: 9px; }
+.pip-talk.on { border-image-source: var(--ui-btn-primary); }
+.pip-talk.starting { opacity: 0.7; }
+.pip-talk-meter { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: var(--gold); opacity: 0.8; }
+.pip-talk-ear { position: relative; width: 24px; height: 45px; background: var(--ui-ear) no-repeat; background-size: 24px 45px; image-rendering: pixelated; }
+.pip-talk-label {
+  position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); margin-bottom: 6px; white-space: nowrap;
+  font-size: 15px; color: var(--ink); background: var(--cream); padding: 0 6px; border: 3px solid var(--ink); pointer-events: none; opacity: 0;
+}
+.pip-talk:hover .pip-talk-label, .pip-talk:focus-visible .pip-talk-label { opacity: 1; }
 
 /* ---------- Pet (sprite player; the art comes from public/characters) ---------- */
 /* The footprint is as wide as the body box and as tall as the cell. The canvas overflows it on both
@@ -116,32 +148,33 @@
   position: relative;
   pointer-events: auto;
   max-width: 300px;
-  background: var(--pip-bg);
-  backdrop-filter: blur(14px);
-  color: var(--pip-fg);
-  border-radius: 16px 16px 4px 16px;
-  padding: 11px 36px 11px 14px;
-  box-shadow: var(--pip-shadow);
-  border: 1px solid var(--pip-border);
-  animation: pip-pop 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2);
-  margin-right: 6px;
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1.3;
+  padding: 0 24px 0 0;
+  margin: 0 9px 15px 0;
+  box-shadow: var(--shadow);
+  animation: pip-pop 0.18s steps(3);
 }
-.pip-bubble.kind-offer, .pip-bubble.kind-confirmation { padding-right: 14px; border-color: rgba(124, 92, 255, 0.35); }
-.pip-bubble.kind-error { border-color: rgba(225, 29, 72, 0.35); }
-.pip-bubble-text { margin: 0; font-size: 14px; }
-.pip-bubble-actions { display: flex; gap: 8px; margin-top: 10px; }
+/* The tail sits on the bottom outline and opens into the fill. It flips when the bubble hangs below the pet. */
+.pip-bubble::after {
+  content: ""; position: absolute; right: 27px; bottom: -24px; width: 21px; height: 12px;
+  background: var(--ui-tail) no-repeat; background-size: 21px 12px; image-rendering: pixelated;
+}
+.pip-dock.below .pip-bubble { margin: 15px 9px 0 0; }
+.pip-dock.below .pip-bubble::after { bottom: auto; top: -24px; transform: scaleY(-1); }
+.pip-bubble.kind-offer, .pip-bubble.kind-confirmation { padding-right: 0; }
+.pip-bubble.kind-error .pip-bubble-text::before { content: "! "; color: var(--red); }
+.pip-bubble-text { margin: 0; }
+.pip-bubble-actions { display: flex; gap: 9px; margin-top: 9px; flex-wrap: wrap; }
 .pip-bubble-close {
-  position: absolute; right: 6px; top: 6px; width: 24px; height: 24px; border: 0; border-radius: 50%;
-  background: transparent; color: var(--pip-muted); cursor: pointer; font-size: 16px; line-height: 1;
+  position: absolute; right: -9px; top: -9px; width: 24px; height: 24px; border: 0; padding: 0;
+  background: transparent; color: var(--ink); cursor: pointer; font: 20px/1 var(--pip-font);
 }
-.pip-bubble-close:hover { background: var(--pip-user); }
-.pip-btn {
-  border: 1px solid var(--pip-border); background: var(--pip-bg-solid); color: var(--pip-fg);
-  border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
-  transition: transform 0.15s ease, background 0.15s ease;
-}
-.pip-btn:hover { transform: translateY(-1px); }
-.pip-btn.primary { background: var(--pip-accent); border-color: var(--pip-accent); color: #fff; }
+.pip-btn { font: 17px/1 var(--pip-font); padding: 0 3px; }
+.pip-btn.primary { border-image-source: var(--ui-btn-primary); color: var(--paper); }
+.pip-btn.quiet { border-image-source: var(--ui-btn-quiet); }
+.pip-btn.alert { border-image-source: var(--ui-btn-alert); color: var(--paper); }
 
 /* ---------- Panel ---------- */
 .pip-panel {
@@ -151,59 +184,53 @@
   max-height: min(560px, 72vh);
   display: flex;
   flex-direction: column;
-  background: var(--pip-bg);
-  backdrop-filter: blur(18px);
-  border-radius: var(--pip-radius);
-  box-shadow: var(--pip-shadow);
-  border: 1px solid var(--pip-border);
+  color: var(--ink);
+  box-shadow: var(--shadow);
   overflow: hidden;
-  transform-origin: bottom right;
-  animation: pip-pop 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.15);
+  animation: pip-pop 0.18s steps(3);
 }
-.pip-panel-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 10px 10px 16px; border-bottom: 1px solid var(--pip-border); }
-.pip-panel-title { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.pip-panel-title strong { font-size: 15px; letter-spacing: -0.01em; }
-.pip-status { font-size: 12px; color: var(--pip-muted); display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pip-status.live { color: #16a34a; }
-.pip-live-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; animation: pip-dot 1.2s ease-in-out infinite; }
-.pip-panel-tools { display: flex; gap: 2px; }
-.pip-icon-btn { width: 30px; height: 30px; border: 0; border-radius: 8px; background: transparent; color: var(--pip-muted); cursor: pointer; font-size: 16px; line-height: 1; }
-.pip-icon-btn:hover { background: var(--pip-user); color: var(--pip-fg); }
-.pip-settings { padding: 10px 16px; border-bottom: 1px solid var(--pip-border); display: flex; flex-direction: column; gap: 8px; font-size: 13px; background: rgba(124, 92, 255, 0.05); }
+.pip-panel-head {
+  display: flex; align-items: center; justify-content: space-between; padding: 6px 6px 6px 9px;
+  background: var(--teal); color: var(--paper); border-bottom: 3px solid var(--gold);
+}
+.pip-panel-title { display: flex; flex-direction: column; gap: 0; min-width: 0; }
+.pip-panel-title strong { font-size: 20px; font-weight: 400; }
+.pip-status { font-size: 15px; color: rgba(255, 253, 245, 0.85); display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pip-status.live { color: var(--gold); }
+.pip-live-dot { width: 9px; height: 9px; background: var(--gold); animation: pip-blink 1.2s steps(2) infinite; }
+.pip-panel-tools { display: flex; gap: 3px; }
+.pip-icon-btn { width: 30px; height: 30px; border: 0; background: transparent; color: var(--paper); cursor: pointer; font-size: 18px; line-height: 1; padding: 0; }
+.pip-icon-btn:hover { background: var(--teal-deep); }
+.pip-settings { padding: 9px 12px; border-bottom: 3px solid var(--ink); display: flex; flex-direction: column; gap: 6px; font-size: 15px; background: var(--paper); }
 .pip-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-.pip-toggle input { accent-color: var(--pip-accent); width: 16px; height: 16px; }
+.pip-toggle input { accent-color: var(--teal); width: 16px; height: 16px; }
 .pip-settings-links { display: flex; gap: 12px; flex-wrap: wrap; }
-.pip-link { border: 0; background: none; color: var(--pip-accent); cursor: pointer; padding: 0; font-size: 13px; text-decoration: underline; }
-.pip-messages { flex: 1; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; scroll-behavior: smooth; min-height: 120px; }
-.pip-empty { color: var(--pip-muted); font-size: 13px; padding: 6px 2px; }
+.pip-link { border: 0; background: none; color: var(--teal-deep); cursor: pointer; padding: 0; font: inherit; text-decoration: underline; }
+.pip-messages { flex: 1; overflow-y: auto; padding: 9px 3px; display: flex; flex-direction: column; gap: 9px; scroll-behavior: smooth; min-height: 120px; }
+.pip-empty { color: var(--pip-muted); font-size: 16px; padding: 3px 6px; }
 .pip-empty p { margin: 0 0 6px; }
 .pip-empty ul { margin: 0; padding-left: 18px; }
-.pip-msg { max-width: 86%; padding: 8px 12px; border-radius: 14px; font-size: 14px; word-wrap: break-word; animation: pip-pop 0.2s ease-out; }
-.pip-msg.user { align-self: flex-end; background: var(--pip-accent); color: #fff; border-bottom-right-radius: 4px; }
-.pip-msg.user.interim { opacity: 0.6; font-style: italic; }
-.pip-msg.companion { align-self: flex-start; background: var(--pip-user); border-bottom-left-radius: 4px; }
-.pip-msg.companion.kind-offer, .pip-msg.companion.kind-confirmation { border: 1px solid rgba(124, 92, 255, 0.4); }
-.pip-msg.companion.kind-status { background: transparent; color: var(--pip-muted); font-size: 13px; padding: 2px 6px; }
-.pip-msg-detail { margin-top: 6px; font-size: 12px; }
-.pip-msg-detail summary { cursor: pointer; color: var(--pip-accent); }
+.pip-msg { max-width: 88%; padding: 0; font-size: 17px; word-wrap: break-word; animation: pip-pop 0.15s steps(2); }
+.pip-msg.user { align-self: flex-end; border-image-source: var(--ui-bubble-teal); color: var(--paper); }
+.pip-msg.user.interim { opacity: 0.6; }
+.pip-msg.companion { align-self: flex-start; }
+.pip-msg.companion.kind-status { border: 0; border-image: none; color: var(--pip-muted); font-size: 15px; padding: 0 6px; }
+.pip-msg-detail { margin-top: 6px; font: 14px/1.4 var(--pip-font-plain); }
+.pip-msg-detail summary { cursor: pointer; color: var(--teal-deep); font-family: var(--pip-font); font-size: 15px; }
 .pip-msg-detail pre { white-space: pre-wrap; margin: 6px 0 0; font-family: inherit; max-height: 220px; overflow: auto; }
-.pip-offline { font-size: 12px; color: #b45309; background: rgba(245, 158, 11, 0.12); padding: 6px 14px; }
-.pip-input-row { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--pip-border); }
-.pip-input {
-  flex: 1; min-width: 0; border: 1px solid var(--pip-border); background: var(--pip-bg-solid); color: var(--pip-fg);
-  border-radius: 999px; padding: 9px 14px; font-size: 14px; font-family: inherit; outline: none;
-}
-.pip-input:focus { border-color: var(--pip-accent); box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.2); }
+.pip-offline { font-size: 15px; color: var(--ink); background: var(--gold); padding: 6px 12px; border-top: 3px solid var(--ink); }
+.pip-input-row { display: flex; align-items: center; gap: 9px; padding: 9px 3px 3px; border-top: 3px solid var(--ink); }
+.pip-input { flex: 1; min-width: 0; color: var(--ink); font: 17px var(--pip-font); padding: 0; outline: none; }
+.pip-input:focus { box-shadow: 0 0 0 3px var(--gold); }
 .pip-input::placeholder { color: var(--pip-muted); }
-.pip-mic, .pip-send {
-  width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--pip-border); background: var(--pip-bg-solid);
-  color: var(--pip-fg); display: grid; place-items: center; cursor: pointer; flex-shrink: 0; transition: background 0.2s ease, transform 0.15s ease;
-}
-.pip-mic:hover, .pip-send:hover:not(:disabled) { transform: translateY(-1px); }
-.pip-mic.on { background: #22c55e; border-color: #22c55e; color: #fff; box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); animation: pip-mic-pulse 1.6s ease-out infinite; }
-.pip-mic.starting { opacity: 0.6; animation: pip-dot 0.8s ease-in-out infinite; }
-.pip-send { background: var(--pip-accent); border-color: var(--pip-accent); color: #fff; font-size: 14px; }
-.pip-send:disabled { opacity: 0.4; cursor: default; }
+.pip-mic, .pip-send { width: 42px; height: 42px; display: grid; place-items: center; flex-shrink: 0; padding: 0; }
+.pip-mic.on { border-image-source: var(--ui-btn-primary); color: var(--paper); }
+.pip-mic.starting { opacity: 0.6; }
+.pip-send { border-image-source: var(--ui-btn-primary); color: var(--paper); font-size: 16px; }
+.pip-send:disabled { opacity: 0.45; cursor: default; }
+@keyframes pip-pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes pip-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes pip-dot { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
 
 /* ---------- Overlay: highlights & beam ---------- */
 .pip-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 0; }

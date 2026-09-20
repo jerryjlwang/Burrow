@@ -9,6 +9,14 @@
       ],
       "slice": 5
     },
+    "bubble_teal": {
+      "file": "bubble_teal.png",
+      "size": [
+        14,
+        14
+      ],
+      "slice": 5
+    },
     "button": {
       "file": "button.png",
       "size": [
@@ -40,6 +48,15 @@
         10
       ],
       "slice": 4
+    },
+    "ear": {
+      "file": "ear.png",
+      "size": [
+        8,
+        15
+      ],
+      "slice": 0,
+      "note": "Icon for the hold to talk button."
     },
     "bubble_tail": {
       "file": "bubble_tail.png",
