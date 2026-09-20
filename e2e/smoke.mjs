@@ -457,6 +457,18 @@ try {
     }
     check("'add a corner mark' extends the drawing instead of regenerating it", st.shapes >= 4 && /a/.test(st.labels) && /c/.test(st.labels) && /90/.test(st.labels), `${st.shapes} shapes, labels: ${st.labels}`);
 
+    // Erase on request, in part: the labels go, the strokes stay (the framed board shares the overlay's erase path).
+    const shapesBefore = st.shapes;
+    await wp.locator(".pip-input").fill("get rid of the labels");
+    await wp.locator(".pip-send").click();
+    for (const t0 = Date.now(); Date.now() - t0 < 10000; ) {
+      st = await strokeState();
+      if (!st.labels.trim()) break;
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    // Checked the instant the labels are gone: the strokes must still all be there, not being rewritten from the top.
+    check("'get rid of the labels' erases just the labels; the rest of the chalkboard stays written", !st.labels.trim() && st.shapes === shapesBefore, `${st.shapes} shapes (was ${shapesBefore}), labels: "${st.labels}"`);
+
     // Anchored sketch: "circle the equation" wraps the drawing onto the equation's own rect.
     await wp.locator(".pip-input").fill("can you circle the equation?");
     await wp.locator(".pip-send").click();
@@ -464,7 +476,7 @@ try {
     let boardBox = null;
     let wrapped = false;
     for (const t0 = Date.now(); Date.now() - t0 < 12000 && !wrapped; ) {
-      boardBox = await wp.locator(".pip-board").boundingBox().catch(() => null);
+      boardBox = await wp.locator(".pip-sketch").boundingBox().catch(() => null); // anchored sketches are SketchOverlay's, not the framed board's
       wrapped = !!(boardBox && eqBox && Math.abs(boardBox.x - eqBox.x) < 40 && Math.abs(boardBox.y - eqBox.y) < 40 && boardBox.width <= eqBox.width + 80);
       if (!wrapped) await new Promise((r) => setTimeout(r, 400));
     }

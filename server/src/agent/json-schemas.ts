@@ -32,7 +32,7 @@ export const DECISION_JSON_SCHEMA = {
     url: nullable(str(), "Absolute http(s) URL for navigate. Otherwise null."),
     direction: nullable({ type: "string", enum: ["up", "down"] }, "Scroll direction for scroll. Otherwise null."),
     amount: nullable({ type: "number" }, "Pixels for scroll or milliseconds for wait. Otherwise null."),
-    value: nullable(str(), "Option label or value for select; for sketch, \"add\" extends the drawing already on screen instead of replacing it. Otherwise null."),
+    value: nullable(str(), "Option label or value for select; for sketch, \"add\" extends the drawing already on screen instead of replacing it and \"erase\" removes from it (text = \"all\" or item numbers). Otherwise null."),
     quote: nullable(str(), "point_to/highlight/observe/sketch only: EXACT short text (3-12 words) copied verbatim from VISIBLE TEXT — to point at that text, for observe to read its whole region in full, or for sketch to wrap the drawing onto that region; may replace elementId. Otherwise null."),
     line: nullable({ type: "integer" }, "point_to/highlight on a textbox/textarea: 1-based line of its value to anchor to (requires elementId), e.g. a step of written working. Otherwise null."),
     tabId: nullable({ type: "integer" }, "switch_tab only: the tab to activate, from the OPEN TABS list. Otherwise null."),

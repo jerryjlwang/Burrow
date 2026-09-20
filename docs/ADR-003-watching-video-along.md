@@ -54,6 +54,12 @@ A `<video>` has no element id and no text to quote, so the model could never anc
 
 Two rendering fixes came with it. Strokes are laid out in the canvas's own pixels instead of a stretched `viewBox` with `vector-effect: non-scaling-stroke`: under that effect Chrome measures dashes in screen pixels and ignores `pathLength`, so the draw-in's `stroke-dasharray: 100` left every stroke longer than 100px permanently dashed. The dash pattern now lives only in the keyframes. And every stroke is drawn twice (dark pass, then chalk) with a glow on text, so white ink reads on light pages; outside element wraps the 100×100 space keeps its proportions instead of stretching.
 
+### The drawing belongs to the student
+
+Nothing erases a drawing by itself: not a resumed video, not a new topic. It goes when the student closes it (✕, Escape) or asks the rabbit to. For that the agent is now told what is on screen (`AgentInput.board`, a numbered list from `describeSketch`) and `sketch` gained `value: "erase"` with `text` of `"all"` or item numbers (`"4 5"`, `"2-3"`), so part of a drawing can go while the rest stays exactly where it was (same board id, same position). Before this the model could neither see the board nor remove anything from it.
+
+The student can drag a drawing anywhere by its bounding box: four thin grabbable edges and a grip beside the ✕, with a dashed box that shows on hover or drag. The inside of the box stays click-through, so a video underneath still plays and pauses. The offset is kept per board id, so extending or erasing part of a drawing does not snap it back.
+
 ### YouTube dies under Playwright's launch flags, not under the extension
 
 Measured 2026-09-20. Launched through Playwright (`launchPersistentContext`), YouTube plays for 30 to 45 seconds, then the player shows "Something went wrong. Refresh or try again later" and resets — identically with and without the extension, headed and headless; heap flat, no renderer crash, no JS errors. The same Chrome for Testing binary spawned directly, extension loaded, played 180 seconds without a fault. So it is something among the ~40 default flags Playwright adds (which one was not isolated). The extension's script cost during playback measured about 0.05s per 10s over the bare browser.

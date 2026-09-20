@@ -44,6 +44,7 @@ OUTPUT: respond with exactly one JSON action object. Field guide:
 - ON A VIDEO: you cannot name the video as an element, and you do not need to. A sketch with no elementId/quote lands on the EMPTY PART of the video picture by itself, words and diagram together, so it looks drawn into the video. That space is small (about half the picture): keep a video sketch to a short title, at most 3 short text lines, and ~8 shapes spread over the whole 100×100 space with labels beside them.
 - sketch draws ON the page (white ink with a dark outline, nothing boxed). Set elementId or quote (verbatim text inside the region) to WRAP the drawing onto that part of the page — the 100×100 space then spans exactly that element: circle what's on screen, mark an angle on a diagram in a paused video, underline one step of the working. Prefer wrapping onto the thing you're annotating over drawing beside it; aim strokes at the darker or emptier parts of the region so they read clearly.
 - To ADD to the drawing already on screen (the student says "also", "add", "now label…"), set value to "add" and send ONLY the new lines and shapes — never resend what is already drawn; it stays. A sketch without value:"add" starts a fresh drawing.
+- To ERASE: set value to "erase" and text to "all", or to the numbers of the items to remove from DRAWING ON SCREEN ("4 5", "2-3"). Erase ONLY when the student asks ("erase that", "clear it", "get rid of the labels", "remove the arrow") — never to tidy up, and never because a video resumed or the topic moved on: the drawing is theirs until they say otherwise. Erasing part of a drawing leaves the rest exactly where it is. The student can also drag the drawing by its box, so never redraw just to move it.
 - navigate replaces THIS tab; open_tab opens a NEW tab (use it when the student asks for a new tab/window, or to visit another site without losing their current work). Both take an absolute https url — well-known sites you are sure exist, or urls from the page. For a plain "open X" request: one step, then done:true with a short say ("Opening Khan Academy in a new tab."). When the GOAL is to land the student on a specific lesson or video, use done:false: you resume on the new tab and can keep acting there (click the best search result, scroll to the lesson) until the actual resource is showing.
 - BE ACTIONABLE when they ask for something to watch, read or practise ("find me a video about volcanoes", "show me a lesson on fractions"), when they accept your offer of one, or when the GOAL tells you to take them somewhere: do not just name a site — look_up, open the best result, and get them to the real thing. Naming a resource they asked for without taking them there is a failure. A question is not a request for a resource: answer it.
 - show_plan: when the student asks what their plan is, what the steps are, how far along they are, or what's next — open the plan map instead of reciting steps. It shows the route through the problem on screen and every learning plan you've made together, with what's done; they can tap a step to start it. say: one short line ("Here's the map — you're on step two."), done:true. Never read a plan out as a list.
@@ -185,6 +186,11 @@ export function formatDecisionContext(input: AgentInput): string {
   if (input.plan) {
     lines.push("");
     lines.push(formatPlan(input.plan, input.planStep ?? null));
+  }
+  if (input.board) {
+    lines.push("");
+    lines.push("DRAWING ON SCREEN (your sketch, still showing; numbers are for value:\"erase\", and value:\"add\" extends it):");
+    lines.push(input.board.slice(0, 1500));
   }
   if (input.video) {
     const v = input.video;
