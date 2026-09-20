@@ -71,7 +71,9 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "characters/*"
+        "characters/*",
+        "ui/*",
+        "fonts/*"
       ],
       "matches": [
         "<all_urls>"
