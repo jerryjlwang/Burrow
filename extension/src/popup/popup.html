@@ -5,28 +5,39 @@
     <title>Burrow</title>
     <link rel="stylesheet" href="burrow.css" />
     <style>
-      body { width: 320px; font-size: 15px; }
-      .wrap { padding: 12px; }
-      h1 { font-size: 22px; margin: 0; }
-      .sub { color: var(--muted); margin: 0 0 12px; }
-      .status { display: flex; gap: 9px; align-items: center; margin-bottom: 9px; padding: 0; }
-      .dot { width: 12px; height: 12px; background: var(--muted); border: 3px solid var(--ink); flex-shrink: 0; }
-      .dot.ok { background: var(--teal); }
+      /* The toolbar popup is the product's card: 320px wide, cream frame, his face on the teal band, one status
+         line, pixel buttons and the panel's toggles. Chrome sizes the popup to the body, so nothing may scroll:
+         every row is a whole number of pixels and the card stays well under Chrome's 600px limit. */
+      html, body { height: auto; overflow: hidden; }
+      body { width: 320px; margin: 0 auto; padding: 12px; line-height: 21px; }
+      .card { display: block; }
+      .head { display: flex; align-items: center; gap: 9px; padding: 6px 9px 6px 6px; background: var(--teal); color: var(--paper); border-bottom: 3px solid var(--gold); }
+      .face { display: block; width: 48px; height: 48px; image-rendering: pixelated; flex-shrink: 0; }
+      .who { display: flex; flex-direction: column; min-width: 0; }
+      .who strong { font-weight: 400; font-size: 20px; line-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .line { display: flex; align-items: center; gap: 6px; font-size: 17px; line-height: 21px; white-space: nowrap; }
+      .dot { width: 9px; height: 9px; background: var(--paper); flex-shrink: 0; }
       .dot.bad { background: var(--red); }
-      label.t { display: flex; align-items: center; gap: 9px; padding: 6px 0; cursor: pointer; }
-      label.t input[type="checkbox"] { accent-color: var(--teal); width: 18px; height: 18px; margin: 0; }
-      .row { display: flex; gap: 9px; flex-wrap: wrap; margin-top: 12px; }
-      .btn { display: inline-grid; place-items: center; border: 12px solid transparent; border-image: url("ui/button.png") 4 fill / 12px repeat; image-rendering: pixelated; background: none; color: var(--ink); cursor: pointer; padding: 0 3px; min-height: 36px; font-size: 15px; line-height: 1; box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.2); }
-      .btn:active { transform: translate(3px, 3px); box-shadow: none; }
-      .btn:disabled { opacity: 0.5; cursor: default; }
-      .btn.primary { border-image-source: url("ui/button_primary.png"); color: var(--paper); }
-      input.url { display: block; width: 100%; min-height: 42px; border: 15px solid transparent; border-image: url("ui/bubble.png") 5 fill / 15px repeat; image-rendering: pixelated; background: none; padding: 0; outline: none; margin-top: 3px; font-size: 15px; }
-      input.url:focus { box-shadow: 0 0 0 3px var(--gold); }
-      .muted { color: var(--muted); }
+      .dot.live { background: var(--gold); animation: blink 1.2s steps(2) infinite; }
+      .dot.wait { animation: blink 0.6s steps(2) infinite; }
+      @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+      .body { padding: 9px 6px 6px; display: flex; flex-direction: column; gap: 9px; }
+      .note { margin: 0; color: var(--muted); }
+      /* Two real actions as full-width pixel buttons (half-width cells cannot hold 17px labels at 320px),
+         then the three pages as the same underlined links the panel's settings block uses. */
+      .actions { display: flex; flex-direction: column; gap: 6px; }
+      .actions .px-btn { display: grid; width: 100%; }
+      .links { display: flex; gap: 15px; flex-wrap: wrap; padding-top: 3px; }
+      .link { border: 0; background: none; color: var(--teal-deep); cursor: pointer; padding: 0; font: 17px/21px var(--font); text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 3px; }
+      .settings { display: flex; flex-direction: column; gap: 3px; padding-top: 9px; border-top: 3px solid var(--ink); }
+      .settings .px-toggle { min-height: 30px; }
+      .server { display: flex; flex-direction: column; gap: 3px; padding-top: 9px; border-top: 3px solid var(--ink); }
+      .server .px-input { line-height: 21px; }
+      .model { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     </style>
   </head>
   <body>
-    <div id="root" class="wrap"></div>
+    <div id="root"></div>
     <script src="popup.js"></script>
   </body>
 </html>

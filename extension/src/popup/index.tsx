@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { getSettings, setSettings, type Settings } from "../shared/settings";
 import type { ServerHealth, VoiceState } from "../shared/messages";
 
+/* The toolbar card: his face, one status line, the actions, and the same toggles as his panel. */
 function Popup() {
   const [settings, setLocal] = useState<Settings | null>(null);
   const [health, setHealth] = useState<ServerHealth | null>(null);
@@ -29,57 +30,94 @@ function Popup() {
     if (t?.id) chrome.tabs.sendMessage(t.id, { type: "command", name }, () => void chrome.runtime.lastError);
     window.close();
   };
+  const openTab = (u: string) => {
+    void chrome.tabs.create({ url: u });
+  };
 
   if (!settings) return null;
+
+  // One status line on the band: the server. The dot carries the voice state, and anything that needs
+  // a sentence goes in a note under the band.
+  const listening = voice?.mode === "listening";
+  const voiceError = voice?.mode === "error" ? voice.error || "Voice trouble. Try again." : "";
+  let dot = "wait";
+  let line = "Checking my server";
+  if (health && !health.ok) {
+    dot = "bad";
+    line = "Server not running";
+  } else if (health) {
+    dot = voiceError ? "bad" : listening ? "live" : "ok";
+    line = "Server connected";
+  }
+  const notes: string[] = [];
+  if (health && !health.ok) notes.push("Start it with npm run dev, then open this again.");
+  if (voiceError) notes.push(voiceError);
+  else if (listening) notes.push("Listening right now.");
+  else if (health?.ok && !health.deepgram) notes.push("No Deepgram key on the server, so no voice.");
+  if (!tabOk) notes.push("He can't run on this page. Chrome's own pages are protected.");
+
   return (
-    <>
-      <h1>{settings.characterName}</h1>
-      <p className="sub">Learning companion</p>
-      <div className="status">
-        <span className={`dot ${health ? (health.ok ? "ok" : "bad") : ""}`} />
-        <span>{health ? (health.ok ? `Server connected · ${health.llm}${health.deepgram ? " · voice ready" : " · no Deepgram key"}` : "Server not reachable. Start it with npm run dev") : "Checking server…"}</span>
-      </div>
-      {voice && (
-        <div className="status">
-          <span className={`dot ${voice.mode === "listening" ? "ok" : voice.mode === "error" ? "bad" : ""}`} />
-          <span>{voice.mode === "listening" ? "Microphone is live" : voice.mode === "error" ? voice.error ?? "Voice error" : "Voice mode off"}</span>
+    <div className="card px-frame">
+      <div className="head">
+        <img className="face" src="icons/icon48.png" width={48} height={48} alt="" />
+        <div className="who">
+          <strong>{settings.characterName}</strong>
+          <span className="line">
+            <span className={`dot ${dot}`} aria-hidden="true" />
+            <span aria-live="polite">{line}</span>
+          </span>
         </div>
-      )}
-      {!tabOk && <p className="muted">{settings.characterName} can't run on this page (Chrome pages and the Web Store are protected).</p>}
-      <label className="t">
-        <input type="checkbox" checked={settings.proactiveEnabled} onChange={(e) => void update({ proactiveEnabled: e.target.checked })} /> Notice when I'm stuck and offer help
-      </label>
-      <label className="t">
-        <input type="checkbox" checked={settings.videoCompanion === "on"} onChange={(e) => void update({ videoCompanion: e.target.checked ? "on" : "off" })} /> Watch videos along with me (may pause for what really matters)
-      </label>
-      <label className="t">
-        <input type="checkbox" checked={settings.ttsEnabled} onChange={(e) => void update({ ttsEnabled: e.target.checked })} /> Speak replies out loud
-      </label>
-      <label className="t">
-        <input type="checkbox" checked={settings.debugMode} onChange={(e) => void update({ debugMode: e.target.checked })} /> Developer panel
-      </label>
-      <label className="t" style={{ display: "block" }}>
-        <span className="muted">Server URL</span>
-        <input className="url" value={url} onChange={(e) => setUrl(e.target.value)} onBlur={() => void update({ serverUrl: url.trim().replace(/\/$/, "") || "http://localhost:8787" })} />
-      </label>
-      <div className="row">
-        <button className="btn primary" disabled={!tabOk} onClick={() => void sendCommand("toggle-companion")}>
-          Open panel
-        </button>
-        <button className="btn" disabled={!tabOk} onClick={() => void sendCommand("toggle-voice")}>
-          {voice?.mode === "listening" ? "Mute voice" : "Start voice"}
-        </button>
-        <button className="btn" onClick={() => void chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html") })}>
-          Setup
-        </button>
-        <button className="btn" onClick={() => void chrome.tabs.create({ url: `${settings.serverUrl}/demo/` })}>
-          Demo
-        </button>
-        <button className="btn" onClick={() => void chrome.tabs.create({ url: chrome.runtime.getURL("parent.html") })}>
-          Parent view
-        </button>
       </div>
-    </>
+      <div className="body">
+        {notes.map((n) => (
+          <p key={n} className="note">
+            {n}
+          </p>
+        ))}
+        <div className="actions">
+          <button className="px-btn primary" disabled={!tabOk} onClick={() => void sendCommand("toggle-companion")}>
+            Open his panel
+          </button>
+          <button className="px-btn" disabled={!tabOk} onClick={() => void sendCommand("toggle-voice")}>
+            {listening ? "Mute voice" : "Start voice"}
+          </button>
+          <div className="links">
+            <button className="link" onClick={() => openTab(chrome.runtime.getURL("onboarding.html"))}>
+              Setup
+            </button>
+            <button className="link" onClick={() => openTab(`${settings.serverUrl}/demo/`)}>
+              Demo
+            </button>
+            <button className="link" onClick={() => openTab(chrome.runtime.getURL("parent.html"))}>
+              Parent view
+            </button>
+          </div>
+        </div>
+        <div className="settings">
+          <label className="px-toggle">
+            <input className="px-check" type="checkbox" checked={settings.proactiveEnabled} onChange={(e) => void update({ proactiveEnabled: e.target.checked })} />
+            <span>Offer help when I'm stuck</span>
+          </label>
+          <label className="px-toggle">
+            <input className="px-check" type="checkbox" checked={settings.videoCompanion === "on"} onChange={(e) => void update({ videoCompanion: e.target.checked ? "on" : "off" })} />
+            <span>Watch videos along with me</span>
+          </label>
+          <label className="px-toggle">
+            <input className="px-check" type="checkbox" checked={settings.ttsEnabled} onChange={(e) => void update({ ttsEnabled: e.target.checked })} />
+            <span>Speak replies out loud</span>
+          </label>
+          <label className="px-toggle">
+            <input className="px-check" type="checkbox" checked={settings.debugMode} onChange={(e) => void update({ debugMode: e.target.checked })} />
+            <span>Developer panel</span>
+          </label>
+        </div>
+        <label className="server">
+          <span className="px-muted">Local server</span>
+          <input className="px-input" value={url} onChange={(e) => setUrl(e.target.value)} onBlur={() => void update({ serverUrl: url.trim().replace(/\/$/, "") || "http://localhost:8787" })} />
+          {health?.ok && <span className="px-muted model">Model: {health.llm}</span>}
+        </label>
+      </div>
+    </div>
   );
 }
 
