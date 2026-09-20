@@ -594,7 +594,13 @@ try {
   check("new tab scene wears the pixel cursor", /cursor_arrow\.png/.test(scene.cursor), scene.cursor);
   const clock = await nt.locator("canvas.clock").evaluate((c) => ({ w: c.width, h: c.height, cssW: c.getBoundingClientRect().width, rendering: getComputedStyle(c).imageRendering, label: c.getAttribute("aria-label") }));
   check("new tab draws the pixel clock at about half size", clock.w > 0 && clock.h >= 45 && clock.h <= 60 && clock.w === clock.cssW && clock.rendering === "pixelated" && /^Current time \d{1,2}:\d{2} [AP]M$/.test(clock.label ?? ""), JSON.stringify(clock));
-  check("new tab shows the meadow HUD", (await nt.locator(".hud .hud-sign").count()) === 2, `${await nt.locator(".hud .hud-sign").count()} signs`);
+  check("new tab shows the meadow HUD", (await nt.locator(".hud .hud-sign").count()) === 3, `${await nt.locator(".hud .hud-sign").count()} signs`);
+  // The sky sign pins the light: a click moves it off "Now" and the scene's time of day follows.
+  const skyBefore = { label: (await nt.locator(".hud .sky").textContent())?.trim(), tod: await nt.evaluate(() => document.body.dataset.tod) };
+  await nt.locator(".hud .sky").click();
+  await wait(2400);
+  const skyAfter = { label: (await nt.locator(".hud .sky").textContent())?.trim(), tod: await nt.evaluate(() => document.body.dataset.tod), pinned: await nt.locator(".hud .sky").getAttribute("data-pinned") };
+  check("the sky sign pins the meadow's light", skyBefore.label === "Now" && skyAfter.label === "Dawn" && skyAfter.pinned === "1", JSON.stringify({ skyBefore, skyAfter }));
   // The welcome hint waits in the sky after the boot; the first click anywhere fades it out.
   const hint0 = await nt.locator(".hint").evaluate((el) => ({ gone: el.classList.contains("gone"), opacity: getComputedStyle(el).opacity, text: (el.textContent ?? "").trim() }));
   check("the welcome hint shows after the boot", !hint0.gone && hint0.opacity === "1" && /is here\./.test(hint0.text), JSON.stringify(hint0));

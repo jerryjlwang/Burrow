@@ -4,7 +4,7 @@ When the agent opens a tab, clicks, types, scrolls, or pauses and resumes a vide
 
 ## The hooks
 
-`burrow:act` (window event, from `actions/executor.ts` at the top of `executeAction`): `{ action, elementId, rect, point, url, text, direction, hold? }`. `rect` is the target's viewport box when the action names an element, `point` when it names a spot. A listener may set `detail.hold` to a promise; the executor waits for it at most 900 ms (`ACT_HOLD_MS`) before running the action, so the rabbit's tap and the click land together. Nothing listening, nothing waits.
+`burrow:act` (window event, from `actions/executor.ts` at the top of `executeAction`): `{ action, elementId, rect, point, url, text, direction, hold? }`. `rect` is the target's viewport box when the action names an element, `point` when it names a spot. A listener may set `detail.hold` to a promise; the executor waits for it at most 3.2 s (`ACT_HOLD_MS`) before running the action, so the rabbit's tap and the click land together, and a piece whose beat the action would interrupt (a new tab takes the window) can hold until that beat is done. Nothing listening, nothing waits.
 
 `burrow:video` (window event, from `page-understanding/video.ts`): `{ kind: "pause" | "play" | "seek", by: "us" | "them", rect }`. `us` is the companion (a pause to talk, a play to resume), `them` the student's own control. A companion pause also fires the DOM pause, so a `them` within 400 ms of an `us` of the same kind is the same moment and `ActionFx` drops it.
 

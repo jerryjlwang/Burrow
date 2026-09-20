@@ -139,7 +139,7 @@ async function openTab(d: ActDetail, ctx: PieceContext): Promise<void> {
     const { home, timer, lift } = ready;
     window.clearTimeout(timer);
     ready = null;
-    void punch(ctx, pet, r0, text, home, lift);
+    await punch(ctx, pet, r0, text, home, lift);
     return;
   }
   if (!pet || !r0 || ctx.reduced) {
@@ -159,10 +159,12 @@ async function openTab(d: ActDetail, ctx: PieceContext): Promise<void> {
   const flight = pet.fling(0, vy);
   trailWhile(ctx, flight);
   await wait(Math.min(apexMs, 820));
-  const at = ctx.petRect() ?? r;
-  void impact(ctx, at, text)
-    .then(() => flight)
-    .then(() => landing(ctx, pet, home, lift));
+  // This is where the hold ends: the card has been read, so the browser may take the window now.
+  const card = await impact(ctx, ctx.petRect() ?? r, text);
+  // The hold ends when the card has reached the strip, so the browser opens the real tab in the
+  // place the card just flew to. His landing plays on after that.
+  await cardAway(ctx, card);
+  void flight.then(() => landing(ctx, pet, home, lift));
 }
 
 /** The wind-up: sparks drawn into him from a ring, a glow under his feet, a crouch. */
@@ -190,7 +192,7 @@ function launch(ctx: PieceContext, r: DOMRect): void {
  * twice. Then the new tab arrives as a card big enough to read in the middle of the screen, holds,
  * and rockets up to the strip on a beam with a comet of sparks behind it.
  */
-async function impact(ctx: PieceContext, at: DOMRect, text: string): Promise<void> {
+async function impact(ctx: PieceContext, at: DOMRect, text: string): Promise<{ el: HTMLElement; gone: () => void; left: number; top: number }> {
   const x = Math.round(at.x + at.width / 2);
   const y = Math.round(APEX_Y + 30);
   flash(ctx, 0.75);
@@ -202,11 +204,15 @@ async function impact(ctx: PieceContext, at: DOMRect, text: string): Promise<voi
   burst(ctx.layer, x, y, 60, { lo: 240, hi: 900, colors: [CREAM, GOLD, TEAL, WHITE], g: 520, life: 1000, size: 3 });
   whoosh("up");
   await wait(140);
-  await bigCard(ctx, x, text);
+  return cardIn(ctx, text);
 }
 
-/** The card the new tab arrives as: it grows out of the hit, holds where it can be read, then goes up. */
-async function bigCard(ctx: PieceContext, _x: number, text: string): Promise<void> {
+/**
+ * The card the new tab arrives as. `cardIn` grows it out of the hit and holds it where it can be
+ * read; the piece's hold ends there, so the real tab opens next, and `cardAway` flies it up to the
+ * strip as the browser puts the new tab in exactly that place.
+ */
+async function cardIn(ctx: PieceContext, text: string): Promise<{ el: HTMLElement; gone: () => void; left: number; top: number }> {
   const left = Math.round((window.innerWidth - BIG_W) / 2 / 3) * 3;
   const top = Math.round((window.innerHeight * 0.3) / 3) * 3;
   const { el, gone } = spawn(ctx.layer, "pip-bigcard", { left: `${left}px`, top: `${top}px`, width: `${BIG_W}px` });
@@ -218,21 +224,28 @@ async function bigCard(ctx: PieceContext, _x: number, text: string): Promise<voi
   sub.textContent = "opening a new tab";
   el.append(ico, label, sub);
   if (ctx.reduced) {
-    await wait(700);
-    gone();
-    return;
+    await wait(400);
+    return { el, gone, left, top };
   }
   await wait(240);
   // A halo of sparks drawn in as it settles, so the eye goes to it.
   gather(ctx.layer, left + BIG_W / 2, top + 45, 18, 180, 300, [GOLD, CREAM]);
   await wait(HOLD_MS);
-  spawn(ctx.layer, "pip-beamup", { left: `${left + BIG_W / 2}px` }, AWAY_MS + 120);
-  el.classList.add("away");
+  return { el, gone, left, top };
+}
+
+async function cardAway(ctx: PieceContext, card: { el: HTMLElement; gone: () => void; left: number; top: number }): Promise<void> {
+  if (ctx.reduced) {
+    card.gone();
+    return;
+  }
+  spawn(ctx.layer, "pip-beamup", { left: `${card.left + BIG_W / 2}px` }, AWAY_MS + 120);
+  card.el.classList.add("away");
   for (let i = 0; i < 6; i++) {
-    burst(ctx.layer, left + BIG_W / 2 + (Math.random() - 0.5) * BIG_W, top - i * 24, 6, { lo: 80, hi: 300, colors: [CREAM, GOLD], g: -180, life: 620, size: 3 });
+    burst(ctx.layer, card.left + BIG_W / 2 + (Math.random() - 0.5) * BIG_W, card.top - i * 24, 6, { lo: 80, hi: 300, colors: [CREAM, GOLD], g: -180, life: 620, size: 3 });
     await wait(AWAY_MS / 6);
   }
-  gone();
+  card.gone();
 }
 
 /** The landing: dust, a ring, a bow, and a little confetti for the judges. */
@@ -258,9 +271,11 @@ async function punch(ctx: PieceContext, pet: PieceContext["pet"], r: DOMRect, te
   const flight = pet.fling(0, vy);
   trailWhile(ctx, flight);
   await wait(Math.min(Math.round((-vy / FLIGHT.gravity) * 1000), 820));
-  await impact(ctx, ctx.petRect() ?? r, text);
-  await flight;
-  await landing(ctx, pet, home, lift);
+  const card = await impact(ctx, ctx.petRect() ?? r, text);
+  // The hold ends when the card has reached the strip, so the browser opens the real tab in the
+  // place the card just flew to. His landing plays on after that.
+  await cardAway(ctx, card);
+  void flight.then(() => landing(ctx, pet, home, lift));
 }
 
 /** He went up early on a guess and is waiting under the strip: where, since when, and where home is. */
