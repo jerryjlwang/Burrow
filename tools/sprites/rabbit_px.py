@@ -17,7 +17,11 @@ import json
 import os
 from PIL import Image
 
-W, H = 48, 58
+W, H = 64, 58
+# The rabbit was drawn on a 48 wide cell. OFF is the columns added on the left when the cell
+# was widened for the thought bubble, so every absolute column below is still in 48 wide terms.
+OFF = (W - 48) // 2
+CX = 23 + OFF  # the left of the two centre columns; the right one is CX + 1
 PAL = {
     ".": (0, 0, 0, 0),
     "o": (59, 42, 35, 255),      # outline, dark brown
@@ -130,6 +134,91 @@ GLYPHS = {
     "spark": [".y.", "yyy", ".y."],
 }
 
+# Thought bubble, hand-placed. Absolute columns are in the widened cell (OFF already applied
+# by BUBBLE_AT). Cream fill (R) inside a one pixel brown outline, two trailing circles down
+# toward the top right of the head, and a 9 x 9 pocket watch face or a light bulb inside.
+BUBBLE = [
+    "......oooooooo......",
+    "....ooRRRRRRRRoo....",
+    "...oRRRRRRRRRRRRo...",
+    "..oRRRRRRRRRRRRRRo..",
+    ".oRRRRRRRRRRRRRRRRo.",
+    ".oRRRRRRRRRRRRRRRRo.",
+    ".oRRRRRRRRRRRRRRRRo.",
+    ".oRRRRRRRRRRRRRRRRo.",
+    ".oRRRRRRRRRRRRRRRRo.",
+    "..oRRRRRRRRRRRRRRo..",
+    "...oRRRRRRRRRRRRo...",
+    "....ooRRRRRRRRoo....",
+    "......oooooooo......",
+]
+BUBBLE_AT = (43, 0)  # (col, row) of the top left of BUBBLE
+TRAIL = [([".oo.", "oRRo", "oRRo", ".oo."], (47, 16)), ([".o.", "oRo", ".o."], (45, 22))]
+CLOCK = [
+    "...ooo...",
+    ".oogggoo.",
+    ".ogfffgo.",
+    "ogfffffgo",
+    "ogfffffgo",
+    "ogfffffgo",
+    ".ogfffgo.",
+    ".oogggoo.",
+    "...ooo...",
+]
+CLOCK_AT = (48, 2)
+# One hand, two pixels long, ticking round: up, right, down, left. (row, col) inside CLOCK.
+CLOCK_HANDS = [[(3, 4), (2, 4)], [(4, 5), (4, 6)], [(5, 4), (6, 4)], [(4, 3), (4, 2)]]
+BULB = [
+    "..ooo..",
+    ".oyyyo.",
+    "oyyyyyo",
+    "oyhyyyo",
+    "oyyyyyo",
+    ".oyyyo.",
+    "..ooo..",
+    "..ogo..",
+    "..ooo..",
+]
+BULB_AT = (49, 2)
+BULB_SPARKS = [(46, 3), (57, 3)]
+
+
+def stamp(g, art, x, y, sub=None):
+    """Write an ASCII block onto the grid. No automatic outline; the block carries its own."""
+    for j, row in enumerate(art):
+        for i, ch in enumerate(row):
+            if ch != "." and 0 <= y + j < H and 0 <= x + i < W:
+                g[y + j][x + i] = sub.get(ch, ch) if sub else ch
+
+
+def thought(g, inside=None):
+    """Thought bubble with its trail. inside draws the contents after the bubble."""
+    stamp(g, BUBBLE, *BUBBLE_AT)
+    for art, (x, y) in TRAIL:
+        stamp(g, art, x, y)
+    if inside:
+        inside(g)
+    return g
+
+
+def clock(tick):
+    def draw(g):
+        stamp(g, CLOCK, *CLOCK_AT)
+        cx, cy = CLOCK_AT
+        g[cy + 4][cx + 4] = "o"
+        for r, c in CLOCK_HANDS[tick % 4]:
+            g[cy + r][cx + c] = "o"
+    return draw
+
+
+def bulb(lit, sparks=False):
+    def draw(g):
+        stamp(g, BULB, *BULB_AT, sub=None if lit else {"y": "f", "h": "f"})
+        if sparks:
+            for x, y in BULB_SPARKS:
+                stamp(g, GLYPHS["spark"], x, y)
+    return draw
+
 
 def blank():
     return [["."] * W for _ in range(H)]
@@ -140,16 +229,16 @@ def paint(g, spec, side="both", dy=0):
         for a, b, ch in runs:
             for d in range(a, b + 1):
                 if side in ("both", "left"):
-                    g[r + dy][23 - d] = ch
+                    g[r + dy][CX - d] = ch
                 if side in ("both", "right"):
-                    g[r + dy][24 + d] = ch
+                    g[r + dy][CX + 1 + d] = ch
 
 
 def clear_region(g, rows, a, b, ch="w"):
     for r in rows:
         for d in range(a, b + 1):
-            g[r][23 - d] = ch
-            g[r][24 + d] = ch
+            g[r][CX - d] = ch
+            g[r][CX + 1 + d] = ch
 
 
 def rabbit(ear_l="up", ear_r="up", eyes="open", mouth="smile", look=False, perk=False, twitch=False):
@@ -166,30 +255,30 @@ def rabbit(ear_l="up", ear_r="up", eyes="open", mouth="smile", look=False, perk=
     if twitch:
         for r in range(3, 8):
             row = g[r][:]
-            for c in range(24, W - 1):
+            for c in range(CX + 1, W - 1):
                 g[r][c + 1] = row[c]
-            g[r][24] = "."
+            g[r][CX + 1] = "."
     paint(g, BODY)
     paint(g, {27: FACE[27]})
     paint(g, {k: v for k, v in EYES[eyes].items() if k != 27})
     for r, c in SHINE[eyes]:
-        g[r][c] = "h"
+        g[r][c + OFF] = "h"
     if look:
         # Glance down toward the watch. Both eye shapes stay where they are so the
         # face keeps its symmetry; only the shine moves, by LOOK_SHINE (rows, cols).
         for r, c in SHINE[eyes]:
-            g[r][c] = "e"
+            g[r][c + OFF] = "e"
         for r, c in SHINE[eyes]:
-            g[r + LOOK_SHINE[0]][c + LOOK_SHINE[1]] = "h"
+            g[r + LOOK_SHINE[0]][c + OFF + LOOK_SHINE[1]] = "h"
     clear_region(g, range(28, 31), 0, 3)
-    g[31][23] = g[31][24] = "w"
+    g[31][CX] = g[31][CX + 1] = "w"
     paint(g, MOUTHS[mouth])
     for i, row in enumerate(WATCH):
         for j, ch in enumerate(row):
             if ch != ".":
-                g[42 + i][34 + j] = ch
+                g[42 + i][34 + OFF + j] = ch
     for r, c in CHAIN:
-        g[r][c] = "g"
+        g[r][c + OFF] = "g"
     return g
 
 
@@ -277,7 +366,7 @@ def patch(rows, a, b, draw):
     g = blank()
     for r in rows:
         for d in range(a, b + 1):
-            for c in (23 - d, 24 + d):
+            for c in (CX - d, CX + 1 + d):
                 if base[r][c] != ".":
                     g[r][c] = "w" if base[r][c] in "ehonm" else base[r][c]
     top = blank()
@@ -291,17 +380,15 @@ def build():
     S["idle"] = dict(frames=[a, b, bob(a), bob(a)], fps=3, loop=True, head_dy=[0, 0, 1, 1])
     S["listening"] = dict(frames=[a, rabbit(perk=True, eyes="wide"), rabbit(perk=True, eyes="wide")], fps=8, loop=False,
                           head_dy=[0, 0, 0])
-    th = []
-    for i in range(4):
-        g = rabbit(look=True, mouth="flat")
-        for d in range(i):
-            glyph(g, "dot", 38 + d * 3, 12 - d * 3)
-        th.append(g)
-    S["thinking"] = dict(frames=th, fps=3, loop=True)
+    S["thinking"] = dict(frames=[thought(rabbit(look=True, mouth="flat"), clock(i)) for i in range(4)], fps=3, loop=True)
+    S["aha"] = dict(frames=[thought(rabbit(look=True, mouth="flat"), bulb(False)),
+                            thought(rabbit(mouth="flat"), bulb(True)),
+                            thought(rabbit(eyes="wide", mouth="open"), bulb(True, sparks=True)),
+                            rabbit()], fps=6, loop=False)
     cf = []
     for i in range(4):
         g = rabbit(ear_l="flop", mouth="flat", eyes="wide" if i % 2 else "open")
-        glyph(g, "?", 40, 8 + (0, -1, 0, 1)[i])
+        glyph(g, "?", 40 + OFF, 8 + (0, -1, 0, 1)[i])
         cf.append(g)
     S["confused"] = dict(frames=cf, fps=4, loop=True)
     ce = []
@@ -310,7 +397,7 @@ def build():
         g = bob(g) if i == 5 else moved(g, 0, dy)
         for k, (sx, sy) in enumerate(((2, 24), (43, 20), (3, 40), (44, 36))):
             if (i + k) % 3 == 0:
-                glyph(g, "spark", sx, sy)
+                glyph(g, "spark", sx + OFF, sy)
         ce.append(g)
     S["celebrate"] = dict(frames=ce, fps=9, loop=False)
     S["wave"] = dict(frames=[rabbit(eyes="happy", mouth="open", ear_l=e) for e in ("up", "flop", "up", "flop")],
@@ -322,7 +409,7 @@ def build():
             g = bob(g)
         for k, (zx, zy) in enumerate(((38, 14), (41, 8), (44, 2))):
             if k < (1, 2, 3, 3)[i]:
-                glyph(g, "z", zx, zy)
+                glyph(g, "z", zx + OFF, zy)
         sl.append(g)
     S["sleepy"] = dict(frames=sl, fps=2, loop=True)
     S["dragged"] = dict(frames=[moved(rabbit(eyes="wide", mouth="wide"), dx, -2) for dx in (-1, 1)], fps=4, loop=True)
@@ -347,7 +434,8 @@ def build():
 NOTES = {
     "idle": "Ear twitch, then a one pixel breath. head_dy tells the renderer how far to push overlays down per frame.",
     "listening": "Ears stretch up, eyes widen. Hold the last frame while the kid talks.",
-    "thinking": "He glances at his watch while dots count up. Loop while the model works.",
+    "thinking": "He glances at his watch while a pocket watch ticks in a thought bubble. Loop while the model works.",
+    "aha": "The watch turns into a light bulb and the bubble pops. Play once when the answer is ready, then idle.",
     "confused": "One ear flops over and a question mark bobs.",
     "celebrate": "A hop with happy eyes and sparkles, landing with a squash. Play once.",
     "wave": "He waves with his ear. Use for greetings.",
@@ -371,6 +459,8 @@ def export(S, out=OUT):
            "display": "whole-number scale only, image-rendering: pixelated",
            "jump_sequence": {"sending": ["hole_open", "dive", "hole_only reversed"],
                              "receiving": ["hole_only", "hole_wait (loop)", "dive reversed", "hole_open reversed", "idle"]},
+           "body": list(image(S["idle"]["frames"][0]).getbbox()),
+           "body_note": "left, top, right, bottom of the rabbit in idle frame 0, rim included, right and bottom exclusive",
            "states": {}}
     for name, st in S.items():
         strip = Image.new("RGBA", (W * len(st["frames"]), H))

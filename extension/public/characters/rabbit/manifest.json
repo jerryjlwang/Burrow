@@ -1,7 +1,7 @@
 {
   "character": "rabbit",
   "cell": [
-    48,
+    64,
     58
   ],
   "anchor": "bottom center, feet end at row 53",
@@ -20,6 +20,13 @@
       "idle"
     ]
   },
+  "body": [
+    19,
+    2,
+    50,
+    55
+  ],
+  "body_note": "left, top, right, bottom of the rabbit in idle frame 0, rim included, right and bottom exclusive",
   "states": {
     "idle": {
       "file": "rabbit_idle.png",
@@ -51,7 +58,14 @@
       "frames": 4,
       "fps": 3,
       "loop": true,
-      "notes": "He glances at his watch while dots count up. Loop while the model works."
+      "notes": "He glances at his watch while a pocket watch ticks in a thought bubble. Loop while the model works."
+    },
+    "aha": {
+      "file": "rabbit_aha.png",
+      "frames": 4,
+      "fps": 6,
+      "loop": false,
+      "notes": "The watch turns into a light bulb and the bubble pops. Play once when the answer is ready, then idle."
     },
     "confused": {
       "file": "rabbit_confused.png",
