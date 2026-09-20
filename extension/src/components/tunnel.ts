@@ -9,6 +9,7 @@
  * here is the tunnel whoosh: sounds.ts owns the state cues and is not touched.
  */
 import { HOST_ID } from "../page-understanding/extract";
+import { journeyOn, type Journey } from "./journey";
 import { store } from "../content/store";
 import { plainCopy } from "./copy";
 import { assetUrl, type PetController } from "./pet";
@@ -306,6 +307,18 @@ export function unrollNotes(pet: PetController, text: string, opts: { ms: number
     }
   });
   return { dismiss: () => rollUp() };
+}
+
+/* ---------- the journey ---------- */
+
+/**
+ * The big sound of the trip to the other screen (see journey.ts): starts as he goes under, and
+ * `emerge(inMs)` lands the burst on the moment he should pop out over there. Null before the
+ * page has had its click, or with sound off, like the whoosh.
+ */
+export function journey(): Journey | null {
+  const ac = audio();
+  return ac ? journeyOn(ac, ac.destination) : null;
 }
 
 /* ---------- the whoosh ---------- */

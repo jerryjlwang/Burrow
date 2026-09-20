@@ -6,7 +6,8 @@
 import type { GraphSnapshot } from "@shared/graph";
 import type { CompanionController } from "../content/controller";
 import type { PetController } from "./pet";
-import { dig, dropNotes, holeOf, tunnelIn, unrollNotes, whoosh } from "./tunnel";
+import { dig, dropNotes, holeOf, journey, tunnelIn, unrollNotes, whoosh } from "./tunnel";
+import type { Journey } from "./journey";
 
 /** kid: any page the kid works on; parent: parent.html; board: the drawing board the tablet watcher opens. */
 export type Role = "kid" | "parent" | "board";
@@ -210,6 +211,10 @@ export function startHandoff(deps: Deps): () => void {
     const hole = holeOf(pet);
     const tunnel = hole ? tunnelIn(hole, reduced) : null;
     const diveAt = stateMs(pet, "hole_open");
+    // To the board, the trip has its own sound: it starts as he goes under and its burst lands on
+    // the moment the board pops him out (its travel, hole and ears are the same constants).
+    let trip: Journey | null = null;
+    const tripTimer = jump.to === "board" ? window.setTimeout(() => (trip = journey()), diveAt) : 0;
     const timers = [
       window.setTimeout(() => whoosh("down"), diveAt),
       window.setTimeout(() => {
@@ -222,6 +227,10 @@ export function startHandoff(deps: Deps): () => void {
     const graph = role === "kid" ? controller.session.graph.toJSON() : await storageGet<GraphSnapshot>(GRAPH_KEY);
     const gone: Jump = { ...jump, stage: "gone", at: Date.now(), summary: summarize(graph, Date.now()), graph: graph ?? undefined };
     await storageSet(JUMP_KEY, gone);
+    if (jump.to === "board") {
+      window.clearTimeout(tripTimer);
+      (trip ?? journey())?.emerge(BOARD_TRAVEL_MS + stateMs(pet, "hole_only") + BOARD_EARS_MS + 150);
+    }
     if (tunnel) window.setTimeout(() => void tunnel.out(), TUNNEL_HOLD_MS);
   };
 
