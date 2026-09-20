@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { GraphSnapshot, Misconception } from "@shared/graph";
+import { KnowledgeGraph, type GraphSnapshot, type Misconception } from "@shared/graph";
 import { mountCompanion } from "../content/mount";
 import { getSettings } from "../shared/settings";
-import { GRANTS_KEY, GRAPH_KEY, JUMP_KEY, SKILLS, ago, isGraph, isJump, learningNotes, sampleGraph, type Grants, type Jump, type SkillId } from "./data";
+import { GRANTS_KEY, GRAPH_KEY, JUMP_KEY, SKILLS, ago, isGraph, isJump, completionLine, learningNotes, provenanceLine, sampleGraph, type Grants, type Jump, type SkillId } from "./data";
 
 /** Below this the rabbit has forgotten the room (MASTERY.unseenThreshold in shared/src/graph.ts). */
 const FORGOTTEN = 0.3;
@@ -120,7 +120,10 @@ function Parent() {
   const fixed = spots.filter((m) => m.status === "resolved" && m.resolution);
   const here = jump?.to === "parent" && jump.stage === "arrived";
   const notes = learningNotes(graph, kid, now);
-  const plans = [...(graph.profile?.plans ?? [])].sort((a, b) => b.updatedAt - a.updatedAt);
+  // Through the graph's tolerant parser, so a stale or half-written carried snapshot can't throw here.
+  const plans = KnowledgeGraph.fromJSON(graph).profile.plans.sort((a, b) => b.updatedAt - a.updatedAt);
+  const topicPlans = plans.filter((p) => p.kind !== "problem");
+  const problemPlans = plans.filter((p) => p.kind === "problem");
 
   return (
     <main>
@@ -207,12 +210,12 @@ function Parent() {
         </div>
       </section>
 
-      {plans.length > 0 && (
+      {topicPlans.length > 0 && (
         <section aria-labelledby="plans-h">
           <h2 id="plans-h">Learning plans</h2>
-          <p className="lede plain">Things {kid} asked to learn about. The rabbit mapped each one out and takes {kid} to a lesson or video for every step.</p>
+          <p className="lede plain">Things {kid} asked to learn about. The rabbit mapped each one out and takes {kid} to a lesson or video for every step. A step only counts as done when something showed it.</p>
           <div className="spots">
-            {plans.map((p) => {
+            {topicPlans.map((p) => {
               const next = p.steps.findIndex((s) => !s.done);
               return (
                 <article key={p.key} className="spot px-frame">
@@ -220,13 +223,38 @@ function Parent() {
                     {p.goal}
                     <span className="tag">{next < 0 ? "finished" : `${p.steps.filter((s) => s.done).length} of ${p.steps.length}`}</span>
                   </h3>
+                  <p className="meta plain">{provenanceLine(p, kid, now)}</p>
                   {p.steps.map((s, i) => (
                     <p key={s.title} className="plain">
                       <span className="k">{s.done ? "Done: " : i === next ? "Next: " : "Later: "}</span>
                       {s.title}
+                      {s.completion && <span className="k"> ({completionLine(s.completion, now)})</span>}
                     </p>
                   ))}
-                  <p className="meta plain">Last worked on {ago(p.updatedAt, now)}</p>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {problemPlans.length > 0 && (
+        <section aria-labelledby="problems-h">
+          <h2 id="problems-h">Problems worked through</h2>
+          <p className="lede plain">Problems {kid} actually worked on, and how far each one got. Coming back to one picks up where it stopped.</p>
+          <div className="spots">
+            {problemPlans.slice(0, 8).map((p) => {
+              const stuck = [...p.history].reverse().find((e) => e.type === "wrong_step");
+              return (
+                <article key={p.key} className={`spot px-frame${p.solvedAt ? " resolved" : ""}`}>
+                  <p className="plain">
+                    <b>{p.goal}</b>
+                    <span className="k"> · {p.solvedAt ? `solved ${ago(p.solvedAt, now)}` : `${p.steps.filter((s) => s.done).length} of ${p.steps.length} steps`}</span>
+                  </p>
+                  <p className="meta plain">
+                    {provenanceLine(p, kid, now)}
+                    {!p.solvedAt && stuck ? ` · got stuck at line ${stuck.step} of the working` : ""}
+                  </p>
                 </article>
               );
             })}

@@ -165,3 +165,74 @@ describe("plans in diagnostics", () => {
     expect(formatDiagnostics(d)).toContain('learning plan "geology": 1/2 steps done; next: Plates');
   });
 });
+
+describe("plan provenance in long-term memory", () => {
+  const asked = { origin: "asked" as const, planner: "llm" as const, utterance: "I want to learn about geology", url: "https://example.edu/home", title: "Home" };
+  const steps = [{ title: "Rocks", concept: "Rock types", query: "rock types for kids" }, { title: "Plates", concept: "Plate tectonics" }];
+
+  it("records where a plan came from and what evidence completed each step", () => {
+    const g = new KnowledgeGraph();
+    g.savePlan({ key: "topic:geology", kind: "topic", goal: "geology", steps, provenance: asked }, T0);
+    g.recordResource("Rock types", T0 + 10, { url: "https://www.khanacademy.org/rocks", title: "Types of rock", kind: "lesson", reason: "plan" });
+    g.recordAttempt("Plate tectonics", T0 + 20, { correct: true });
+    const plan = g.plan("topic:geology")!;
+    expect(plan.provenance).toEqual(asked);
+    expect(plan.steps[0].completion).toEqual({ at: T0 + 10, by: "resource", url: "https://www.khanacademy.org/rocks", title: "Types of rock" });
+    expect(plan.steps[1].completion).toEqual({ at: T0 + 20, by: "attempt" });
+    expect(plan.history.map((e) => e.type)).toEqual(["created", "step_done", "step_done"]);
+    expect(plan.history[0].detail).toBe("I want to learn about geology");
+  });
+
+  it("re-saving a plan never rewrites its origin, completions or history", () => {
+    const g = new KnowledgeGraph();
+    g.savePlan({ key: "topic:geology", kind: "topic", goal: "geology", steps, provenance: asked }, T0);
+    g.recordAttempt("Rock types", T0 + 5, { correct: true });
+    const again = g.savePlan({ key: "topic:geology", goal: "geology", steps, provenance: { origin: "asked", planner: "scaffold", utterance: "different words" } }, T0 + 9);
+    expect(again.createdAt).toBe(T0);
+    expect(again.provenance).toEqual(asked);
+    expect(again.steps[0].completion?.by).toBe("attempt");
+    expect(again.history).toHaveLength(2);
+  });
+
+  it("keeps a worked problem's plan with its progress, wrong lines and solve — by key, not by concept", () => {
+    const g = new KnowledgeGraph();
+    const page = { origin: "page" as const, planner: "deterministic" as const, url: "https://example.edu/working", title: "Show your work" };
+    const problem = [{ title: "Clear the constant", concept: "Linear equations" }, { title: "Divide out the coefficient", concept: "Linear equations" }, { title: "Check", concept: "Linear equations" }];
+    g.savePlan({ key: "eq:3x + 5 = 20", kind: "problem", goal: "Solve 3x + 5 = 20", steps: problem, provenance: page }, T0);
+    g.savePlan({ key: "eq:2x - 4 = 10", kind: "problem", goal: "Solve 2x - 4 = 10", steps: problem, provenance: page }, T0);
+    g.recordPlanProgress("eq:3x + 5 = 20", T0 + 1, { wrongStep: 2, by: "working" });
+    g.recordPlanProgress("eq:3x + 5 = 20", T0 + 2, { wrongStep: 2, by: "working" }); // same wrong line: logged once
+    g.recordPlanProgress("eq:3x + 5 = 20", T0 + 3, { reached: 1, by: "working" });
+    g.recordAttempt("Linear equations", T0 + 4, { correct: true }); // evidence on the concept must not complete OTHER problems
+    g.recordPlanProgress("eq:3x + 5 = 20", T0 + 5, { solved: true, by: "attempt" });
+    const solved = g.plan("eq:3x + 5 = 20")!;
+    expect(solved.history.map((e) => `${e.type}:${e.step ?? ""}`)).toEqual(["created:", "wrong_step:2", "step_done:1", "step_done:2", "step_done:3", "solved:"]);
+    expect(solved.solvedAt).toBe(T0 + 5);
+    expect(solved.steps[0].completion).toMatchObject({ by: "working", title: "Show your work" });
+    expect(g.plan("eq:2x - 4 = 10")!.steps.every((s) => !s.done)).toBe(true);
+    expect(g.recordPlanProgress("eq:unknown", T0, { solved: true, by: "attempt" })).toBeNull();
+  });
+
+  it("worked problems never crowd out, or masquerade as, the plans the learner asked for", () => {
+    const g = new KnowledgeGraph();
+    g.savePlan({ key: "topic:geology", kind: "topic", goal: "geology", steps, provenance: asked }, T0);
+    for (let i = 0; i < 60; i++) g.savePlan({ key: `page:p${i}`, kind: "problem", goal: `p${i}`, steps: [{ title: "a" }, { title: "b" }] }, T0 + 1 + i);
+    expect(g.plan("topic:geology")).not.toBeNull();
+    expect(g.profile.plans.filter((p) => p.kind === "problem")).toHaveLength(40);
+    expect(g.plan("page:p0")).toBeNull(); // oldest worked problems age out first
+    expect(g.activePlan()?.key).toBe("topic:geology");
+    expect(diagnose(g, T0 + 100).plans).toHaveLength(1);
+  });
+
+  it("survives persistence, and upgrades a plan stored before provenance existed", () => {
+    const g = new KnowledgeGraph();
+    g.savePlan({ key: "topic:geology", kind: "topic", goal: "geology", steps, provenance: asked }, T0);
+    g.recordResource("Rock types", T0 + 10, { url: "https://www.khanacademy.org/rocks", title: "Types of rock", kind: "lesson", reason: "plan" });
+    const back = KnowledgeGraph.fromJSON(JSON.parse(JSON.stringify(g.toJSON())));
+    expect(back.plan("topic:geology")).toEqual(g.plan("topic:geology"));
+
+    const legacy = KnowledgeGraph.fromJSON({ version: 1, nodes: [], edges: [], updatedAt: 0, profile: { plans: [{ key: "topic:old", goal: "old", createdAt: 1, updatedAt: 2, steps: [{ title: "a", done: true }, { title: "b", done: false }] }] } });
+    expect(legacy.plan("topic:old")).toMatchObject({ kind: "topic", history: [], steps: [{ done: true }, { done: false }] });
+    expect(legacy.plan("topic:old")!.provenance).toBeUndefined();
+  });
+});

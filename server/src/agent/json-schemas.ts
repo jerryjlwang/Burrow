@@ -33,7 +33,7 @@ export const DECISION_JSON_SCHEMA = {
     direction: nullable({ type: "string", enum: ["up", "down"] }, "Scroll direction for scroll. Otherwise null."),
     amount: nullable({ type: "number" }, "Pixels for scroll or milliseconds for wait. Otherwise null."),
     value: nullable(str(), "Option label or value for select. Otherwise null."),
-    quote: nullable(str(), "point_to/highlight only: EXACT short text (3-12 words) copied verbatim from VISIBLE TEXT, to point at that specific text; may replace elementId. Otherwise null."),
+    quote: nullable(str(), "point_to/highlight/observe only: EXACT short text (3-12 words) copied verbatim from VISIBLE TEXT — to point at that text, or for observe to read its whole region in full; may replace elementId. Otherwise null."),
     line: nullable({ type: "integer" }, "point_to/highlight on a textbox/textarea: 1-based line of its value to anchor to (requires elementId), e.g. a step of written working. Otherwise null."),
     tabId: nullable({ type: "integer" }, "switch_tab only: the tab to activate, from the OPEN TABS list. Otherwise null."),
     pendingAction: nullable(PENDING_ACTION, "Only for ask_confirmation. Otherwise null."),

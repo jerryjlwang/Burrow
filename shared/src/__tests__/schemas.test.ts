@@ -51,3 +51,12 @@ describe("validateIntervention", () => {
     expect(validateIntervention({ intervene: false, confidence: 2, type: "none", message: null, elementId: null, reason: "x" }).ok).toBe(false);
   });
 });
+
+describe("observe region targets", () => {
+  it("keeps quote on observe (region read) but quashes it on plain actions", () => {
+    const observe = validateDecision({ action: "observe", quote: "the description", reason: "r" });
+    expect(observe.ok && observe.decision.quote).toBe("the description");
+    const click = validateDecision({ action: "click", elementId: 1, quote: "stray", reason: "r" });
+    expect(click.ok && click.decision.quote).toBeNull();
+  });
+});

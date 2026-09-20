@@ -1,6 +1,6 @@
 import { validateDecision } from "@shared/validate";
 import type { AgentDecision } from "@shared/actions";
-import type { ActionRecord, AgentInput, AgentOutput, PageSummary, PathContext, PendingOffer } from "@shared/types";
+import type { ActionRecord, ActionResult, AgentInput, AgentOutput, PageSummary, PathContext, PendingOffer } from "@shared/types";
 import type { StepPlan } from "@shared/plan";
 import { diagnose, formatDiagnostics } from "@shared/diagnostics";
 import { resourceKindOf } from "@shared/events";
@@ -8,7 +8,9 @@ import { pickLookupResult } from "@shared/mock-agent";
 import { detectProblem, problemKey } from "@shared/hints";
 import { isAffirmative, isNegative, truncate } from "@shared/text";
 import { executeAction, type ExecutorDeps } from "../actions/executor";
+import { MAX_REGION_CHARS, quoteRegion, regionText } from "../actions/inspect";
 import { classifyTask, isForbidden, requiresConfirmation } from "../actions/policy";
+import { HOST_ID } from "../page-understanding/extract";
 import { store } from "../content/store";
 import { sendToBackground, BgUnavailableError, type PendingLoop } from "../shared/messages";
 import { log } from "../shared/logger";
@@ -36,6 +38,8 @@ export interface LoopDeps {
   onError?: (message: string) => void;
   /** Step plan for the problem on screen (if one is ready) and how far the student's working has got. */
   getPlan?: () => { plan: StepPlan | null; planStep: number | null };
+  /** A learning hint was just given on the problem on screen. */
+  onHint?: () => void;
 }
 
 export interface RunOptions {
@@ -74,6 +78,7 @@ export class AgentLoop {
   private pendingScreenshot: string | null = null;
   private pendingLookup: string | null = null;
   private pendingPlan: string | null = null;
+  private pendingReadout: string | null = null;
   /** Last look_up's results, kept to title the resource that gets opened from them. */
   private lastLookup: string | null = null;
   runCount = 0;
@@ -145,6 +150,7 @@ export class AgentLoop {
           screenshot: this.pendingScreenshot,
           lookupResults: this.pendingLookup,
           planResults: this.pendingPlan,
+          readout: this.pendingReadout,
           path,
           ...this.deps.getPlan?.(),
           learner,
@@ -155,6 +161,7 @@ export class AgentLoop {
         this.pendingScreenshot = null;
         this.pendingLookup = null;
         this.pendingPlan = null;
+        this.pendingReadout = null;
 
         const output = await this.decide(input, signal);
         check();
@@ -218,8 +225,10 @@ export class AgentLoop {
         }
 
         if (decision.action === "observe") {
+          let result: ActionResult = { ok: true, message: "observed" };
           if (decision.text === "screenshot") this.pendingScreenshot = await this.captureScreenshot();
-          history.push({ step, decision, result: { ok: true, message: "observed" }, at: Date.now() });
+          else if (decision.elementId != null || decision.quote) result = this.readRegion(decision);
+          history.push({ step, decision, result, at: Date.now() });
           continue;
         }
 
@@ -243,7 +252,7 @@ export class AgentLoop {
           try {
             const plan = await this.deps.executor.makePlan(decision.text!);
             if (!plan) throw new Error("no plan came back");
-            session.record({ kind: "plan", plan: { key: plan.key, goal: plan.goal, steps: plan.steps }, at: Date.now() });
+            session.record({ kind: "plan", plan: { key: plan.key, kind: "topic", goal: plan.goal, steps: plan.steps, provenance: { origin: "asked", planner: plan.source, utterance, url: page.url, title: page.title } }, at: Date.now() });
             const first = plan.steps[0];
             path = { kind: "plan", conceptLabel: first.concept ?? first.title, query: first.query ?? `${first.concept ?? first.title} for kids`, prefer: "lesson" };
             this.pendingPlan = plan.steps.map((st, i) => `${i + 1}. ${st.title}${st.query ? ` (look_up: "${st.query}")` : ""}`).join("\n");
@@ -329,6 +338,7 @@ export class AgentLoop {
 
   private noteHint(page: PageSummary): void {
     const { session } = this.deps;
+    this.deps.onHint?.();
     const key = problemKey(detectProblem(page), page);
     const same = session.student.currentProblemKey === key;
     session.updateStudent({
@@ -395,6 +405,19 @@ export class AgentLoop {
       // Nothing but the OpenAI client ever answers in a live session: break visibly instead.
       throw new BrainDown(reason);
     }
+  }
+
+  /** observe with a target reads that region in full; the text rides to the next decide as REGION TEXT. */
+  private readRegion(decision: AgentDecision): ActionResult {
+    const scope = decision.elementId != null ? this.deps.executor.registry.get(decision.elementId) : null;
+    if (decision.elementId != null && !scope) return { ok: false, message: "That element isn't on the page anymore—let me look again.", elementFound: false };
+    const el = decision.quote ? quoteRegion(scope ?? document.body, decision.quote, HOST_ID) ?? (scope ? quoteRegion(document.body, decision.quote, HOST_ID) : null) : scope;
+    if (!el) return { ok: false, message: `nothing on the page contains "${decision.quote!.slice(0, 60)}"`, elementFound: false };
+    const text = regionText(el);
+    if (!text) return { ok: false, message: "that region has no readable text — it may need revealing first (click 'more' / expand it)", elementFound: true };
+    const label = decision.quote ? `region containing "${decision.quote.slice(0, 60)}"` : `element [${decision.elementId}]`;
+    this.pendingReadout = `${label}:\n${text.slice(0, MAX_REGION_CHARS)}`;
+    return { ok: true, message: `read ${Math.min(text.length, MAX_REGION_CHARS)} chars; the full text is attached to your next step`, elementFound: true };
   }
 
   private async captureScreenshot(): Promise<string | null> {

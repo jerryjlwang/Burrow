@@ -163,3 +163,31 @@ describe("asking about plans", () => {
     expect(decideMock(input("give me a hint")).action).not.toBe("show_plan");
   });
 });
+
+describe("region reading (observe with a target)", () => {
+  it("observes with a quote first, then answers from the full readout", () => {
+    const first = decideMock(input("What does the description say?"));
+    expect(first).toMatchObject({ action: "observe", quote: "description", done: false });
+    expect(validateDecision(first).ok).toBe(true);
+
+    const readout = `region containing "description":\nThis assignment closes the unit. ${"More context. ".repeat(30)}Spotting it earns a golden ratio bonus.`;
+    const second = decideMock(input("What does the description say?", { step: 1, history: [{ step: 0, decision: first, result: { ok: true, message: "read" }, at: 0 }], readout }));
+    expect(second.action).toBe("explain");
+    expect(second.done).toBe(true);
+    expect(second.text).toMatch(/golden ratio bonus/);
+    expect(second.text).not.toMatch(/region containing/); // label line stripped
+  });
+
+  it("gives up honestly when the region was not found", () => {
+    const first = decideMock(input("read the fine print"));
+    expect(first).toMatchObject({ action: "observe", quote: "fine print" });
+    const second = decideMock(input("read the fine print", { step: 1, history: [{ step: 0, decision: first, result: { ok: false, message: "not found" }, at: 0 }] }));
+    expect(second.action).toBe("speak");
+    expect(second.done).toBe(true);
+  });
+
+  it("does not hijack page summaries or clicks", () => {
+    expect(decideMock(input("What's on this page?")).action).toBe("explain");
+    expect(decideMock(input("click the check answer button")).action).toBe("click");
+  });
+});

@@ -1,6 +1,6 @@
 // Storage contract for the parent view (docs/frontend/HANDOFF.md), the skill list, a relative time
 // helper and the sample graph the page falls back to so a demo always has rooms to show.
-import { KnowledgeGraph, emptyConceptState, emptyProfile, type ConceptNode, type GraphSnapshot, type LearnerConceptState, type Misconception } from "@shared/graph";
+import { KnowledgeGraph, emptyConceptState, emptyProfile, type ConceptNode, type GraphSnapshot, type LearnerConceptState, type LearningPlan, type Misconception, type StepCompletion } from "@shared/graph";
 import { diagnose, preferredModality } from "@shared/diagnostics";
 
 export const GRANTS_KEY = "burrow.grants";
@@ -94,6 +94,21 @@ export function learningNotes(snapshot: GraphSnapshot, kid: string, now = Date.n
   return notes;
 }
 
+/** How a step got done, in a parent's words. */
+export function completionLine(c: StepCompletion, now = Date.now()): string {
+  const how = c.by === "resource" ? `opened ${c.title ? `"${c.title}"` : "a lesson"}` : c.by === "attempt" ? "answered a question on it correctly" : "got there in written working";
+  return `${how}, ${ago(c.at, now)}`;
+}
+
+/** Where a plan came from, in a parent's words. */
+export function provenanceLine(plan: LearningPlan, kid: string, now = Date.now()): string {
+  const pv = plan.provenance;
+  const when = ago(plan.createdAt, now);
+  if (pv?.origin === "asked") return `${kid} asked ${when}${pv.utterance ? `: "${pv.utterance}"` : ""}`;
+  if (pv?.origin === "page") return `From ${pv.title ? `"${pv.title}"` : "a page"}, ${when}`;
+  return `Started ${when}`;
+}
+
 export function sampleGraph(now = Date.now()): GraphSnapshot {
   const H = 3_600_000;
   const D = 24 * H;
@@ -144,14 +159,38 @@ export function sampleGraph(now = Date.now()): GraphSnapshot {
       plans: [
         {
           key: "topic:castles",
+          kind: "topic",
           goal: "castles",
           createdAt: now - 5 * D,
           updatedAt: now - D,
+          provenance: { origin: "asked", planner: "llm", utterance: "I want to learn about castles", title: "Castles - Kiddle encyclopedia" },
           steps: [
-            { title: "Why castles were built where they were", concept: "Castle walls", done: true },
-            { title: "How a moat keeps attackers out", concept: "Moats", done: true },
+            { title: "Why castles were built where they were", concept: "Castle walls", done: true, completion: { at: now - 5 * D, by: "resource", title: "Castles for kids (video)" } },
+            { title: "How a moat keeps attackers out", concept: "Moats", done: true, completion: { at: now - D, by: "attempt" } },
             { title: "How attackers tried to get in anyway", concept: "Siege towers", done: false },
             { title: "What life was like inside the walls", concept: "Castle life", done: false },
+          ],
+          history: [
+            { at: now - 5 * D, type: "created", detail: "I want to learn about castles" },
+            { at: now - 5 * D, type: "step_done", step: 1, detail: "Castles for kids (video)" },
+            { at: now - D, type: "step_done", step: 2, detail: "attempt" },
+          ],
+        },
+        {
+          key: "page:homework:which-is-bigger",
+          kind: "problem",
+          goal: "Decide which of two fractions is bigger",
+          createdAt: now - 6 * D,
+          updatedAt: now - 6 * D,
+          provenance: { origin: "page", planner: "llm", title: "Fractions homework, question 4" },
+          steps: [
+            { title: "Give both fractions the same bottom number", concept: "Comparing fractions", done: true, completion: { at: now - 6 * D, by: "working", title: "Fractions homework, question 4" } },
+            { title: "Compare the top numbers", concept: "Comparing fractions", done: false },
+          ],
+          history: [
+            { at: now - 6 * D, type: "created", detail: "Fractions homework, question 4" },
+            { at: now - 6 * D, type: "step_done", step: 1, detail: "working" },
+            { at: now - 6 * D, type: "wrong_step", step: 3 },
           ],
         },
       ],

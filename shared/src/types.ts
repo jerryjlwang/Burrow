@@ -168,6 +168,8 @@ export interface AgentInput {
   planStep?: number | null;
   /** A plan the previous step's make_plan produced, pre-formatted for the prompt. */
   planResults?: string | null;
+  /** Full text of the region the previous step's observe targeted (label line + body). */
+  readout?: string | null;
   /** Longitudinal learner diagnostics, pre-formatted (see formatDiagnostics). */
   learner?: string | null;
 }

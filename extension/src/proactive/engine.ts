@@ -95,6 +95,8 @@ export class ProactiveEngine {
   private planLoading: string | null = null;
   private planRetryAt = 0;
   private reachedPlanStep: number | null = null;
+  /** Problem whose plan is already in long-term memory (so it is stored once, on first engagement). */
+  private persistedPlanKey: string | null = null;
   private remoteJudgeTimer: number | null = null;
   private remoteJudging = false;
   private lastRemoteWorking = "";
@@ -140,12 +142,69 @@ export class ProactiveEngine {
     return { plan: this.plan, planStep: this.reachedPlanStep };
   }
 
+  /**
+   * The student actually worked on this problem (wrote working, answered, took a hint): its plan
+   * becomes a long-term record with provenance. Pages merely visited never get stored.
+   */
+  notePlanEngaged(): void {
+    const plan = this.plan;
+    // The offline scaffold is a placeholder, identical for every problem — not worth remembering.
+    if (!plan || plan.kind !== "problem" || plan.source === "scaffold" || this.persistedPlanKey === plan.key) return;
+    this.persistedPlanKey = plan.key;
+    this.deps.session.record({
+      kind: "plan",
+      plan: { key: plan.key, kind: "problem", goal: plan.goal, steps: plan.steps, provenance: { origin: "page", planner: plan.source, url: location.href.split("#")[0], title: document.title } },
+      at: Date.now(),
+    });
+  }
+
+  private recordPlanProgress(progress: { reached?: number; solved?: boolean; wrongStep?: number; by: "working" | "attempt" }): void {
+    if (!this.plan || this.plan.kind !== "problem") return;
+    this.notePlanEngaged();
+    const stored = this.deps.session.graph.plan(this.plan.key);
+    if (!stored) return;
+    // Judging re-runs on every pause in typing; only what memory doesn't already hold is an event.
+    const doneSoFar = stored.steps.filter((st) => st.done).length;
+    const news = (progress.solved && stored.solvedAt === undefined) || (progress.reached ?? 0) > doneSoFar || progress.wrongStep !== undefined;
+    if (news) this.deps.session.record({ kind: "planProgress", key: this.plan.key, ...progress, at: Date.now() });
+  }
+
   /** Where attempts and struggles land: the plan step being worked, else the page's top concept. */
   private conceptLabel(): string | null {
     const step = this.plan?.steps[Math.min(this.reachedPlanStep ?? 0, this.plan.steps.length - 1)];
     if (step?.concept) return step.concept;
     const top = this.currentConceptIds[0];
     return top ? this.deps.session.graph.get(top)?.label ?? null : null;
+  }
+
+  private adoptPlan(key: string, plan: StepPlan | null, reached: number | null = null): StepPlan | null {
+    this.plan = plan;
+    this.planKey = key;
+    this.reachedPlanStep = reached;
+    this.deps.onPlanProgress?.();
+    return plan;
+  }
+
+  /**
+   * The part of plan resolution that needs no model and no waiting: a plan long-term memory
+   * already holds for this problem (with how far they got), or a shape we plan locally. True when
+   * a plan is in hand afterwards. Safe to call any time — "where am I in the plan?" on a fresh tab
+   * must not depend on the student having typed something first.
+   */
+  recallPlan(page: PageSummary | null = this.deps.getPage()): boolean {
+    if (!page) return false;
+    const problem = detectProblem(page);
+    const key = problemKey(problem, page);
+    if (this.planKey === key) return this.plan !== null;
+    const remembered = this.deps.session.graph.plan(key);
+    if (remembered?.kind === "problem") {
+      const open = remembered.steps.findIndex((st) => !st.done);
+      this.persistedPlanKey = key;
+      this.adoptPlan(key, { key, kind: "problem", goal: remembered.goal, steps: remembered.steps.map(({ title, concept }) => ({ title, concept })), source: remembered.provenance?.planner ?? "llm" }, open < 0 ? remembered.steps.length : open);
+      return true;
+    }
+    if (problem.kind === "linear-equation") return this.adoptPlan(key, linearPlan(problem, key)) !== null;
+    return false;
   }
 
   /**
@@ -156,15 +215,9 @@ export class ProactiveEngine {
   private async ensurePlan(page: PageSummary): Promise<StepPlan | null> {
     const problem = detectProblem(page);
     const key = problemKey(problem, page);
+    if (this.recallPlan(page)) return this.plan;
     if (this.planKey === key) return this.plan;
-    const adopt = (plan: StepPlan | null) => {
-      this.plan = plan;
-      this.planKey = key;
-      this.reachedPlanStep = null;
-      this.deps.onPlanProgress?.();
-      return plan;
-    };
-    if (problem.kind === "linear-equation") return adopt(linearPlan(problem, key));
+    const adopt = (plan: StepPlan | null) => this.adoptPlan(key, plan);
     if (this.planLoading === key || Date.now() < this.planRetryAt) return null;
     this.planLoading = key;
     try {
@@ -240,8 +293,10 @@ export class ProactiveEngine {
     this.deps.tracker.recordWorkingJudgement(judgement, now);
     logger.debug("working judged", { firstWrongStep: judgement.firstWrongStep, solved: judgement.solved, planStep: judgement.planStep });
     this.lastJudgementWrongStep = judgement.firstWrongStep;
-    if (judgement.planStep !== null && judgement.planStep !== this.reachedPlanStep) {
-      this.reachedPlanStep = judgement.planStep;
+    this.notePlanEngaged();
+    if ((judgement.planStep !== null && judgement.planStep !== this.reachedPlanStep) || judgement.solved) {
+      if (judgement.planStep !== null) this.reachedPlanStep = judgement.planStep;
+      this.recordPlanProgress({ reached: judgement.planStep ?? undefined, solved: judgement.solved, by: "working" });
       this.deps.onPlanProgress?.();
     }
     if (judgement.firstWrongStep === null && this.struggledStep !== null) {
@@ -332,6 +387,15 @@ export class ProactiveEngine {
 
   /** Graded feedback → attempt events: the evidence precision, recall and resource efficacy are built on. */
   private recordAttempts(incorrectCounted: boolean, newSuccesses: string[], hinted: boolean, now: number): void {
+    const correct = newSuccesses.some((s) => CORRECT_RE.test(s));
+    if (!incorrectCounted && !correct) return;
+    // The plan's own record first: it is keyed by the problem, so it never waits on concept extraction.
+    this.recallPlan();
+    if (correct) {
+      this.recordPlanProgress({ solved: true, by: "attempt" });
+      if (this.plan?.kind === "problem") this.reachedPlanStep = this.plan.steps.length;
+      this.deps.onPlanProgress?.();
+    } else this.notePlanEngaged();
     const concept = this.conceptLabel();
     if (!concept) return;
     if (incorrectCounted) {
@@ -339,7 +403,7 @@ export class ProactiveEngine {
       const id = this.deps.session.graph.resolve(concept);
       if (id) this.sessionMisses.set(id, (this.sessionMisses.get(id) ?? 0) + 1);
     }
-    if (newSuccesses.some((s) => CORRECT_RE.test(s))) this.deps.session.record({ kind: "attempt", concept, correct: true, hinted, at: now });
+    if (correct) this.deps.session.record({ kind: "attempt", concept, correct: true, hinted, at: now });
   }
 
   /**
@@ -460,6 +524,7 @@ export class ProactiveEngine {
       this.hintsAtStruggle = student.hintsGiven;
       const concept = this.conceptLabel();
       if (concept) this.deps.session.record({ kind: "struggle", concept, at: now });
+      this.recordPlanProgress({ wrongStep: signals.wrongStep.step, by: "working" });
     }
     if (signals.lastErrorText && !student.recentErrors.includes(signals.lastErrorText)) {
       this.deps.session.updateStudent({ recentErrors: [...student.recentErrors.slice(-4), signals.lastErrorText] });

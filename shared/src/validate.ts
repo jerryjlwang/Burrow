@@ -4,8 +4,8 @@ const ACTION_SET = new Set<string>(ACTIONS);
 const TASK_SET = new Set<string>(TASK_TYPES);
 const INTERVENTION_SET = new Set<string>(INTERVENTION_TYPES);
 const ELEMENT_ACTIONS = new Set<ActionName>(["highlight", "point_to", "click", "focus", "type", "clear", "select", "press_enter", "scroll_to"]);
-/** Actions that may anchor to a sub-element target (a verbatim quote or a line of a field's value). */
-const ANCHOR_ACTIONS = new Set<ActionName>(["highlight", "point_to"]);
+/** Actions that may carry a sub-element target (a verbatim quote or a line of a field's value): pointing, and observe's full-region read. */
+const ANCHOR_ACTIONS = new Set<ActionName>(["highlight", "point_to", "observe"]);
 
 export type DecisionValidation = { ok: true; decision: AgentDecision } | { ok: false; error: string };
 

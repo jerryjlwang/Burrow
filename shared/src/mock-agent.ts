@@ -183,6 +183,18 @@ export function decideMock(input: AgentInput): AgentDecision {
     return d({ action: "speak", say: "Hey! I'm here. Ask me where something is, or say 'what's on this page'.", done: true, taskType: "chat" });
   }
 
+  // ---- Region reading: observe with a target, then answer from the full text ----
+  const region = /\b(?:read|check|look at|what does|what do|tell me about|tell me what)\b.*\b(description|instructions|directions|details|summary|caption|fine print)\b/.exec(u);
+  if (region) {
+    if (input.readout) {
+      // The readout's first line is its label; the body is the region's full text.
+      const body = input.readout.slice(input.readout.indexOf("\n") + 1).trim();
+      return d({ action: "explain", say: `Here's what it says: ${truncate(body, 240)}`, text: truncate(body, 2000), done: true, taskType: "accessibility", reason: "answer from region readout" });
+    }
+    if (last?.decision.action === "observe") return d({ action: "speak", say: `I don't see a ${region[1]} on this page.`, done: true, taskType: "accessibility" });
+    return d({ action: "observe", quote: region[1], done: false, taskType: "accessibility", reason: "read the region in full" });
+  }
+
   // ---- Page description / accessibility ----
   if (/(what s on|what is on|whats on|describe|summari[sz]e|what can i do|what is this page|what s this page|whats this page|where am i|what am i looking at|read (me )?(this|the) page|tell me about this page)/.test(u)) {
     const s = pageSummarySpeech(page);
