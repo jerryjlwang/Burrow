@@ -69,6 +69,7 @@ function PetControls({ pet }: { pet?: RefObject<PetController | null> }) {
         <button type="button" className={reduced ? "on" : ""} onClick={() => store.setState({ reducedMotion: !reduced })}>reduced motion</button>
       </div>
       <div className="pip-debug-pet">
+        <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("burrow:point", { detail: { selector: "header a.btn, main h1, h1, main a, a", label: "Look here" } }))}>point: here</button>
         <button type="button" onClick={() => actOut("open_tab", null, { url: "https://example.com" })}>act: open tab</button>
         <button type="button" onClick={() => actOut("switch_tab", null)}>act: switch tab</button>
         <button type="button" onClick={() => actOut("navigate", null, { url: "https://example.com" })}>act: navigate</button>

@@ -35,7 +35,7 @@ const STATE_MAP: Record<CharacterState, string> = {
   listening: "listening",
   thinking: "thinking",
   speaking: "idle",
-  pointing: "idle",
+  pointing: "wave",
   acting: "idle",
   celebrating: "celebrate",
   confused: "confused",

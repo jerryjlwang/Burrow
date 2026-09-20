@@ -36,6 +36,14 @@ function assetUrl(path: string): string {
 const UI_VARS = {
   "--ui-bubble": `url("${assetUrl("ui/bubble.png")}")`,
   "--ui-bubble-teal": `url("${assetUrl("ui/bubble_teal.png")}")`,
+  "--corner-tl": `url("${assetUrl("ui/guide/corner_tl.png")}")`,
+  "--corner-tl-gold": `url("${assetUrl("ui/guide/corner_tl_gold.png")}")`,
+  "--corner-tr": `url("${assetUrl("ui/guide/corner_tr.png")}")`,
+  "--corner-tr-gold": `url("${assetUrl("ui/guide/corner_tr_gold.png")}")`,
+  "--corner-bl": `url("${assetUrl("ui/guide/corner_bl.png")}")`,
+  "--corner-bl-gold": `url("${assetUrl("ui/guide/corner_bl_gold.png")}")`,
+  "--corner-br": `url("${assetUrl("ui/guide/corner_br.png")}")`,
+  "--corner-br-gold": `url("${assetUrl("ui/guide/corner_br_gold.png")}")`,
   "--ui-tail": `url("${assetUrl("ui/bubble_tail.png")}")`,
   "--ui-btn": `url("${assetUrl("ui/button.png")}")`,
   "--ui-btn-primary": `url("${assetUrl("ui/button_primary.png")}")`,
@@ -160,6 +168,17 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
       const d = (e as CustomEvent<{ state: string }>).detail;
       if (d?.state) petRef.current?.play(d.state);
     };
+    // "burrow:point" {selector, label} points him at a page element the way the agent does (the Developer panel uses it).
+    const onPoint = (e: Event) => {
+      const d = (e as CustomEvent<{ selector: string; label?: string }>).detail;
+      const el = d?.selector ? document.querySelector(d.selector) : null;
+      if (!el) return;
+      void controller.overlay.pointAt(controller.registry.idFor(el), { spotlight: true, label: d.label, durationMs: 12000 });
+      store.setState({ characterState: "pointing" });
+      window.setTimeout(() => {
+        if (store.getState().characterState === "pointing") store.setState({ characterState: "idle" });
+      }, 1600);
+    };
     const onLeave = (e: Event) => {
       const d = (e as CustomEvent<{ url: string; line?: string; arriveLine?: string }>).detail;
       if (d?.url) void escort(controller, petRef.current, d.url, d.line ?? "Let's go find out!", d.arriveLine ?? "Here's what I found. Want me to read it?");
@@ -167,10 +186,12 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
     window.addEventListener("burrow:goto", onGoto);
     window.addEventListener("burrow:play", onPlay);
     window.addEventListener("burrow:leave", onLeave);
+    window.addEventListener("burrow:point", onPoint);
     return () => {
       window.removeEventListener("burrow:goto", onGoto);
       window.removeEventListener("burrow:play", onPlay);
       window.removeEventListener("burrow:leave", onLeave);
+      window.removeEventListener("burrow:point", onPoint);
     };
   }, [controller]);
   useEffect(() => armSounds(), []);

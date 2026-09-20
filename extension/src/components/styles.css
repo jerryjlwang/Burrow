@@ -288,34 +288,57 @@
 @keyframes pip-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 @keyframes pip-dot { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
 
-/* ---------- Overlay: highlights & beam ---------- */
+/* ---------- The guide: pawprints, the lock-on brackets, the dither spotlight, the plank ---------- */
+/* Overlay.tsx sets --paw and --dim (ui/guide/*.png) on the layer. Everything is on the 3px grid and
+   moves in steps. The names .pip-hl, .pip-hl-label and .pip-beam are what the checks look for. */
 .pip-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
-.pip-hl {
-  position: fixed; border-radius: 0; border: 3px solid var(--teal); pointer-events: none;
-  box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.25), 0 0 0 3px var(--cream);
-  animation: pip-hl-in 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2), pip-hl-pulse 1.7s ease-in-out 0.3s infinite;
-  transition: left 0.08s linear, top 0.08s linear, width 0.08s linear, height 0.08s linear;
+/* The spotlight: a Bayer dither of ink over the page, a window cut out around the target (Overlay.tsx
+   sets the mask position and size as the iris closes in six steps). */
+.pip-hl-dim {
+  position: fixed; inset: 0; pointer-events: none;
+  background: var(--dim) 0 0 / 12px 12px repeat, rgba(59, 42, 35, 0.2); image-rendering: pixelated;
+  -webkit-mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0); mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-composite: xor; mask-composite: exclude;
 }
-.pip-hl.kind-acting { border-color: var(--gold); animation: pip-hl-in 0.2s ease-out, pip-hl-pulse 0.8s steps(2) 0.2s infinite; }
-.pip-hl.spotlight { box-shadow: 0 0 0 9999px rgba(59, 42, 35, 0.38), 0 0 0 3px var(--cream); }
-.pip-hl.reduced { animation: none; }
+.pip-hl { position: fixed; pointer-events: none; transition: left 0.08s linear, top 0.08s linear, width 0.08s linear, height 0.08s linear; }
+/* Four corners snap in from two grid steps out over three steps, then breathe one step out and back. */
+.pip-hl-c { position: absolute; width: 21px; height: 21px; background: var(--c) no-repeat 0 0 / 21px 21px; image-rendering: pixelated; }
+.pip-hl-c.tl { left: -3px; top: -3px; --c: var(--corner-tl); --dx: -6px; --dy: -6px; }
+.pip-hl-c.tr { right: -3px; top: -3px; --c: var(--corner-tr); --dx: 6px; --dy: -6px; }
+.pip-hl-c.bl { left: -3px; bottom: -3px; --c: var(--corner-bl); --dx: -6px; --dy: 6px; }
+.pip-hl-c.br { right: -3px; bottom: -3px; --c: var(--corner-br); --dx: 6px; --dy: 6px; }
+.pip-hl-c { animation: pip-lock 0.24s steps(3, end) both, pip-breathe 1.2s steps(2, end) 0.24s infinite; }
+@keyframes pip-lock { from { transform: translate(var(--dx), var(--dy)); } to { transform: translate(0, 0); } }
+@keyframes pip-breathe { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(calc(var(--dx) / 2), calc(var(--dy) / 2)); } }
+.pip-hl.kind-acting .pip-hl-c { animation-duration: 0.16s, 0.6s; }
+.pip-hl.kind-acting .pip-hl-c.tl { --c: var(--corner-tl-gold); }
+.pip-hl.kind-acting .pip-hl-c.tr { --c: var(--corner-tr-gold); }
+.pip-hl.kind-acting .pip-hl-c.bl { --c: var(--corner-bl-gold); }
+.pip-hl.kind-acting .pip-hl-c.br { --c: var(--corner-br-gold); }
+.pip-hl.reduced .pip-hl-c { animation: none; }
+/* The label hangs from the top left bracket on a plank, or stands on the bottom one when there is no room above. */
 .pip-hl-label {
-  position: absolute; left: -3px; top: -33px; background: var(--ink); color: var(--cream); font-size: 17px; line-height: 21px;
-  padding: 3px 6px; border-radius: 0; white-space: nowrap; font-family: var(--pip-font);
+  position: absolute; left: -3px; bottom: 100%; margin-bottom: 15px; padding: 0 3px; white-space: nowrap;
+  color: var(--ink); font-family: var(--pip-font); font-size: 17px; line-height: 21px;
+  border: 15px solid transparent; border-image: var(--ui-bubble) 5 fill / var(--frame) repeat; image-rendering: pixelated;
+  animation: pip-plank 0.18s steps(3, end) 0.24s both;
 }
-@keyframes pip-hl-in { from { opacity: 0; transform: scale(1.08); } to { opacity: 1; transform: scale(1); } }
-@keyframes pip-hl-pulse { 0%, 100% { box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.25), 0 0 0 3px var(--cream); } 50% { box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.25), 0 0 0 3px var(--gold); } }
+.pip-hl-label::after { content: ""; position: absolute; left: 6px; top: 100%; margin-top: 15px; width: 3px; height: 15px; background: var(--ink); }
+.pip-hl-label.below { bottom: auto; top: 100%; margin-bottom: 0; margin-top: 15px; }
+.pip-hl-label.right { left: auto; right: -3px; }
+.pip-hl-label.right::after { left: auto; right: 6px; }
+.pip-hl-label.below::after { top: auto; bottom: 100%; margin-top: 0; margin-bottom: 15px; }
+@keyframes pip-plank { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+/* The trail: a hop of pawprints along the arc, the newest crisp, the older ones fading in two steps. */
 .pip-beam { position: fixed; inset: 0; pointer-events: none; overflow: visible; }
-.pip-beam-path {
-  fill: none; stroke: var(--pip-accent); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 10 8;
-  animation: pip-beam-dash 0.9s linear infinite, pip-beam-in 0.35s ease-out;
-  filter: drop-shadow(0 2px 6px rgba(124, 92, 255, 0.5));
-}
-.pip-beam-path.reduced { animation: none; }
-.pip-beam-dot { fill: var(--pip-accent); animation: pip-beam-dot 1.2s ease-in-out infinite; }
-@keyframes pip-beam-dash { to { stroke-dashoffset: -36; } }
-@keyframes pip-beam-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes pip-beam-dot { 0%, 100% { r: 5; opacity: 0.9; } 50% { r: 8; opacity: 0.5; } }
+.pip-paw { position: fixed; width: 27px; height: 24px; margin: -12px 0 0 -13px; background: var(--paw) no-repeat 0 0 / 27px 24px; image-rendering: pixelated; animation: pip-paw-in 0.14s steps(2, end) both; }
+.pip-paw.a1 { opacity: 0.62; }
+.pip-paw.a2 { opacity: 0.3; }
+@keyframes pip-paw-in { from { opacity: 0; } to { opacity: 1; } }
+/* Off screen: a print at the nearest edge, nudging the way, twice a second. */
+.pip-hl-edge { position: fixed; width: 27px; height: 24px; margin: -12px 0 0 -13px; background: var(--paw) no-repeat 0 0 / 27px 24px; image-rendering: pixelated; animation: pip-edge 0.6s steps(2, end) infinite; }
+@keyframes pip-edge { 0%, 100% { margin-top: -12px; } 50% { margin-top: -18px; } }
 
 /* ---------- Debug panel ---------- */
 .pip-debug {
