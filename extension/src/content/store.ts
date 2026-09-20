@@ -31,6 +31,13 @@ export interface Bubble {
   expiresAt?: number;
 }
 
+/** A worked example the rabbit "draws out" line by line on its chalkboard. */
+export interface SketchBoard {
+  id: string;
+  title?: string;
+  lines: string[];
+}
+
 export interface DebugInfo {
   lastDecision: AgentDecision | null;
   lastResult: ActionResult | null;
@@ -57,6 +64,7 @@ export interface UIState {
   interimTranscript: string;
   voice: VoiceState;
   bubble: Bubble | null;
+  board: SketchBoard | null;
   highlights: HighlightBox[];
   pointer: { from: { x: number; y: number }; to: { x: number; y: number } } | null;
   busy: boolean;
@@ -83,6 +91,7 @@ export const initialState: UIState = {
   interimTranscript: "",
   voice: { mode: "off", ttsPlaying: false, serverOk: null },
   bubble: null,
+  board: null,
   highlights: [],
   pointer: null,
   busy: false,
