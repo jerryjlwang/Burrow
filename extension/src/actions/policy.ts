@@ -46,7 +46,7 @@ export function requiresConfirmation(decision: AgentDecision, ctx: PolicyContext
       return { required: true, reason: "form submission", message: `This looks like it sends the form. Want me to go ahead?` };
     }
   }
-  if (decision.action === "navigate") {
+  if (decision.action === "navigate" || decision.action === "open_tab") {
     if (page && decision.url) {
       try {
         const from = new URL(page.url);

@@ -22,6 +22,7 @@ function setup(html: string) {
     rescan,
     waitForChange: async () => ({ changed: true, urlChanged: false }),
     navigate: vi.fn(async () => undefined),
+    openTab: vi.fn(async () => undefined),
     goBack: vi.fn(async () => undefined),
   };
   return { page, deps, overlay };

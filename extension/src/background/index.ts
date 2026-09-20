@@ -269,6 +269,10 @@ async function handle(msg: BgRequest, sender: chrome.runtime.MessageSender): Pro
       if (!/^https?:\/\//i.test(msg.url)) throw new Error("only http(s) urls");
       await chrome.tabs.update(tabId, { url: msg.url });
       return { ok: true };
+    case "nav.open":
+      if (!/^https?:\/\//i.test(msg.url)) throw new Error("only http(s) urls");
+      await chrome.tabs.create({ url: msg.url, active: true });
+      return { ok: true };
     case "nav.back":
       if (tabId == null) throw new Error("no tab");
       await chrome.tabs.goBack(tabId);

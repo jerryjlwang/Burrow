@@ -12,6 +12,7 @@ export const ACTIONS = [
   "scroll",
   "scroll_to",
   "navigate",
+  "open_tab",
   "go_back",
   "wait",
   "ask_user",

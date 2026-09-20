@@ -37,3 +37,12 @@ describe("decision anchor validation", () => {
     expect(v.ok).toBe(false);
   });
 });
+
+describe("open_tab validation", () => {
+  it("requires an absolute http(s) url, like navigate", () => {
+    expect(validateDecision({ ...base, action: "open_tab", elementId: null, url: "https://www.khanacademy.org/" }).ok).toBe(true);
+    expect(validateDecision({ ...base, action: "open_tab", elementId: null, url: "khanacademy.org" }).ok).toBe(false);
+    expect(validateDecision({ ...base, action: "open_tab", elementId: null, url: "javascript:alert(1)" }).ok).toBe(false);
+    expect(validateDecision({ ...base, action: "open_tab", elementId: null }).ok).toBe(false);
+  });
+});

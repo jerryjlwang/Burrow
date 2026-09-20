@@ -73,6 +73,7 @@ export type BgRequest =
   | { type: "tab.session.set"; patch: Partial<TabSession> }
   | { type: "tab.session.clear" }
   | { type: "nav.navigate"; url: string }
+  | { type: "nav.open"; url: string }
   | { type: "nav.back" }
   | { type: "screenshot" }
   | { type: "open.onboarding" }
@@ -106,6 +107,7 @@ export type BgResponseMap = {
   "tab.session.set": { ok: boolean };
   "tab.session.clear": { ok: boolean };
   "nav.navigate": { ok: boolean };
+  "nav.open": { ok: boolean };
   "nav.back": { ok: boolean };
   screenshot: { ok: boolean; dataUrl?: string; error?: string };
   "open.onboarding": { ok: boolean };

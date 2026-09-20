@@ -90,7 +90,7 @@ export function validateDecision(raw: unknown): DecisionValidation {
     if (d.action === "type" && (d.text === null || d.text.length === 0)) return { ok: false, error: "type requires text" };
     if (d.action === "type" && d.text!.length > 2000) return { ok: false, error: "type text too long" };
     if (d.action === "select" && d.value === null) return { ok: false, error: "select requires value" };
-    if (d.action === "navigate" && (!d.url || !/^https?:\/\//i.test(d.url))) return { ok: false, error: "navigate requires an absolute http(s) url" };
+    if ((d.action === "navigate" || d.action === "open_tab") && (!d.url || !/^https?:\/\//i.test(d.url))) return { ok: false, error: `${d.action} requires an absolute http(s) url` };
     if (d.action === "scroll" && d.direction === null) return { ok: false, error: "scroll requires direction" };
     if (d.action === "ask_confirmation") {
       if (!d.pendingAction) return { ok: false, error: "ask_confirmation requires pendingAction" };

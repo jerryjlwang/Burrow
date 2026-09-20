@@ -197,6 +197,18 @@ export function decideMock(input: AgentInput): AgentDecision {
   if (/^(go|take me|head) back$/.test(u) || /^back$/.test(u)) return d({ action: "go_back", say: "Going back.", taskType: "navigation" });
 
   // ---- Clicking / navigating ----
+  // ---- New tab / window (must outrank plain click/open handling) ----
+  const newTab = /\b(?:open|show|take me to)\b(.*)\bin a new (?:tab|window)\b|\bnew (?:tab|window)\b.*\b(?:for|with|of)\b(.*)/i.exec(utterance);
+  if (newTab) {
+    const what = (newTab[1] ?? newTab[2] ?? "").trim();
+    const link = what ? findBestElement(page.elements.filter((e) => e.role === "link" && !!e.href), what, {}) : null;
+    if (link?.href) {
+      const url = /^https?:\/\//i.test(link.href) ? link.href : new URL(link.href, page.url).href;
+      return d({ action: "open_tab", url, say: `Opening ${truncate(link.name, 40)} in a new tab.`, done: true, taskType: "navigation", reason: "new tab from page link" });
+    }
+    return d({ action: "speak", say: "I don't see that here to open. Which link should I use?", done: true, taskType: "navigation" });
+  }
+
   const wantsClick = /^(?:please |pip |ok |okay |yeah |yes |can you |could you |would you )*(click|press|tap|hit|open|select|choose|check|tick|pick|go to|take me to|navigate to|bring me to|start|launch|submit|turn in|send)\b/.test(u);
   if (wantsClick) {
     const urlMatch = utterance.match(/((?:https?:\/\/)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:\/\S*)?)/i);

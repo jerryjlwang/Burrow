@@ -17,6 +17,7 @@ export interface ExecutorDeps {
   /** Resolves when the DOM/URL changed or the timeout elapsed. */
   waitForChange: (timeoutMs: number) => Promise<{ changed: boolean; urlChanged: boolean }>;
   navigate: (url: string) => Promise<void>;
+  openTab: (url: string) => Promise<void>;
   goBack: () => Promise<void>;
   /** Called right before an action that may unload the page. */
   beforeMaybeNavigate?: () => Promise<void> | void;
@@ -379,6 +380,12 @@ export async function executeAction(decision: AgentDecision, deps: ExecutorDeps)
         await deps.beforeMaybeNavigate?.();
         await deps.navigate(decision.url!);
         return { ok: true, message: "navigating", urlChanged: true, changed: true };
+      }
+
+      case "open_tab": {
+        // The current page stays put; the new tab gets its own content script and session.
+        await deps.openTab(decision.url!);
+        return { ok: true, message: "opened in a new tab" };
       }
 
       case "go_back": {
