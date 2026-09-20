@@ -87,6 +87,11 @@ const boardDone = (page) =>
 /** Out of the hole and standing: the idle strip with a body that measures. */
 const standing = async (page) => (await strip(page)) === "idle" && !!(await petBox(page));
 const LEAK = /\b15\b|x\s*=\s*5\b/;
+/** The numbers of the kid's own problem; a note that borrows any of them is the worked step in disguise. */
+const THEIRS = new Set(["3", "5", "20", "25"]);
+const borrowed = (text) => (text.match(/-?\d+(?:\.\d+)?/g) ?? []).map((n) => String(Number(n))).filter((n) => THEIRS.has(n));
+/** Offers the page's own proactive engine would make from excalidraw's DOM; none belong on the board. */
+const PAGE_OFFER = /leans on|haven't really touched|want a hint|want a quick look|being stubborn/i;
 const fmt = (r) => (r ? `${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.width)}x${Math.round(r.height)}` : "none");
 
 const profileDir = resolve(here, ".profile-tablet");
@@ -197,11 +202,12 @@ try {
     const near = Math.abs(after.y + after.height - 342) < 40 && after.x + after.width <= 317 + 6;
     check("he stands beside the line, feet on its baseline, not over it", near, `body ${fmt(after)}`);
   }
+  const said = v?.nudge ?? "";
   const offer = await until(async () => {
     const b = await bubble(board);
-    return b && b.actions >= 2 ? b : null;
+    return b && b.actions >= 2 && (!said || b.text === said) ? b : null;
   }, 10000);
-  check("a nudge bubble with Yes and No is up beside him", !!offer, offer ? `"${offer.text}"` : `bubble: ${JSON.stringify(await bubble(board))}`);
+  check("the judge's nudge is up as a bubble with Yes and No beside him", !!offer, offer ? `"${offer.text}"` : `judge said "${said}", bubble: ${JSON.stringify(await bubble(board))}`);
   check("the nudge names the step, never the fix", !!offer && !LEAK.test(offer.text), offer?.text ?? "");
   check("the nudge carries the rung: a question first", !live || (!!offer && /\?\s*$/.test(offer.text)), offer?.text ?? "");
   await board.screenshot({ path: resolve(shots, "20-tablet-ring.png") });
@@ -214,7 +220,7 @@ try {
   const note = rose ? await until(() => boardDone(board), 15000) : null;
   st = await status();
   check("the chalkboard rises with a note after the pen stays still", !!note, note ? `${roseS} s: ${note.slice(0, 120)}` : `${rose ? "board never finished writing" : "no board"}; ${st?.checks} checks, last ${st?.lastReason} rung ${st?.lastRung}`);
-  check("the note uses other numbers, never the fix", !!note && !LEAK.test(note), note ?? "");
+  check("the note uses other numbers, never the fix", !!note && !LEAK.test(note) && borrowed(note).length === 0, note ? `${note}${borrowed(note).length ? ` (borrows ${borrowed(note).join(", ")})` : ""}` : "");
   check("the stall was the only check while the pen rested", (st?.checks ?? 0) - checksBefore === 1 && st?.lastReason === "stall", `${(st?.checks ?? 0) - checksBefore} checks, last ${st?.lastReason}`);
   v = st?.lastVerdict;
   check("the stall verdict carried the note and a spoken line", (v?.note?.length ?? 0) > 0 && !!v?.nudge, JSON.stringify({ note: v?.note, nudge: v?.nudge }));
@@ -264,6 +270,7 @@ try {
   await context.close().catch(() => null);
 }
 
+check("no page offer from excalidraw's own DOM ever showed on the board", !bubbleLog.some((l) => PAGE_OFFER.test(l)), bubbleLog.filter((l) => PAGE_OFFER.test(l)).join("; "));
 if (bubbleLog.length) console.log(`\nbubbles on the board:\n  ${bubbleLog.join("\n  ")}`);
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length} of ${results.length} checks passed`);

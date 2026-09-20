@@ -20,6 +20,7 @@ import type { OverlayController } from "../actions/overlay";
 import type { ElementRegistry } from "../page-understanding/registry";
 import type { PageWatcher } from "../page-understanding/watcher";
 import { HOST_ID } from "../page-understanding/extract";
+import { pageRole } from "../components/handoff";
 
 const logger = log("proactive");
 /** Ink verdicts below this confidence only earn a glance; at or above it the rabbit speaks. */
@@ -147,6 +148,9 @@ export class ProactiveEngine {
   }
 
   start(): void {
+    // On the drawing board the page is a canvas app: the only proactive thing there is the tablet
+    // coach (onInkJudgement), never the page's own signals, concepts or step judge.
+    if (pageRole() === "board") return;
     const onPointerDown = (e: PointerEvent) => this.handlePointerDown(e);
     document.addEventListener("pointerdown", onPointerDown, true);
     const onKey = (e: KeyboardEvent) => {
@@ -588,14 +592,15 @@ export class ProactiveEngine {
       this.inkNoteKey = key;
       if (this.offerActive) this.offerResolved("dismissed");
       logger.info("ink note", { line: j.line, note: j.note, rung: meta.rung });
+      // The offer slot is his from here, so nothing ambient slips in while he hops to the empty space.
+      this.offerActive = true;
+      this.activeOffer = { kind: "ink-note", key };
       this.inkStaging = true;
       try {
         await this.stage({ phase: "note", judgement: j, rung: meta.rung });
       } finally {
         this.inkStaging = false;
       }
-      this.offerActive = true;
-      this.activeOffer = { kind: "ink-note", key };
       this.deps.onOffer({ type: "hint", message: j.nudge, elementId: null, at: now, goal: inkGoal(j, meta, "note") });
       if (s.settings.ttsEnabled) void this.deps.speak(j.nudge);
       return;
@@ -619,15 +624,16 @@ export class ProactiveEngine {
       this.inkCooldownUntil = now + INK_COOLDOWN_MS;
       this.inkOff = true;
       logger.info("ink nudge", { line: j.line, issue: j.issue, confidence: j.confidence, rung: meta.rung });
-      // He goes to the line and circles the part first; the words follow once the circle is drawn.
+      // The offer slot is his from here, so nothing ambient slips in during the hop. He goes to the
+      // line and circles the part first; the words follow once the circle is drawn.
+      this.offerActive = true;
+      this.activeOffer = { kind: "ink", key };
       this.inkStaging = true;
       try {
         await this.stage({ phase: "nudge", judgement: j, rung: meta.rung });
       } finally {
         this.inkStaging = false;
       }
-      this.offerActive = true;
-      this.activeOffer = { kind: "ink", key };
       store.setState({ attention: 2 });
       this.deps.onOffer({ type: "hint", message: j.nudge, elementId: null, at: now, goal: inkGoal(j, meta, "nudge") });
       if (s.settings.ttsEnabled) void this.deps.speak(j.nudge);

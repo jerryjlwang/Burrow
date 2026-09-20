@@ -151,6 +151,32 @@ export function validateInkJudgement(raw: unknown): { ok: true; judgement: InkJu
   };
 }
 
+const NUMBER_RE = /-?\d+(?:\.\d+)?/g;
+
+/**
+ * The numbers a stall note borrows from the kid's own lines. A note is meant to be an analogous
+ * example in other numbers, a question or a diagram; one built on their numbers is the worked
+ * step in disguise, so the server asks again or drops it. Shape coordinates are not numbers here:
+ * only text lines and the words of labels count.
+ */
+export function noteReusesNumbers(lines: string[], note: string[]): string[] {
+  const theirs = new Set<string>();
+  for (const l of lines) for (const n of l.match(NUMBER_RE) ?? []) theirs.add(String(Number(n)));
+  if (!theirs.size) return [];
+  const reused = new Set<string>();
+  for (const raw of note) {
+    const line = raw.trim();
+    const m = /^(line|arrow|circle|rect|dot|label)\s/i.exec(line);
+    let text = line;
+    if (m) {
+      if (m[1].toLowerCase() !== "label") continue;
+      text = line.replace(/^label\s+\S+\s+\S+\s*/i, "");
+    }
+    for (const n of text.match(NUMBER_RE) ?? []) if (theirs.has(String(Number(n)))) reused.add(String(Number(n)));
+  }
+  return [...reused];
+}
+
 /** Where the mock's lines sit on a 1280 x 800 board: "3x + 5 = 20" then "3x = 25", the 25 marked, empty space below. */
 const MOCK_BOX: InkBox = { x: 0.248, y: 0.398, w: 0.064, h: 0.027 };
 const MOCK_MARK: InkBox = { x: 0.287, y: 0.398, w: 0.025, h: 0.026 };

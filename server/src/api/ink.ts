@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { judgeInkMock, MAX_RUNG, validateInkJudgement, type InkJudgeInput, type InkJudgeOutput, type InkJudgement } from "@shared/ink";
+import { judgeInkMock, MAX_RUNG, noteReusesNumbers, validateInkJudgement, type InkJudgeInput, type InkJudgeOutput, type InkJudgement } from "@shared/ink";
 import type { Config } from "../config";
 import { log } from "../util/logger";
 
@@ -90,8 +90,16 @@ export class InkService {
     const started = Date.now();
     if (this.apiKey) {
       try {
-        const judgement = await this.callGemini(input);
-        logger.info("judge", { status: judgement.status, line: judgement.line, confidence: judgement.confidence, lines: judgement.lines.length, solved: judgement.solved, ms: Date.now() - started });
+        let judgement = await this.callGemini(input);
+        // A note in the kid's own numbers is the worked step in disguise: one more try in other numbers, else no note.
+        let reused = noteReusesNumbers(judgement.lines, judgement.note);
+        if (reused.length) {
+          logger.info("note reused the kid's numbers; asking again", { reused });
+          judgement = await this.callGemini(input, `Your last note reused the kid's own numbers (${reused.join(", ")}). Write the note again with different numbers, as an analogous example, a question or a diagram, or leave "note" empty.`);
+          reused = noteReusesNumbers(judgement.lines, judgement.note);
+          if (reused.length) judgement = { ...judgement, note: [] };
+        }
+        logger.info("judge", { reason: input.reason, rung: input.rung, status: judgement.status, line: judgement.line, mark: !!judgement.mark, note: judgement.note.length, confidence: judgement.confidence, lines: judgement.lines.length, solved: judgement.solved, ms: Date.now() - started });
         dumpForDebug(input, judgement);
         return { judgement, provider: this.providerName, degraded: false, latencyMs: Date.now() - started };
       } catch (e) {
@@ -102,7 +110,7 @@ export class InkService {
     return { judgement: judgeInkMock(input), provider: "mock", degraded: false, latencyMs: Date.now() - started };
   }
 
-  private async callGemini(input: InkJudgeInput): Promise<InkJudgement> {
+  private async callGemini(input: InkJudgeInput, correction?: string): Promise<InkJudgement> {
     const frame = imagePart(input.frame);
     if (!frame) throw new Error("frame is not an image data URL");
     const context = input.context ? imagePart(input.context) : null;
@@ -115,7 +123,7 @@ export class InkService {
     const memory = input.previousLines.length ? ` Last time you read these lines, possibly mid-stroke, so re-read every line from the image and trust the image over this list: ${JSON.stringify(input.previousLines.slice(-12))}.` : "";
     const rung = Math.min(MAX_RUNG, Math.max(1, Math.floor(input.rung) || 1));
     const rungNote = input.lastWrongLine ? ` This is nudge ${rung} on the line "${input.lastWrongLine.slice(0, 60)}" if that line is still wrong; a different mistake is nudge 1.` : " This is nudge 1.";
-    parts.push({ text: `The tablet now. Reason for this check: ${input.reason}.${rungNote}${memory}` }, frame);
+    parts.push({ text: `The tablet now. Reason for this check: ${input.reason}.${rungNote}${memory}${correction ? ` ${correction}` : ""}` }, frame);
     const body = {
       systemInstruction: { parts: [{ text: SYSTEM }] },
       contents: [{ role: "user", parts }],

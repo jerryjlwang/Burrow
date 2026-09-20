@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { judgeInkMock, parseInkBox, validateInkJudgement, type InkJudgeInput, type InkReason } from "./ink";
+import { judgeInkMock, noteReusesNumbers, parseInkBox, validateInkJudgement, type InkJudgeInput, type InkReason } from "./ink";
 
 const input = (seq: number, reason: InkReason = "ink", rung = 1): InkJudgeInput => ({ frame: "data:image/jpeg;base64,AAAA", context: null, contextTitle: "", contextUrl: "", previousLines: [], seq, reason, rung, lastWrongLine: null });
 
@@ -76,6 +76,21 @@ describe("validateInkJudgement", () => {
     if (!first.ok) return;
     const again = validateInkJudgement(JSON.parse(JSON.stringify(first.judgement)));
     expect(again.ok && again.judgement).toEqual(first.judgement);
+  });
+});
+
+describe("noteReusesNumbers", () => {
+  const lines = ["3x + 5 = 20", "3x = 25"];
+  it("passes an analogous example in other numbers, questions and diagrams", () => {
+    expect(noteReusesNumbers(lines, ["A similar one:", "y + 2 = 9", "take 2 from both sides", "y = 7"])).toEqual([]);
+    expect(noteReusesNumbers(lines, ["What undoes adding?", "line 20 50 80 50", "label 20 30 y + 2 = 9"])).toEqual([]);
+    expect(noteReusesNumbers([], ["5 + 5"])).toEqual([]);
+  });
+  it("catches the kid's own numbers in text lines and label words, ignoring shape coordinates", () => {
+    expect(noteReusesNumbers(lines, ["To undo + 5:", "subtract 5 from", "both sides"])).toEqual(["5"]);
+    expect(noteReusesNumbers(lines, ["label 20 30 3x = 15"])).toEqual(["3"]);
+    expect(noteReusesNumbers(lines, ["circle 25 20 5"])).toEqual([]);
+    expect(noteReusesNumbers(["x = 5.0"], ["try 5"])).toEqual(["5"]);
   });
 });
 
