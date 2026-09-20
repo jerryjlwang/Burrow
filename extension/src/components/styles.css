@@ -810,3 +810,16 @@
 @keyframes pip-inkmark-draw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
 @keyframes pip-inkmark-breathe { 0%, 100% { stroke: var(--teal); } 50% { stroke: var(--gold-deep); } }
 @keyframes pip-inkmark-out { from { opacity: 1; } to { opacity: 0; } }
+
+/* ---------- The guest: a scanned character standing beside the rabbit ---------- */
+/* He walks in from the left edge of the window on whole pixels, waves once, then breathes. The art
+   is a canvas so the sprite stays crisp; the bob is the whole thing moving one grid step. */
+.pip-guest { position: fixed; bottom: 18px; right: 228px; left: auto; pointer-events: none; z-index: 2147483000; }
+.pip-guest-art { display: block; image-rendering: pixelated; filter: drop-shadow(3px 3px 0 rgba(59, 42, 35, 0.3)); }
+.pip-guest.in { animation: pip-guest-walk 2.2s steps(14, end) both, pip-guest-bob 0.32s steps(2, end) 7; }
+.pip-guest.wave { transform: translateX(0); animation: pip-guest-wave 0.36s steps(2, end) 3 both; }
+.pip-guest.idle { transform: translateX(0); animation: pip-guest-bob 1.4s steps(2, end) infinite; }
+.pip-guest.still { transform: translateX(0); animation: none; }
+@keyframes pip-guest-walk { from { transform: translateX(-70vw); } to { transform: translateX(0); } }
+@keyframes pip-guest-bob { 0%, 100% { margin-bottom: 0; } 50% { margin-bottom: 3px; } }
+@keyframes pip-guest-wave { 0%, 100% { transform: translateX(0) rotate(0deg); } 50% { transform: translateX(0) rotate(-4deg); } }

@@ -11,6 +11,7 @@ import { Board } from "./Board";
 import { SketchOverlay } from "./SketchOverlay";
 import { InkCoach } from "./InkCoach";
 import { ActionFx } from "./actfx";
+import { GuestPet } from "./GuestPet";
 import { PlanMap } from "./PlanMap";
 import { DebugPanel } from "./DebugPanel";
 import { escort, pageRole, pendingJumpTo, readArrival, startHandoff, type Arrival } from "./handoff";
@@ -355,6 +356,7 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
       <SketchOverlay />
       <InkCoach pet={petRef} />
       <ActionFx pet={petRef} />
+      <GuestPet />
       <PlanMap controller={controller} />
       {settings.debugMode && <DebugPanel pet={petRef} />}
       <div className={`pip-dock${below ? " below" : ""}`} style={dockStyle}>
