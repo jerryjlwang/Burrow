@@ -104,16 +104,25 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
   // Arriving from a page he escorted? Then he starts in the hole and pops out with a line.
   const [arrival, setArrival] = useState<Arrival | null>(null);
   const arrivalRef = useRef<Arrival | null>(null);
-  useEffect(() => {
-    void readArrival().then((a) => {
-      if (!a) return;
+  // Read once, and keep the promise: the sprite art may finish loading before storage answers, and
+  // the pet controller must not decide how he appears until this is settled, or he simply stands
+  // there on a page he was supposed to climb out onto.
+  const arrivalRead = useRef<Promise<Arrival | null> | null>(null);
+  if (!arrivalRead.current) {
+    arrivalRead.current = readArrival().then((a) => {
+      if (!a) return null;
       arrivalRef.current = a;
-      setArrival(a);
       try {
         chrome.storage.local.remove("burrow.arrive");
       } catch {
         /* ignore */
       }
+      return a;
+    });
+  }
+  useEffect(() => {
+    void arrivalRead.current?.then((a) => {
+      if (a) setArrival(a);
     });
   }, []);
   // The new tab page draws its world first and then says "burrow:enter"; he stays in the hole until then
@@ -143,14 +152,15 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
     (c: PetController | null) => {
       onController(c);
       if (!c) return;
-      const a = arrivalRef.current;
-      if (a) {
+      // Wait for the arrival read before choosing: he came through the ground, so he comes up out of it.
+      void arrivalRead.current?.then((a) => {
+        if (!a || arrivalRef.current === null) return;
         arrivalRef.current = null;
         void c.jumpIn(new Promise((r) => setTimeout(r, 500))).then(() => {
           controller.showBubble({ id: `arrive-${a.at}`, text: a.line ?? "Here we are!", kind: "info", expiresAt: Date.now() + 6000 });
         });
-        return;
-      }
+      });
+      if (arrivalRef.current) return;
       if (bootPage.current) {
         const ready = entered.current ? Promise.resolve() : new Promise<void>((r) => enterWaiters.current.push(r));
         void c.jumpIn(ready);
