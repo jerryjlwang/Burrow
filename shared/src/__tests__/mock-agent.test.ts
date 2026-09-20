@@ -275,3 +275,31 @@ describe("sketch extension and anchoring", () => {
     expect(v.ok && v.decision.quote).toBe("3x + 5 = 20");
   });
 });
+
+describe("erasing a drawing", () => {
+  const board = "1. line 20 80 80 80\n2. line 20 80 20 30\n3. label 12 58 a\n4. label 48 92 b\n5. The square corner is between a and b.";
+
+  it("erases everything when asked, and only the named parts when the student names them", () => {
+    const all = decideMock(input("ok erase the drawing", { board }));
+    expect(validateDecision(all).ok).toBe(true);
+    expect(all).toMatchObject({ action: "sketch", value: "erase", text: "all" });
+    const labels = decideMock(input("get rid of the labels", { board }));
+    expect(validateDecision(labels).ok).toBe(true);
+    expect(labels).toMatchObject({ action: "sketch", value: "erase", text: "3 4" });
+  });
+
+  it("says so when there is nothing to erase, and never erases unasked", () => {
+    expect(decideMock(input("erase the drawing")).action).toBe("speak");
+    expect(decideMock(input("what does b mean?", { board })).value).not.toBe("erase");
+  });
+});
+
+describe("sketch erase validation", () => {
+  const base = { action: "sketch", value: "erase", say: null, reason: "r", done: true };
+  it("accepts 'all' and item numbers, and rejects anything else as the erase target", () => {
+    expect(validateDecision({ ...base, text: "all" }).ok).toBe(true);
+    expect(validateDecision({ ...base, text: "2, 5-7" }).ok).toBe(true);
+    expect(validateDecision({ ...base, text: "the labels" }).ok).toBe(false);
+    expect(validateDecision({ ...base, text: "" }).ok).toBe(false);
+  });
+});

@@ -163,6 +163,47 @@ try {
   check("the drawing lands inside the video picture, not in the corner", !!drawn && drawn.placement === "video" && drawn.inside, JSON.stringify(drawn));
   check("strokes are solid once drawn: none left dashed, even ones longer than 100px", !!drawn && drawn.strokes >= 6 && drawn.dashed === 0 && drawn.longest > 100, drawn ? `${drawn.strokes} strokes, ${drawn.dashed} dashed, longest ${drawn.longest}px` : "");
   await page.screenshot({ path: resolve(shots, "22-video-sketch.png") });
+
+  // ---- 6. The drawing is the student's: it survives the video resuming, moves when dragged, and goes only when asked ----
+  const boardState = () => page.evaluate(() => {
+    const root = document.getElementById("pip-companion-host").shadowRoot;
+    const board = root.querySelector(".pip-board");
+    if (!board) return null;
+    const b = board.getBoundingClientRect();
+    return { x: Math.round(b.left), y: Math.round(b.top), strokes: root.querySelectorAll(".pip-board-canvas path, .pip-board-canvas circle, .pip-board-canvas rect").length, labels: root.querySelectorAll(".pip-board-label").length, hot: root.querySelector(".pip-board-box")?.getAttribute("data-hot") };
+  });
+  await page.evaluate(() => document.getElementById("lesson").play());
+  await new Promise((r) => setTimeout(r, 3000));
+  const afterResume = await boardState();
+  check("resuming the video does not erase the drawing", !!afterResume && afterResume.strokes >= 6 && !(await video(page)).paused, JSON.stringify(afterResume));
+
+  // Click-through: a click in the middle of the drawing reaches the video underneath (native controls toggle play).
+  const before = await boardState();
+  const mid = await page.evaluate(() => { const b = document.getElementById("pip-companion-host").shadowRoot.querySelector(".pip-board").getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; });
+  await page.mouse.click(mid.x, mid.y);
+  const toggled = await until(async () => (await video(page)).paused, 3000);
+  check("the inside of the drawing is click-through: the video underneath still pauses", !!toggled);
+
+  await page.locator(".pip-input").fill("get rid of the labels");
+  await page.locator(".pip-input").press("Enter");
+  const partial = await until(async () => { const b = await boardState(); return b && b.labels === 0 ? b : null; }, 10_000);
+  check("'get rid of the labels' erases just the labels and leaves the rest where it was", !!partial && partial.strokes === before.strokes && partial.x === before.x && partial.y === before.y, JSON.stringify({ before, partial }));
+
+  const grip = await page.locator(".pip-board-grip").boundingBox();
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+  const hovered = await until(async () => (await boardState())?.hot === "true", 2000);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + grip.width / 2 - 150, grip.y + grip.height / 2 + 60, { steps: 8 });
+  await page.screenshot({ path: resolve(shots, "23-video-sketch-dragging.png") });
+  await page.mouse.up();
+  const moved = await boardState();
+  check("hovering the grip shows the bounding box", !!hovered);
+  check("dragging the box moves the whole drawing", !!moved && Math.abs(moved.x - (before.x - 150)) <= 2 && Math.abs(moved.y - (before.y + 60)) <= 2, JSON.stringify({ from: { x: before.x, y: before.y }, to: moved && { x: moved.x, y: moved.y } }));
+
+  await page.locator(".pip-input").fill("ok erase the drawing");
+  await page.locator(".pip-input").press("Enter");
+  const gone = await until(async () => (await boardState()) === null, 10_000);
+  check("'erase the drawing' removes it", !!gone);
 } catch (e) {
   check("video e2e ran to completion", false, String(e).slice(0, 300));
 } finally {
