@@ -215,7 +215,7 @@ try {
   if (extId) {
     const ob = await context.newPage();
     await ob.goto(`chrome-extension://${extId}/onboarding.html`);
-    await ob.locator("text=Meet Pip").waitFor({ timeout: 8000 });
+    await ob.locator("text=Meet the White Rabbit").waitFor({ timeout: 8000 });
     await ob.locator("button:has-text('Next')").click();
     await ob.locator("button:has-text('Enable microphone')").click();
     const granted = await ob.locator("text=Microphone enabled").waitFor({ timeout: 8000 }).then(() => true).catch(() => false);

@@ -10,7 +10,7 @@ export function DebugPanel() {
   const offline = useStore((s) => s.offline);
   return (
     <aside className="pip-debug" aria-label="Developer panel">
-      <h4>Pip dev</h4>
+      <h4>Wonderland dev</h4>
       <div className="pip-debug-grid">
         <span>character</span><b>{characterState}</b>
         <span>voice</span><b>{voice.mode}{voice.ttsPlaying ? " · tts" : ""}{voice.serverOk === false || offline ? " · server ✗" : voice.serverOk ? " · server ✓" : ""}</b>

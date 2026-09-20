@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Pip — Learning Companion",
+  "name": "Wonderland",
   "version": "0.1.0",
-  "description": "A tiny animated companion that lives in your browser, sees the page you're on, talks with you by voice, and helps you get unstuck without doing the work for you.",
+  "description": "A pixel-art White Rabbit that lives on the page. Kids teach it in their own words, and it asks, forgets, and learns.",
   "minimum_chrome_version": "116",
   "permissions": ["storage", "activeTab", "tabs", "scripting", "offscreen", "contextMenus"],
   "host_permissions": ["http://localhost:8787/*", "http://127.0.0.1:8787/*", "<all_urls>"],
@@ -19,7 +19,7 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Pip — Learning Companion",
+    "default_title": "Wonderland",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
@@ -37,11 +37,14 @@
   "commands": {
     "toggle-companion": {
       "suggested_key": { "default": "Alt+Shift+P" },
-      "description": "Open or close Pip's panel"
+      "description": "Open or close the rabbit's panel"
     },
     "toggle-voice": {
       "suggested_key": { "default": "Alt+Shift+V" },
       "description": "Start or stop voice mode"
     }
-  }
+  },
+  "web_accessible_resources": [
+    { "resources": ["characters/*"], "matches": ["<all_urls>"] }
+  ]
 }
