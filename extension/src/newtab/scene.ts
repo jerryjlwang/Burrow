@@ -217,7 +217,7 @@ interface Particle {
   k: number;
 }
 
-type HitKind = "cloud" | "birds" | "sun" | "moon" | "chimney" | "door" | "item" | "carrot" | "concept" | "pond" | "flamingo" | "oak" | "swing" | "tea" | "roses" | "giant" | "card" | "sheep" | "windmill" | "arrow";
+type HitKind = "cloud" | "birds" | "sun" | "moon" | "chimney" | "door" | "item" | "carrot" | "concept" | "pond" | "flamingo" | "oak" | "swing" | "cat" | "tea" | "roses" | "giant" | "card" | "sheep" | "windmill" | "arrow";
 
 interface Hit {
   kind: HitKind;
@@ -903,8 +903,11 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
       // The swing hangs from the branch on the left; its cell is 13 wide so the swung frame keeps both ropes.
       draw("swing", ox + 3, oy + 36, live ? Math.floor(t / (swingFast ? 250 : 900)) % 2 : 0);
       hit("swing", 0, ox + 3, oy + 36, 13, 17);
+      // The cat's tail hangs from the leaves on the right and wiggles; a click on it brings the rest of him.
+      draw("cattail", ox + 37, oy + 31, live ? [0, 1, 0, 2][Math.floor(t / 450) % 4] : 0);
+      hit("cat", 0, ox + 36, oy + 30, 10, 13);
       const cf = cheshireFrame(now);
-      if (cf >= 0) draw("cheshire", ox + 22, oy + 4, cf);
+      if (cf >= 0) draw("cheshire", ox + 11, oy + 3, cf);
     }
 
     // The pond with its ducks, the fish that jumps, the flamingo and the croquet hoops.
@@ -1111,11 +1114,11 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
   function cheshireFrame(now: number): number {
     if (!cheshireAt) return -1;
     const age = now - cheshireAt;
-    if (age < 400) return 0;
-    if (age < 900) return 1;
-    if (age < 3700) return 2;
-    if (age < 4300) return 1;
-    if (age < 5000) return 0;
+    if (age < 450) return 0;
+    if (age < 950) return 1;
+    if (age < 5200) return 2;
+    if (age < 5800) return 1;
+    if (age < 6500) return 0;
     cheshireAt = 0;
     return -1;
   }
@@ -1243,6 +1246,10 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
         blipFor("creak");
         return;
       case "swing":
+        blipFor("wiggle");
+        return;
+      case "cat":
+        cheshireAt = now;
         blipFor("wiggle");
         return;
       case "tea":
