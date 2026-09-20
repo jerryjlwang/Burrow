@@ -139,6 +139,8 @@ export interface AgentInput {
   maxSteps: number;
   resumedAfterNavigation?: boolean;
   demoMode?: boolean;
+  /** Set on a retry after the model produced an invalid action, so it can correct itself. */
+  retryNote?: string;
 }
 
 export interface AgentOutput {

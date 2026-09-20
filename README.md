@@ -108,10 +108,10 @@ Or separately: `npm run dev:server` and `npm run build` (one‑off production bu
 | Variable | Purpose |
 |---|---|
 | `DEEPGRAM_API_KEY` | **Secret.** Enables voice (STT + TTS). Without it Pip is text‑only. |
-| `LLM_API_KEY` | **Secret.** Anthropic API key (also accepts `ANTHROPIC_API_KEY`). Without it the server runs the rule‑based mock agent. |
-| `LLM_PROVIDER` | `anthropic` (default when a key is present) or `mock`. |
-| `LLM_MODEL` | Default `claude-opus-5`. |
-| `LLM_EFFORT` | `low` (default, fastest replies) / `medium` / `high`. |
+| `LLM_API_KEY` | **Secret.** OpenAI (`sk-…`) or Anthropic (`sk-ant-…`) key; `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` also work. Without it the server runs the rule‑based mock agent. |
+| `LLM_PROVIDER` | `openai`, `anthropic` or `mock`. If omitted the key format decides. |
+| `LLM_MODEL` | Default `gpt-5.4-mini` (OpenAI) or `claude-opus-5` (Anthropic). |
+| `LLM_EFFORT` | Reasoning effort for decisions: `minimal` / `low` (default) / `medium` / `high`. |
 | `DEEPGRAM_TTS_MODEL` | `flux-rufus-en` (default) |
 | `DEEPGRAM_TTS_SPEED` | `1` (default) |
 | `DEEPGRAM_TTS_EXPRESSIVITY` | `0` (default) |
@@ -154,7 +154,7 @@ Each student turn runs a **bounded loop** (max 6 steps): `observe → decide →
 - `execute` runs the action with realistic pointer/mouse events or framework‑compatible value setting, then `verify` waits for DOM/URL changes and diffs error messages. Stale elements cause a re‑observe, never a repeated click on a dead node.
 - If an action navigates, the loop state is stored per tab and the next page's content script resumes it.
 
-Provider abstraction: `server/src/agent/provider.ts` (`AgentProvider.decide/intervene`). Implementations: `anthropic.ts`, `mock.ts`. `api/agent.ts` wraps them with fallback + validation. The same mock also runs **inside the extension** when the server is unreachable.
+Provider abstraction: `server/src/agent/provider.ts` (`AgentProvider.decide/intervene`). Implementations: `openai.ts` (Chat Completions + strict JSON schema), `anthropic.ts` (structured outputs via zod), `mock.ts`. `api/agent.ts` wraps them with fallback + validation. The same mock also runs **inside the extension** when the server is unreachable. Try the configured provider without a browser: `npx tsx scripts/try-agent.ts` (or pass an utterance).
 
 ## Proactive help
 
