@@ -31,7 +31,7 @@ export interface ExecutorDeps {
   makePlan: (topic: string) => Promise<StepPlan | null>;
   /** Open the plan map; false when there is no plan of any kind to show. */
   showPlan: () => boolean;
-  /** Show a worked example on the rabbit's chalkboard (newline-separated lines). */
+  /** Show a worked example on the rabbit's chalkboard (newline-separated text lines and draw commands). */
   sketch: (spec: string) => void;
   /** Trusted mouse/keyboard input via the background; `ok: false` means fall back to DOM events. */
   input: (ops: InputOp[]) => Promise<{ ok: boolean; error?: string }>;

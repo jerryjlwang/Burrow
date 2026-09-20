@@ -300,3 +300,7 @@
   .pip-panel { width: calc(100vw - 24px); }
   .pip-dock { right: 12px; bottom: 12px; }
 }
+
+/* ---------- Chalkboard strokes ---------- */
+@keyframes pip-chalk { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+@keyframes pip-chalk-fade { from { opacity: 0; } to { opacity: 1; } }
