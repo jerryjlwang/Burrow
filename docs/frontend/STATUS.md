@@ -28,9 +28,11 @@ Updated: 2026-09-19
 
 - Kid UI restyle: the bubble, panel, messages, input, buttons, badges and the minimized tab now use the hand-placed 9-slice frames at 15px (5 source pixels at 3x) with `border-image` and `repeat`, the Burrow palette (cream, brown, teal, gold, red) and Pixelify Sans loaded through the FontFace API (page CSP cannot block it, and `@font-face` does not work inside a shadow root). The bubble has a pixel tail that flips when the bubble hangs below the pet. A hold to talk button with the rabbit's ear sits at his feet: tap turns voice on, tap again turns it off, a hold listens until release plus a short grace. Product renamed to Burrow in front end files. Checked with `tools/pet/check.mjs`: 56 of 56 on light and dark, bubble and panel screenshots viewed.
 
+- Handoff, front end side: `extension/src/components/handoff.ts` follows `docs/frontend/HANDOFF.md`. A newly granted skill makes the rabbit celebrate and say what he can do now. A jump request makes the visible tab he is leaving say goodbye, dive, and write the `gone` record with a summary and the graph he carries; the page he is going to opens a hole, waits for `gone` (12 s at most), pops him out, writes `arrived`, and shows the summary. The "I'm late" vignette runs after a long quiet spell: watch check, panic, then a hole trip to a new spot. Debug buttons: grant voice, revoke voice, call to parent, send to kid. The parent view itself is being built in `extension/src/parent`.
+
 ## In progress
 
-- Nothing.
+- Parent view page (`extension/src/parent`), built by a subagent against `HANDOFF.md` and `KID_UI.md`.
 
 ## Blocked
 

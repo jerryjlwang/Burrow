@@ -1,6 +1,7 @@
 import type { RefObject } from "react";
 import { store, useStore, type CharacterState } from "../content/store";
 import { besidePoint, type PetController } from "./pet";
+import { grant, requestJump } from "./handoff";
 
 const STATES: { label: string; state: CharacterState; level?: number }[] = [
   { label: "idle", state: "idle" },
@@ -79,6 +80,12 @@ function PetControls({ pet }: { pet?: RefObject<PetController | null> }) {
           show bubble
         </button>
         <button type="button" onClick={() => store.setState({ bubble: null })}>hide bubble</button>
+      </div>
+      <div className="pip-debug-pet">
+        <button type="button" onClick={() => void grant("use_voice")}>grant voice</button>
+        <button type="button" onClick={() => void grant("use_voice", false)}>revoke voice</button>
+        <button type="button" onClick={() => void requestJump("parent")}>call to parent</button>
+        <button type="button" onClick={() => void requestJump("kid")}>send to kid</button>
       </div>
       <div className="pip-debug-pet">
         <button type="button" onClick={() => hopBy(-150)}>hop left</button>

@@ -7,6 +7,7 @@ import { Panel } from "./Panel";
 import { Bubble } from "./Bubble";
 import { Overlay } from "./Overlay";
 import { DebugPanel } from "./DebugPanel";
+import { pageRole, startHandoff } from "./handoff";
 
 /** Must match .pip-dock right/bottom/gap and .pip-panel width in styles.css. */
 const DOCK_EDGE = 18;
@@ -84,6 +85,16 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
   const quiet = !panelOpen && !bubble && characterState === "idle" && voice.mode === "off";
 
   useEffect(() => loadKidFont(), []);
+
+  // Grants, the jump between laptops, and the "I'm late" vignette. See docs/frontend/HANDOFF.md.
+  const quietRef = useRef(quiet);
+  quietRef.current = quiet;
+  const reducedRef = useRef(reduced);
+  reducedRef.current = reduced;
+  useEffect(
+    () => startHandoff({ controller, role: pageRole(), getPet: () => petRef.current, isQuiet: () => quietRef.current, reducedMotion: () => reducedRef.current }),
+    [controller],
+  );
 
   // Hold to talk. A tap turns voice on (or off when it was on); a hold listens until release plus a grace period.
   const press = useRef<{ at: number; wasOn: boolean } | null>(null);

@@ -22,15 +22,13 @@ One line in `e2e/smoke.mjs` was changed by the front end to match the new onboar
 
 ## 2. Cross-laptop jump handoff
 
-Status: the pet side is ready. `PetController.jumpOut()` and `jumpIn(ready)` exist in `extension/src/components/pet` and the debug panel drives them with a timer. Needed from the backend: the message path below.
+Status: the front end is done for one machine. `docs/frontend/HANDOFF.md` defines three `chrome.storage.local` records: `burrow.grants`, `burrow.jump` and `burrow.graph`. Every page with the rabbit reacts to them already, so the parent view and the kid's page hand him back and forth in two tabs today.
 
-The jump is a two-step handoff. The receiving laptop confirms it is ready, then the sending laptop plays the dive. The front end needs a way to send a "ready?" question to the other laptop and get a "ready" answer back, plus a final "done" message with whatever the rabbit carries over. A proposal: three messages over the existing server socket, `jump.request`, `jump.ready` and `jump.done`, keyed by a pairing code the parent view shows.
+Needed from the backend for two laptops: relay those three records between the two machines. Simplest shape: the extension's background posts each write to `POST /api/burrow/state/<key>` and subscribes to `WS /ws/burrow` for the other side's writes, then mirrors them into `chrome.storage.local`. Pair the two laptops with a short code the parent view shows. No other front end change is needed.
 
 ## 3. Parent approval event
 
-Status: heads-up, not needed yet. Will be mocked with a debug panel button.
-
-The demo needs a parent approval to arrive on the kid's laptop and unlock a skill. The front end needs a pushed event with the skill name. The parent UI will send the grant, the kid's extension reacts.
+Status: covered by the `burrow.grants` record above. The parent view writes it, the kid's rabbit celebrates and says what he can do now. The same relay carries it between laptops.
 
 ## 4. Housekeeping from the merge on 2026-09-19
 
