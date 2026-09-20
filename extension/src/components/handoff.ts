@@ -7,7 +7,8 @@ import type { GraphSnapshot } from "@shared/graph";
 import type { CompanionController } from "../content/controller";
 import type { PetController } from "./pet";
 
-export type Role = "kid" | "parent";
+/** kid: any page the kid works on; parent: parent.html; board: the drawing board the tablet watcher opens. */
+export type Role = "kid" | "parent" | "board";
 export type JumpStage = "requested" | "gone" | "arrived";
 
 export interface Grant {
@@ -17,6 +18,8 @@ export interface Grant {
 export interface Jump {
   id: string;
   to: Role;
+  /** Where he is coming from, when the writer knows. */
+  from?: Role;
   stage: JumpStage;
   at: number;
   summary?: string;
@@ -88,7 +91,18 @@ const HANDOFF_TIMEOUT_MS = 12_000;
 const VIGNETTE_GAP_MS: [number, number] = [150_000, 300_000];
 
 export function pageRole(): Role {
-  return /\/parent\.html$/.test(location.pathname) ? "parent" : "kid";
+  if (/\/parent\.html$/.test(location.pathname)) return "parent";
+  if (/(^|\.)excalidraw\.com$/.test(location.hostname)) return "board";
+  return "kid";
+}
+
+/** A jump aimed at `role` that is still in flight: requested moments ago, or gone and not yet arrived. */
+export function pendingJumpTo(role: Role): Promise<boolean> {
+  return storageGet<Jump>(JUMP_KEY).then((jump) => {
+    if (!jump || jump.to !== role) return false;
+    if (jump.stage === "gone") return true;
+    return jump.stage === "requested" && Date.now() - jump.at < HANDOFF_TIMEOUT_MS;
+  });
 }
 
 /** Skills that flipped to granted between two maps. */
@@ -110,9 +124,16 @@ export function summarize(graph: GraphSnapshot | null | undefined, now: number):
   return `Today I learned about ${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}.`;
 }
 
-export function requestJump(to: Role): Promise<void> {
-  const jump: Jump = { id: `j-${Date.now().toString(36)}`, to, stage: "requested", at: Date.now() };
+export function requestJump(to: Role, from?: Role): Promise<void> {
+  const jump: Jump = { id: `j-${Date.now().toString(36)}`, to, from, stage: "requested", at: Date.now() };
   return storageSet(JUMP_KEY, jump);
+}
+
+/** What he says as he dives, by where he is going. */
+function departLine(role: Role, to: Role): string {
+  if (to === "board") return "To your drawing board!";
+  if (to === "parent") return "Off to see your parent. Back soon!";
+  return role === "board" ? "Back to your page!" : "Off I go, back to my kid!";
 }
 
 export function grant(skill: string, granted = true): Promise<void> {
@@ -137,22 +158,46 @@ export function startHandoff(deps: Deps): () => void {
   const handled = new Set<string>();
   const waiting = new Map<string, () => void>();
   let stopped = false;
+  // While he is away this page must not offer anything from an empty corner: the proactive
+  // engine pauses when he leaves and resumes when he lands, always in matched pairs.
+  let enginePaused = false;
+  const pauseEngine = () => {
+    if (enginePaused) return;
+    enginePaused = true;
+    controller.engine.stop();
+  };
+  const resumeEngine = () => {
+    if (!enginePaused) return;
+    enginePaused = false;
+    controller.engine.start();
+  };
 
   const say = (id: string, text: string, ms: number) => controller.showBubble({ id, text, kind: "info", expiresAt: Date.now() + ms });
+
+  /** The pet controller, waiting a little for the art to load on a page that is still booting. */
+  const petSoon = async (): Promise<PetController | null> => {
+    for (let i = 0; i < 20; i++) {
+      const pet = getPet();
+      if (pet || stopped) return pet;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return getPet();
+  };
 
   const depart = async (jump: Jump) => {
     const pet = getPet();
     if (!pet) return;
-    say(`jump-${jump.id}`, role === "kid" ? "Off to see your parent. Back soon!" : "Off I go, back to my kid!", 2500);
+    say(`jump-${jump.id}`, departLine(role, jump.to), 2500);
     await new Promise((r) => setTimeout(r, 900));
     await pet.jumpOut();
+    pauseEngine();
     const graph = role === "kid" ? controller.session.graph.toJSON() : await storageGet<GraphSnapshot>(GRAPH_KEY);
     const gone: Jump = { ...jump, stage: "gone", at: Date.now(), summary: summarize(graph, Date.now()), graph: graph ?? undefined };
     await storageSet(JUMP_KEY, gone);
   };
 
   const arrive = async (jump: Jump, alreadyGone: boolean) => {
-    const pet = getPet();
+    const pet = await petSoon();
     if (!pet) return;
     const ready = alreadyGone
       ? Promise.resolve()
@@ -164,12 +209,20 @@ export function startHandoff(deps: Deps): () => void {
           });
         });
     await pet.jumpIn(ready);
+    resumeEngine();
     waiting.delete(jump.id);
     const latest = (await storageGet<Jump>(JUMP_KEY)) ?? jump;
     if (latest.id === jump.id && latest.graph && role === "parent") await storageSet(GRAPH_KEY, latest.graph);
     if (latest.id === jump.id && latest.stage !== "arrived") await storageSet(JUMP_KEY, { ...latest, stage: "arrived", at: Date.now(), graph: undefined });
-    const text = role === "parent" ? latest.summary ?? summarize(latest.graph, Date.now()) : "I am back! Your parent says hi.";
-    say(`arrive-${jump.id}`, text, 9000);
+    const text =
+      role === "parent"
+        ? latest.summary ?? summarize(latest.graph, Date.now())
+        : role === "board"
+          ? "Here I am. Show me your working!"
+          : latest.from === "board"
+            ? "I am back on the page."
+            : "I am back! Your parent says hi.";
+    say(`arrive-${jump.id}`, text, role === "board" ? 6000 : 9000);
   };
 
   const onJump = (jump: Jump | undefined) => {
@@ -213,11 +266,14 @@ export function startHandoff(deps: Deps): () => void {
       handled.add(`${jump.id}:requested`);
       const tryHide = () => {
         const pet = getPet();
-        if (pet) void pet.jumpOut();
-        else if (!stopped) setTimeout(tryHide, 300);
+        if (pet) {
+          void pet.jumpOut();
+          pauseEngine();
+        } else if (!stopped) setTimeout(tryHide, 300);
       };
       tryHide();
-    } else if (jump.to === role && jump.stage === "gone") {
+    } else if (jump.to === role && (jump.stage === "gone" || (jump.stage === "requested" && Date.now() - jump.at < HANDOFF_TIMEOUT_MS))) {
+      // He is on his way here (the board opens after the request is written): wait in the hole.
       onJump(jump);
     }
   });
@@ -245,6 +301,7 @@ export function startHandoff(deps: Deps): () => void {
 
   return () => {
     stopped = true;
+    resumeEngine();
     window.clearTimeout(vignetteTimer);
     try {
       chrome.storage.onChanged.removeListener(listener);
