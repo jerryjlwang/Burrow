@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { InkBox, InkJudgement } from "@shared/ink";
-import { parseSketch } from "@shared/sketch";
+import { parseSketch, type SketchItem, type Stroke } from "@shared/sketch";
 import type { Rect } from "@shared/types";
 import { sendToBackground, type InkStageDetail } from "../shared/messages";
 import { store, useStore } from "../content/store";
@@ -47,7 +47,7 @@ function reportMask(quietMs?: number): void {
   sendToBackground({ type: "tablet.mask", rects: ownUiRects(), viewport, ...(quietMs ? { quietMs } : {}) }, 2000).catch(() => undefined);
 }
 /** The parts of the companion's UI the watcher must not read as ink. */
-const MASK_SELECTORS = [".pip-dock", ".pip-board", ".pip-inkmark", ".pip-sketch", ".pip-plan"];
+const MASK_SELECTORS = [".pip-dock", ".pip-board", ".pip-inkmark", ".pip-sketch", ".pip-plan", ".pip-pen"];
 
 const toRect = (b: InkBox): Rect => ({ x: b.x * window.innerWidth, y: b.y * window.innerHeight, width: b.w * window.innerWidth, height: b.h * window.innerHeight });
 
@@ -143,6 +143,69 @@ interface Mark {
   rect: Rect;
 }
 
+/** The pen note: lines and shapes he writes straight onto the board's canvas, in black, in the empty space. */
+interface PenNote {
+  id: number;
+  rect: Rect;
+  title?: string;
+  items: SketchItem[];
+}
+/** One item (a written line, a shape) lands every so often, like a hand writing. */
+const PEN_STEP_MS = 520;
+const PEN_LINE_PX = 30;
+const PEN_MAX_W = 460;
+const PEN_MIN_W = 240;
+/** Space the excalidraw toolbar takes at the top, and the pad from any edge. */
+const PEN_TOP_CLEAR = 110;
+const PEN_PAD = 20;
+
+/**
+ * Where the pen note goes: inside the judge's empty area when it is big enough, leaving the
+ * rabbit his room at its lower right; else the top left of the canvas under the toolbar, which the
+ * kid's work (in the middle) and the rabbit (in a corner below) leave clear. Never over the wrong line.
+ */
+export function penRect(j: InkJudgement | null, items: SketchItem[], size: { width: number; height: number }, vw: number, vh: number): Rect {
+  const textLines = items.filter((it) => it.kind === "text").length + 1;
+  const hasShapes = items.some((it) => it.kind === "stroke");
+  const wantH = textLines * PEN_LINE_PX + (hasShapes ? 200 : 0) + 12;
+  const space = j?.space ? toRect(j.space) : null;
+  if (space && space.width >= PEN_MIN_W + size.width + PEN_PAD * 2 && space.height >= 120) {
+    const width = Math.max(PEN_MIN_W, Math.min(PEN_MAX_W, space.width - size.width - PEN_PAD * 3));
+    const height = Math.min(wantH, Math.max(120, space.height - PEN_PAD * 2));
+    return { x: space.x + PEN_PAD, y: Math.max(PEN_TOP_CLEAR, space.y + PEN_PAD), width, height };
+  }
+  const width = Math.max(PEN_MIN_W, Math.min(PEN_MAX_W, vw * 0.36));
+  return { x: PEN_PAD + 60, y: PEN_TOP_CLEAR, width, height: Math.min(wantH, vh - PEN_TOP_CLEAR - PEN_PAD) };
+}
+
+/** A shape in the pen note's own pixels, drawn once in black ink. */
+function PenShape({ stroke, w, h }: { stroke: Stroke; w: number; h: number }) {
+  const unit = Math.min(w, h) / 100;
+  const X = (v: number) => (v * w) / 100;
+  const Y = (v: number) => (v * h) / 100;
+  const [a, b, c, d] = stroke.n;
+  const common = { fill: "none", stroke: "#1b1b1b", strokeWidth: 2.4, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, pathLength: 100, className: "pip-pen-stroke" };
+  switch (stroke.kind) {
+    case "line":
+      return <path d={`M ${X(a)} ${Y(b)} L ${X(c)} ${Y(d)}`} {...common} />;
+    case "arrow": {
+      const ang = Math.atan2(Y(d) - Y(b), X(c) - X(a));
+      const len = Math.max(9, 4 * unit);
+      const flick = (off: number) => `M ${X(c)} ${Y(d)} L ${X(c) - len * Math.cos(ang + off)} ${Y(d) - len * Math.sin(ang + off)}`;
+      return <path d={`M ${X(a)} ${Y(b)} L ${X(c)} ${Y(d)} ${flick(0.5)} ${flick(-0.5)}`} {...common} />;
+    }
+    case "circle":
+      return <circle cx={X(a)} cy={Y(b)} r={c * unit} {...common} />;
+    case "rect":
+      return <rect x={X(a)} y={Y(b)} width={X(c)} height={Y(d)} {...common} />;
+    case "dot":
+      return <circle cx={X(a)} cy={Y(b)} r={Math.max(3, 1.3 * unit)} fill="#1b1b1b" stroke="none" />;
+    default:
+      return null;
+  }
+}
+
+
 /** How long a stage may take before the caller goes on without it (a hole trip is about 2.5 s). */
 const STAGE_TIMEOUT_MS = 4000;
 
@@ -177,6 +240,9 @@ export function InkCoach({ pet }: { pet: RefObject<PetController | null> }) {
   const reduced = useStore((s) => s.reducedMotion);
   const [mark, setMark] = useState<Mark | null>(null);
   const [leaving, setLeaving] = useState(false);
+  const [pen, setPen] = useState<PenNote | null>(null);
+  const [penShown, setPenShown] = useState(0);
+  const lastJudgement = useRef<InkJudgement | null>(null);
   const reducedRef = useRef(reduced);
   reducedRef.current = reduced;
 
@@ -201,10 +267,14 @@ export function InkCoach({ pet }: { pet: RefObject<PetController | null> }) {
       const d = (e as CustomEvent<InkStageDetail>).detail;
       if (!d?.judgement) return;
       const j = d.judgement;
+      if (j.space || j.box) lastJudgement.current = j;
       if (d.phase === "clear") {
         setMark((m) => (m ? { ...m, id: -Math.abs(m.id) } : null));
         setLeaving(true);
-        if (j.solved) store.setState((s) => (s.board?.id.startsWith("ink-") ? { board: null } : {}));
+        if (j.solved) {
+          store.setState((s) => (s.board?.id.startsWith("ink-") ? { board: null } : {}));
+          setPen(null);
+        }
         return;
       }
       const p = pet.current;
@@ -221,7 +291,10 @@ export function InkCoach({ pet }: { pet: RefObject<PetController | null> }) {
             if (!center || Math.hypot(x - center.x, y - center.y) >= STAY_PX) await p.goTo(x, y);
           }
           const sk = parseSketch(j.note.join("\n"));
-          if (sk.items.length) store.setState({ board: { id: `ink-${Date.now()}`, title: sk.title, items: sk.items, anchor: null }, planView: null });
+          if (sk.items.length) {
+            playCue("chalk");
+            setPen({ id: Date.now(), rect: penRect(j, sk.items, size, window.innerWidth, window.innerHeight), title: sk.title, items: sk.items });
+          }
           window.setTimeout(d.done, reducedRef.current ? 0 : NOTE_RISE_MS);
         })();
         return;
@@ -262,6 +335,53 @@ export function InkCoach({ pet }: { pet: RefObject<PetController | null> }) {
     return () => document.removeEventListener("pointerdown", onPen, true);
   }, [inkBoardAt]);
 
+  // "Draw it out" on the board: the agent's sketch is written in pen on the canvas, not on a chalkboard.
+  useEffect(() => {
+    if (pageRole() !== "board") return;
+    const onPen = (e: Event) => {
+      const d = (e as CustomEvent<{ spec?: string; add?: boolean }>).detail;
+      const sk = d?.spec ? parseSketch(d.spec) : null;
+      if (!sk?.items.length) {
+        if (d && !d.spec) setPen(null);
+        return;
+      }
+      const p = pet.current;
+      const body = p?.getBodyRect() ?? null;
+      const size = bodySize(p, body);
+      setPen((prev) => {
+        const items = d?.add && prev ? [...prev.items, ...sk.items].slice(0, 48) : sk.items;
+        const rect = d?.add && prev ? prev.rect : penRect(lastJudgement.current, items, size, window.innerWidth, window.innerHeight);
+        return { id: d?.add && prev ? prev.id : Date.now(), rect, title: sk.title ?? (d?.add ? prev?.title : undefined), items };
+      });
+      playCue("chalk");
+      reportMask(QUIET_NOTE_MS);
+      if (p && !(d?.add)) {
+        const rect = penRect(lastJudgement.current, sk.items, size, window.innerWidth, window.innerHeight);
+        const to = besidePoint({ x: rect.x, y: rect.y, width: rect.width, height: rect.height }, size.width, size.height, window.innerWidth);
+        const center = body && body.width > 0 ? { x: body.left + body.width / 2, y: body.top + body.height / 2 } : null;
+        if (!center || Math.hypot(to.x - center.x, to.y - center.y) >= STAY_PX) void p.goTo(to.x, to.y);
+      }
+    };
+    window.addEventListener("burrow:pen", onPen);
+    return () => window.removeEventListener("burrow:pen", onPen);
+  }, [pet]);
+
+  // The pen writes one item at a time.
+  useEffect(() => {
+    if (!pen) {
+      setPenShown(0);
+      return;
+    }
+    const total = pen.items.length + (pen.title ? 1 : 0);
+    if (reduced) {
+      setPenShown(total);
+      return;
+    }
+    setPenShown((n) => Math.min(n, total));
+    const t = window.setInterval(() => setPenShown((n) => (n >= total ? n : n + 1)), PEN_STEP_MS);
+    return () => window.clearInterval(t);
+  }, [pen, reduced]);
+
   // The ring goes on its own after a while; a fade first unless motion is reduced.
   useEffect(() => {
     if (!mark) return;
@@ -279,17 +399,43 @@ export function InkCoach({ pet }: { pet: RefObject<PetController | null> }) {
     return () => window.clearTimeout(t);
   }, [mark, leaving, reduced]);
 
-  if (!mark) return null;
-  const r = mark.rect;
+  if (!mark && !pen) return null;
+  const r = mark?.rect ?? { x: 0, y: 0, width: 0, height: 0 };
   const w = r.width + 2 * MARK_PAD;
   const h = r.height + 2 * MARK_PAD;
-  const d = ringPath(w, h, mark.id);
+  const d = mark ? ringPath(w, h, mark.id) : "";
+  let penIndex = 0;
+  const penTotal = pen ? pen.items.length + (pen.title ? 1 : 0) : 0;
+  const penTextH = pen ? (pen.items.filter((it) => it.kind === "text").length + (pen.title ? 1 : 0)) * PEN_LINE_PX : 0;
+  const penShapeH = pen ? Math.max(0, pen.rect.height - penTextH - 8) : 0;
   return (
     <div className="pip-inkcoach" aria-hidden="true">
+      {pen && (
+        <div key={pen.id} className={`pip-pen${penShown >= penTotal ? " complete" : ""}`} style={{ left: pen.rect.x, top: pen.rect.y, width: pen.rect.width, transform: `rotate(${((pen.id % 5) - 2) * 0.4}deg)` }} role="figure" aria-label="note">
+          {pen.title && penIndex++ < penShown && <div className="pip-pen-line pip-pen-title">{pen.title}</div>}
+          {pen.items.map((it, i) => (it.kind === "text" ? <div key={`${pen.id}-t${i}`} className="pip-pen-line" style={{ visibility: i + (pen.title ? 1 : 0) < penShown ? "visible" : "hidden" }}>{it.text}</div> : null))}
+          {pen.items.some((it) => it.kind === "stroke") && penShapeH > 40 && (
+            <div className="pip-pen-canvas" style={{ height: penShapeH }}>
+              <svg width={pen.rect.width} height={penShapeH} viewBox={`0 0 ${pen.rect.width} ${penShapeH}`} style={{ overflow: "visible" }}>
+                {pen.items.map((it, i) => (it.kind === "stroke" && it.stroke.kind !== "label" && i + (pen.title ? 1 : 0) < penShown ? <PenShape key={`${pen.id}-s${i}`} stroke={it.stroke} w={pen.rect.width} h={penShapeH} /> : null))}
+              </svg>
+              {pen.items.map((it, i) =>
+                it.kind === "stroke" && it.stroke.kind === "label" && i + (pen.title ? 1 : 0) < penShown ? (
+                  <span key={`${pen.id}-l${i}`} className="pip-pen-label" style={{ left: `${it.stroke.n[0]}%`, top: `${it.stroke.n[1]}%` }}>
+                    {it.stroke.text}
+                  </span>
+                ) : null,
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      {mark && (
       <svg key={mark.id} className={`pip-inkmark${reduced ? " reduced" : ""}${leaving ? " leaving" : ""}`} style={{ left: r.x - MARK_PAD, top: r.y - MARK_PAD, width: w, height: h, transform: `rotate(${((Math.abs(mark.id) % 7) - 3) * 1.3}deg)` }} viewBox={`0 0 ${w} ${h}`} overflow="visible">
         <path d={d} pathLength={100} className="pip-inkmark-rim" />
         <path d={d} pathLength={100} className="pip-inkmark-ink" />
       </svg>
+      )}
     </div>
   );
 }

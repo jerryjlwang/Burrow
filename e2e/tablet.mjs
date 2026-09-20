@@ -78,10 +78,10 @@ const markBox = (page) => page.evaluate(() => {
 const boardDone = (page) =>
   inHost(page, () => {
     const sr = document.getElementById("pip-companion-host")?.shadowRoot;
-    const b = sr?.querySelector(".pip-board");
+    const b = sr?.querySelector(".pip-pen");
     if (!b || !b.classList.contains("complete")) return null;
-    const lines = [...b.querySelectorAll(".pip-board-line")].map((l) => l.textContent?.trim() ?? "");
-    const labels = [...b.querySelectorAll(".pip-board-label")].map((l) => l.textContent?.trim() ?? "");
+    const lines = [...b.querySelectorAll(".pip-pen-line")].map((l) => l.textContent?.trim() ?? "");
+    const labels = [...b.querySelectorAll(".pip-pen-label")].map((l) => l.textContent?.trim() ?? "");
     return [...lines, ...labels].filter(Boolean).join(" | ");
   });
 /** Out of the hole and standing: a strip that is not a hole or a dive, with a body that measures. */
@@ -226,18 +226,20 @@ try {
   // The stall: the pen stays still after a wrong line, so about twenty seconds later the judge is asked again and the note rises.
   const t1 = Date.now();
   const checksBefore = st?.checks ?? 0;
-  const rose = await until(() => rectOf(board, ".pip-board"), 45000);
+  const rose = await until(() => rectOf(board, ".pip-pen"), 45000);
   const roseS = Math.round((Date.now() - t1) / 1000);
   const note = rose ? await until(() => boardDone(board), 15000) : null;
   st = await status();
-  check("the chalkboard rises with a note after the pen stays still", !!note, note ? `${roseS} s: ${note.slice(0, 120)}` : `${rose ? "board never finished writing" : "no board"}; ${st?.checks} checks, last ${st?.lastReason} rung ${st?.lastRung}`);
+  check("a note is written in pen on the board after the pen stays still", !!note, note ? `${roseS} s: ${note.slice(0, 120)}` : `${rose ? "board never finished writing" : "no board"}; ${st?.checks} checks, last ${st?.lastReason} rung ${st?.lastRung}`);
   check("the note uses other numbers, never the fix", !!note && !LEAK.test(note) && borrowed(note).length === 0, note ? `${note}${borrowed(note).length ? ` (borrows ${borrowed(note).join(", ")})` : ""}` : "");
   check("the stall was the only spoken check while the pen rested", (st?.checks ?? 0) - checksBefore <= 2 && st?.lastReason === "stall", `${(st?.checks ?? 0) - checksBefore} checks, last ${st?.lastReason}`);
   v = st?.lastVerdict;
   check("the stall verdict carried the note and a spoken line", (v?.note?.length ?? 0) > 0 && !!v?.nudge, JSON.stringify({ note: v?.note, nudge: v?.nudge }));
-  const noteBoard = await rectOf(board, ".pip-board");
+  const noteBoard = await rectOf(board, ".pip-pen");
   const him = await petBox(board);
-  check("the note board stands beside him", !!noteBoard && !!him && Math.abs(noteBoard.y + noteBoard.height - (him.y + him.height)) < 60, `board ${fmt(noteBoard)}, rabbit ${fmt(him)}`);
+  // The kid's lines sit at x 320..440, y 205..345; the note must not be written over them, and no chalkboard frame appears on the board.
+  const overLines = noteBoard && noteBoard.x < 440 && noteBoard.x + noteBoard.width > 320 && noteBoard.y < 345 && noteBoard.y + noteBoard.height > 205;
+  check("the pen note sits in empty space, clear of the work, with no chalkboard frame", !!noteBoard && !overLines && !(await rectOf(board, ".pip-board")), `note ${fmt(noteBoard)}, rabbit ${fmt(him)}`);
   await board.screenshot({ path: resolve(shots, "21-tablet-note.png") });
 
   // The fix: clear the board and write the work through to the answer, a line at a time like a kid does.
@@ -264,7 +266,7 @@ try {
   check("the rabbit celebrates once the work is solved", !!cheered, cheered ?? `strip ${await strip(board)}, bubble ${JSON.stringify(await bubble(board))}, verdict ${JSON.stringify(st?.lastVerdict?.lines)}`);
   const ringGone = await until(async () => ((await markBox(board)) ? null : true), 5000);
   check("the ring is gone once the line is right", !!ringGone);
-  check("the note board is gone once the work is solved", !(await rectOf(board, ".pip-board")));
+  check("the pen note is gone once the work is solved", !(await rectOf(board, ".pip-pen")));
   v = st?.lastVerdict;
   check("the judge saw the work solved", v?.solved === true, JSON.stringify({ status: v?.status, solved: v?.solved, lines: v?.lines }));
   await board.screenshot({ path: resolve(shots, "22-tablet-solved.png") });

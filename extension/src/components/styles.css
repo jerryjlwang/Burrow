@@ -811,3 +811,15 @@
 @keyframes pip-inkmark-draw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
 @keyframes pip-inkmark-breathe { 0%, 100% { stroke: var(--teal); } 50% { stroke: var(--gold-deep); } }
 @keyframes pip-inkmark-out { from { opacity: 1; } to { opacity: 0; } }
+
+/* The pen note on the drawing board: black handwriting straight on the canvas, no frame, click-through. */
+.pip-pen { position: fixed; pointer-events: none; color: #1b1b1b; font-family: "Excalifont", "Virgil", "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive; font-size: 24px; line-height: 30px; transform-origin: top left; }
+.pip-pen-line { white-space: pre-wrap; animation: pip-pen-in 260ms ease-out both; }
+.pip-pen-title { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.pip-pen-canvas { position: relative; margin-top: 6px; }
+.pip-pen-canvas svg { position: absolute; left: 0; top: 0; }
+.pip-pen-stroke { stroke-dasharray: 100; animation: pip-pen-draw 520ms ease-out both; }
+.pip-pen-label { position: absolute; transform: translateY(-50%); white-space: nowrap; font-size: 20px; line-height: 20px; animation: pip-pen-in 260ms ease-out both; }
+@keyframes pip-pen-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+@keyframes pip-pen-draw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+.pip-root.reduced .pip-pen-line, .pip-root.reduced .pip-pen-stroke, .pip-root.reduced .pip-pen-label { animation: none; }

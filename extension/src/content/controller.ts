@@ -137,6 +137,11 @@ export class CompanionController {
         sketch: (spec, opts) => {
           const sk = parseSketch(spec);
           if (!sk.items.length) return;
+          // On the drawing board he writes in pen on the canvas, in the empty space, never on a chalkboard.
+          if (pageRole() === "board") {
+            window.dispatchEvent(new CustomEvent("burrow:pen", { detail: { spec, add: !!opts?.add } }));
+            return;
+          }
           const named = opts?.elementId != null ? this.registry.get(opts.elementId) : opts?.quote ? quoteRegion(document.body, opts.quote, HOST_ID, { grow: false }) : null;
           const prev = store.getState().board;
           if (opts?.add && prev) {
