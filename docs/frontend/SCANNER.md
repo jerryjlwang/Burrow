@@ -20,7 +20,18 @@ about 25 seconds. But every route to a character a judge would actually name is 
 Childhood heroes are almost all somebody's property, so generation cannot be the reveal. It stays in
 the file as an option for original characters, off the demo path.
 
-## So the sprite is the drawing
+## The way that actually works: the sprite is drawn here, in code
+
+`tools/sprites/guest_px.py` places the pixels by hand, exactly as `rabbit_px.py` and `scene_px.py`
+do. Nothing generative is involved, so nothing can refuse it, and the result is in the product's
+style by construction rather than by prompt. A caped hero took one pass.
+
+This also fixes the timing. The judge is asked at the *start* of the pitch, so there are five or six
+minutes to draw their character while the demo runs, and the scan at the end is the reveal rather
+than the computation. A photo of the sketch is only ever looked at, never processed, so it can be
+pasted into the chat instead of being moved onto the machine as a file.
+
+## The other way: the sprite is the drawing
 
 Nothing generative, nothing that can be refused, and it runs in well under a second. The story is
 also better: it is the drawing they watched being made.
