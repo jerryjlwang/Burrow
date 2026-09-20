@@ -7,7 +7,7 @@ import { Panel } from "./Panel";
 import { Bubble } from "./Bubble";
 import { Overlay } from "./Overlay";
 import { DebugPanel } from "./DebugPanel";
-import { pageRole, startHandoff } from "./handoff";
+import { escort, pageRole, readArrival, startHandoff, type Arrival } from "./handoff";
 import { armSounds, playCue, setSoundsEnabled } from "./sounds";
 
 /** Must match .pip-dock right/bottom/gap and .pip-panel width in styles.css. */
@@ -87,8 +87,37 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
 
   useEffect(() => loadKidFont(), []);
 
+  // Arriving from a page he escorted? Then he starts in the hole and pops out with a line.
+  const [arrival, setArrival] = useState<Arrival | null>(null);
+  const arrivalRef = useRef<Arrival | null>(null);
+  useEffect(() => {
+    void readArrival().then((a) => {
+      if (!a) return;
+      arrivalRef.current = a;
+      setArrival(a);
+      try {
+        chrome.storage.local.remove("burrow.arrive");
+      } catch {
+        /* ignore */
+      }
+    });
+  }, []);
+  const onControllerWithArrival = useCallback(
+    (c: PetController | null) => {
+      onController(c);
+      const a = arrivalRef.current;
+      if (!c || !a) return;
+      arrivalRef.current = null;
+      void c.jumpIn(new Promise((r) => setTimeout(r, 500))).then(() => {
+        controller.showBubble({ id: `arrive-${a.at}`, text: a.line ?? "Here we are!", kind: "info", expiresAt: Date.now() + 6000 });
+      });
+    },
+    [onController, controller],
+  );
+
   // Pages can ask the rabbit for things: "burrow:goto" {x, y} hops or hole-travels him so his body
-  // center lands there, "burrow:play" {state} plays a manifest state. Used by the new tab scene.
+  // center lands there, "burrow:play" {state} plays a manifest state, "burrow:leave" {url, line?,
+  // arriveLine?} makes him dive before the page navigates. Used by the new tab scene.
   useEffect(() => {
     const onGoto = (e: Event) => {
       const d = (e as CustomEvent<{ x: number; y: number }>).detail;
@@ -98,13 +127,19 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
       const d = (e as CustomEvent<{ state: string }>).detail;
       if (d?.state) petRef.current?.play(d.state);
     };
+    const onLeave = (e: Event) => {
+      const d = (e as CustomEvent<{ url: string; line?: string; arriveLine?: string }>).detail;
+      if (d?.url) void escort(controller, petRef.current, d.url, d.line ?? "Let's go find out!", d.arriveLine ?? "Here's what I found. Want me to read it?");
+    };
     window.addEventListener("burrow:goto", onGoto);
     window.addEventListener("burrow:play", onPlay);
+    window.addEventListener("burrow:leave", onLeave);
     return () => {
       window.removeEventListener("burrow:goto", onGoto);
       window.removeEventListener("burrow:play", onPlay);
+      window.removeEventListener("burrow:leave", onLeave);
     };
-  }, []);
+  }, [controller]);
   useEffect(() => armSounds(), []);
   useEffect(() => setSoundsEnabled(settings.ttsEnabled), [settings.ttsEnabled]);
   const onShown = useCallback((s: string) => playCue(s), []);
@@ -249,7 +284,7 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
           {voice.mode === "listening" && <span className="pip-mic-badge" title="Microphone is on" aria-hidden="true" />}
           {unread > 0 && !panelOpen && <span className="pip-unread" aria-hidden="true">{unread}</span>}
           <button type="button" className={`pip-char-btn${busy ? " busy" : ""}`} onClick={() => controller.togglePanel()} aria-label={label} aria-expanded={panelOpen} title={panelOpen ? "Close" : `Talk to ${settings.characterName}`}>
-            <Character state={characterState} level={level} lookAt={lookAt} attention={attention} reducedMotion={reduced} scale={petScale} onAnchor={onAnchor} onPosition={onPosition} onController={onController} quiet={quiet} onShown={onShown} />
+            <Character state={characterState} level={level} lookAt={lookAt} attention={attention} reducedMotion={reduced} scale={petScale} onAnchor={onAnchor} onPosition={onPosition} onController={onControllerWithArrival} quiet={quiet} onShown={onShown} startHidden={!!arrival} />
           </button>
         </div>
       </div>

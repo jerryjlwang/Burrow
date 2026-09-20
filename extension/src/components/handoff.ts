@@ -23,9 +23,55 @@ export interface Jump {
   graph?: GraphSnapshot;
 }
 
+function storageGet<T>(key: string): Promise<T | undefined> {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.get(key, (raw) => resolve(raw?.[key] as T | undefined));
+    } catch {
+      resolve(undefined);
+    }
+  });
+}
+
+function storageSet(key: string, value: unknown): Promise<void> {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.set({ [key]: value }, () => resolve());
+    } catch {
+      resolve();
+    }
+  });
+}
+
 export const GRANTS_KEY = "burrow.grants";
 export const JUMP_KEY = "burrow.jump";
 export const GRAPH_KEY = "burrow.graph";
+/** Set just before a page navigation the rabbit escorts: the next page pops him out of a hole. */
+export const ARRIVE_KEY = "burrow.arrive";
+export interface Arrival {
+  at: number;
+  url: string;
+  /** What he says when he pops out. */
+  line?: string;
+}
+/** An arrival older than this is stale (the navigation never happened). */
+const ARRIVE_FRESH_MS = 15_000;
+
+export function readArrival(): Promise<Arrival | null> {
+  return storageGet<Arrival>(ARRIVE_KEY).then((a) => (a && Date.now() - a.at < ARRIVE_FRESH_MS ? a : null));
+}
+
+/** Escort a navigation: say a line, dive, mark the arrival, then go. Without a pet, just go. */
+export async function escort(controller: CompanionController, pet: PetController | null, url: string, line: string, arriveLine: string): Promise<void> {
+  if (pet) {
+    controller.showBubble({ id: `escort-${Date.now()}`, text: line, kind: "info", expiresAt: Date.now() + 2500 });
+    await new Promise((r) => setTimeout(r, 700));
+    await pet.jumpOut();
+  }
+  const arrival: Arrival = { at: Date.now(), url, line: arriveLine };
+  await storageSet(ARRIVE_KEY, arrival);
+  location.assign(url);
+}
 
 /** What each skill lets him do, in his own words. */
 export const SKILLS: Record<string, string> = {
@@ -62,26 +108,6 @@ export function summarize(graph: GraphSnapshot | null | undefined, now: number):
   if (!labels.length) return "I have not learned anything new yet. Teach me something!";
   if (labels.length === 1) return `Today I learned about ${labels[0]}.`;
   return `Today I learned about ${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}.`;
-}
-
-function storageGet<T>(key: string): Promise<T | undefined> {
-  return new Promise((resolve) => {
-    try {
-      chrome.storage.local.get(key, (raw) => resolve(raw?.[key] as T | undefined));
-    } catch {
-      resolve(undefined);
-    }
-  });
-}
-
-function storageSet(key: string, value: unknown): Promise<void> {
-  return new Promise((resolve) => {
-    try {
-      chrome.storage.local.set({ [key]: value }, () => resolve());
-    } catch {
-      resolve();
-    }
-  });
 }
 
 export function requestJump(to: Role): Promise<void> {

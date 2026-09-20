@@ -61,6 +61,8 @@ export interface SpritePetProps {
   onController?: (controller: PetController | null) => void;
   /** Called with the strip name each time a different state starts showing. */
   onShown?: (state: string) => void;
+  /** Start hidden, for a page he is about to pop out of a hole on. Only read when the art first loads. */
+  startHidden?: boolean;
 }
 
 interface Geometry {
@@ -143,7 +145,7 @@ function drawGap([min, max]: [number, number]): number {
   return min + Math.random() * Math.max(0, max - min);
 }
 
-export function SpritePet({ character = DEFAULT_CHARACTER, state, speaking = false, level = 0, reducedMotion = false, scale, size, quiet = false, onPosition, onAnchor, onController, onShown }: SpritePetProps) {
+export function SpritePet({ character = DEFAULT_CHARACTER, state, speaking = false, level = 0, reducedMotion = false, scale, size, quiet = false, onPosition, onAnchor, onController, onShown, startHidden = false }: SpritePetProps) {
   const [loaded, setLoaded] = useState<LoadedCharacter | null>(null);
   const [gone, setGone] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -163,8 +165,9 @@ export function SpritePet({ character = DEFAULT_CHARACTER, state, speaking = fal
   const startHiddenRef = useRef(false);
   const playerWaiters = useRef<((p: SpritePlayer) => void)[]>([]);
   const frameRef = useRef<(p: SpritePlayer, dt: number) => void>(() => undefined);
-  const latest = useRef({ state, speaking, level, reducedMotion, quiet, onShown });
-  latest.current = { state, speaking, level, reducedMotion, quiet, onShown };
+  const latest = useRef({ state, speaking, level, reducedMotion, quiet, onShown, startHidden });
+  latest.current = { state, speaking, level, reducedMotion, quiet, onShown, startHidden };
+  const firstPlayer = useRef(true);
   const lastShown = useRef("");
   goneRef.current = gone;
 
@@ -213,10 +216,11 @@ export function SpritePet({ character = DEFAULT_CHARACTER, state, speaking = fal
     player.setReducedMotion(p.reducedMotion);
     player.setSpeaking(p.speaking, p.level);
     player.setState(p.state);
-    if (startHiddenRef.current) {
+    if (startHiddenRef.current || (firstPlayer.current && latest.current.startHidden)) {
       startHiddenRef.current = false;
       player.setHidden(true);
     }
+    firstPlayer.current = false;
     if (wanderRef.current.timer < 0 && loaded.manifest.wander_gap) wanderRef.current.timer = drawGap(loaded.manifest.wander_gap);
     const waiters = playerWaiters.current;
     playerWaiters.current = [];
