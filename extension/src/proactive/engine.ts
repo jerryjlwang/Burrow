@@ -518,7 +518,8 @@ export class ProactiveEngine {
   /**
    * A verdict from the tablet watcher (the background judged a fresh frame of the kid's ink).
    * Ink gets no glance-first ladder: a confident "off" speaks right away, because the kid is
-   * looking at the tablet, not at us. The same issue never repeats inside the cooldown, a shaky
+   * looking at the tablet, not at us, and it preempts an ambient offer that happens to be up.
+   * The same issue never repeats inside the cooldown, a shaky
    * verdict only earns a glance, and a solved page earns one celebration.
    */
   onInkJudgement(j: InkJudgement): void {
@@ -535,13 +536,16 @@ export class ProactiveEngine {
         }
         return;
       }
-      if (this.offerActive || this.deps.isBusy()) return;
+      if (this.deps.isBusy()) return;
       if (key === this.inkKey && now < this.inkCooldownUntil) return;
+      // A live "off track" beats whatever ambient offer is up; that one counts as dismissed.
+      if (this.offerActive) this.offerResolved("dismissed");
       this.inkKey = key;
       this.inkCooldownUntil = now + INK_COOLDOWN_MS;
       this.inkOff = true;
       logger.info("ink nudge", { line: j.line, issue: j.issue, confidence: j.confidence });
       this.offerActive = true;
+      this.activeOffer = { kind: "ink", key };
       store.setState({ attention: 2 });
       this.deps.onOffer({ type: "hint", message: j.nudge, elementId: null, at: now, goal: `Help me with my work on the tablet: ${j.issue || j.nudge}` });
       if (s.settings.ttsEnabled) void this.deps.speak(j.nudge);
