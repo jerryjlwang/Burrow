@@ -73,7 +73,7 @@ export class SignalTracker {
   }
 
   /** Feed each fresh page model. Returns what newly appeared, so the engine can react (e.g. celebrate). */
-  recordPage(page: PageSummary, now: number): { newErrors: string[]; newSuccesses: string[]; problemChanged: boolean } {
+  recordPage(page: PageSummary, now: number): { newErrors: string[]; newSuccesses: string[]; problemChanged: boolean; incorrectCounted: boolean } {
     this.hasQuizUi = page.hasQuizUi;
     const key = problemKey(detectProblem(page), page);
     let problemChanged = false;
@@ -99,6 +99,7 @@ export class SignalTracker {
     // Attribute errors to the student's most recent action, at most once per action. This also
     // counts pages that keep showing the same "try again" message after every attempt.
     const attributable = now - this.lastActionAt <= THRESHOLDS.attributionMs && this.lastActionAt > this.lastCountedActionAt;
+    const incorrectBefore = this.incorrectAt.length;
     const incorrectShown = page.errors.find((e) => INCORRECT_RE.test(e));
     const newIncorrect = newErrors.find((e) => INCORRECT_RE.test(e));
     if (attributable && incorrectShown) {
@@ -116,6 +117,7 @@ export class SignalTracker {
     } else if (newErrors.length) {
       this.lastErrorText = newErrors[0];
     }
+    const incorrectCounted = this.incorrectAt.length > incorrectBefore;
     if (newSuccesses.length) {
       this.incorrectAt = [];
       this.validationAt = [];
@@ -128,7 +130,7 @@ export class SignalTracker {
     }
     const corpus = `${page.title} ${page.headings.join(" ")} ${page.textSummary.slice(0, 400)}`;
     this.deadEnd = DEAD_END_RE.test(corpus) && page.elements.length < 40;
-    return { newErrors, newSuccesses, problemChanged };
+    return { newErrors, newSuccesses, problemChanged, incorrectCounted };
   }
 
   /**

@@ -20,7 +20,8 @@ const root = resolve(here, "..");
 const extPath = resolve(root, "extension/dist");
 const shots = resolve(here, "screenshots");
 mkdirSync(shots, { recursive: true });
-const PORT = 8787;
+// E2E_PORT runs the suite beside a live server on the default port instead of fighting it for 8787.
+const PORT = Number(process.env.E2E_PORT) || 8787;
 const HEADLESS = process.env.HEADED ? false : true;
 
 if (!existsSync(resolve(extPath, "manifest.json"))) {
@@ -105,6 +106,7 @@ try {
   // Reset the persisted learner graph BEFORE anything hydrates it, so reruns on a reused
   // profile start from a blank memory and the recurrence check below stays deterministic.
   if (sw) await sw.evaluate(() => chrome.storage.local.remove("pip.graph"));
+  if (sw && PORT !== 8787) await sw.evaluate((url) => chrome.storage.local.set({ "pip.settings": { serverUrl: url } }), `http://localhost:${PORT}`);
 
   // Close the onboarding tab the extension opens on first install.
   await new Promise((r) => setTimeout(r, 1200));
@@ -373,17 +375,95 @@ try {
     const fixed = await wp.locator("#working-feedback.success.show").waitFor({ timeout: 5000 }).then(() => true).catch(() => false);
     check("corrected working passes the page's final check", fixed);
     // Path consumer: with the seasons misconception recurring in the persistent graph, the win
-    // here should draw a cross-topic "circle back" suggestion a beat after the celebration.
+    // here should draw a cross-topic suggestion a beat after the celebration. The belief already
+    // came back once after a Socratic fix, so the move is "reconcile": offer a resource, not more questions.
     const pathBubble = wp.locator(".pip-bubble");
     let pathText = "";
     for (const t0 = Date.now(); Date.now() - t0 < 15000; ) {
       pathText = (await pathBubble.count()) ? (await pathBubble.first().textContent()) ?? "" : "";
-      if (/circle back/i.test(pathText)) break;
+      if (/seasons/i.test(pathText)) break;
       await new Promise((r) => setTimeout(r, 400));
     }
-    check("after the win, the rabbit suggests revisiting the shaky topic (path consumer)", /circle back/i.test(pathText) && /seasons/i.test(pathText), pathText || "(no bubble)");
+    check("after the win, the rabbit offers to find a resource for the recurring shaky topic (path consumer)", /seasons/i.test(pathText) && /find a (video|lesson|article)/i.test(pathText), pathText || "(no bubble)");
     await wp.screenshot({ path: resolve(shots, "17-path-suggestion.png") });
+
+    // Accepting must DO something: look_up → open_tab on a real resource, not a sentence naming a site.
+    if (/seasons/i.test(pathText)) {
+      const opening = context.waitForEvent("page", { timeout: 25000 }).catch(() => null);
+      await pathBubble.locator("button", { hasText: /yes/i }).first().click();
+      const resourceTab = await opening;
+      const resourceUrl = resourceTab?.url() ?? "";
+      check("accepting the suggestion opens an actual resource in a new tab (look_up → open_tab)", /youtube\.com|khanacademy\.org|wikipedia\.org/.test(resourceUrl) && /season/i.test(decodeURIComponent(resourceUrl)), resourceUrl || "(no new tab)");
+      await new Promise((r) => setTimeout(r, 2200)); // debounced graph save
+      const profile = sw ? await sw.evaluate(async () => (await chrome.storage.local.get("pip.graph"))["pip.graph"]?.profile ?? null) : null;
+      const credited = profile?.resources?.find((r) => r.concept === "seasons");
+      check("the opened resource is remembered against the concept (resource efficacy)", !!credited && credited.reason === "reconcile" && credited.helped === null, JSON.stringify(credited ?? null));
+      check("offer outcomes land in the learner profile", (profile?.offers?.reconcile?.shown ?? 0) >= 1 && (profile?.offers?.reconcile?.accepted ?? 0) >= 1, JSON.stringify(profile?.offers ?? null));
+      await resourceTab?.close().catch(() => undefined);
+    }
+
+    await wp.bringToFront();
+
+    // Sketch: "draw it out" gets a chalkboard worked example with ANALOGOUS numbers, never x = 5.
+    await wp.locator(".pip-input").fill("can you draw it out for me?");
+    await wp.locator(".pip-send").click();
+    const boardEl = wp.locator(".pip-board");
+    await boardEl.waitFor({ timeout: 10000 }).catch(() => null);
+    let boardText = "";
+    for (const t0 = Date.now(); Date.now() - t0 < 8000; ) {
+      boardText = (await boardEl.count()) ? ((await boardEl.first().textContent()) ?? "") : "";
+      if (/x = 3/.test(boardText)) break; // fully revealed
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    check("'draw it out' puts a worked example on the chalkboard (sketch)", /2x \+ 4 = 10/.test(boardText) && /x = 3/.test(boardText), boardText || "(no board)");
+    check("the board teaches with different numbers, never this problem's answer", !/x\s*=\s*5\b/.test(boardText), boardText);
+    await wp.screenshot({ path: resolve(shots, "18-sketch-board.png") });
+
+    // The working page's graded feedback became attempt evidence on the page's concept.
+    const nodes = sw ? await sw.evaluate(async () => (await chrome.storage.local.get("pip.graph"))["pip.graph"]?.nodes ?? []) : [];
+    const practiced = nodes.filter((n) => n.state.attempts > 0).map((n) => `${n.id}:${n.state.correct}/${n.state.attempts}`);
+    check("graded feedback is recorded as attempts (precision evidence)", practiced.length > 0, practiced.join(", ") || "(no attempts recorded)");
     await wp.close();
+  }
+
+  // "I want to learn about X": make_plan → the plan is saved to the learner profile → its first step
+  // is acted on immediately (look_up → open_tab), and the loop RESUMES on the tab it opened.
+  {
+    const lp = await context.newPage();
+    await lp.goto(`http://localhost:${PORT}/demo/index.html`, { waitUntil: "load" });
+    await lp.locator("#pip-companion-host").waitFor({ state: "attached", timeout: 10000 });
+    await new Promise((r) => setTimeout(r, 800));
+    await lp.evaluate(() => document.getElementById("pip-companion-host").shadowRoot.querySelector(".pip-char-btn")?.click());
+    await lp.locator(".pip-panel").waitFor({ timeout: 5000 });
+    const opening = context.waitForEvent("page", { timeout: 30000 }).catch(() => null);
+    await lp.locator(".pip-input").fill("I want to learn about volcanoes");
+    await lp.locator(".pip-send").click();
+    const planTab = await opening;
+    const planUrl = decodeURIComponent(planTab?.url() ?? "");
+    check("a learning goal ends in an opened resource, not advice (make_plan → look_up → open_tab)", /volcano/i.test(planUrl), planUrl || "(no new tab)");
+    await new Promise((r) => setTimeout(r, 2200));
+    const plans = sw ? await sw.evaluate(async () => (await chrome.storage.local.get("pip.graph"))["pip.graph"]?.profile?.plans ?? []) : [];
+    const volcano = plans.find((p) => /volcano/i.test(p.goal));
+    check("the learning plan persists with its first step done", !!volcano && volcano.steps.length >= 3 && volcano.steps[0].done && !volcano.steps[1].done, JSON.stringify(volcano ?? null));
+    if (planTab) {
+      // The opened tab inherited the loop and the conversation: its content script consumes the
+      // pending loop and the rabbit's next line lands in THAT tab's session.
+      let handoff = null;
+      for (const t0 = Date.now(); Date.now() - t0 < 25000; ) {
+        handoff = sw
+          ? await sw.evaluate(async () => {
+              const all = await chrome.storage.session.get(null);
+              const s = Object.values(all).find((v) => v?.conversation?.some((t) => /here we are/i.test(t.text)));
+              return s ? { pendingLoop: s.pendingLoop, turns: s.conversation.map((t) => t.text) } : null;
+            })
+          : null;
+        if (handoff) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      check("the loop resumes on the tab it opened, with the conversation carried over (cross-tab handoff)", !!handoff && handoff.pendingLoop === null && handoff.turns.some((t) => /volcanoes/i.test(t)), JSON.stringify(handoff)?.slice(0, 300) ?? "(no resumed session)");
+      await planTab.close().catch(() => undefined);
+    }
+    await lp.close();
   }
 
   // Consequential action asks for confirmation.

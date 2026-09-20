@@ -1,6 +1,7 @@
 // Storage contract for the parent view (docs/frontend/HANDOFF.md), the skill list, a relative time
 // helper and the sample graph the page falls back to so a demo always has rooms to show.
-import type { ConceptNode, GraphSnapshot, Misconception } from "@shared/graph";
+import { KnowledgeGraph, emptyConceptState, type ConceptNode, type GraphSnapshot, type LearnerConceptState, type Misconception } from "@shared/graph";
+import { diagnose, preferredModality } from "@shared/diagnostics";
 
 export const GRANTS_KEY = "burrow.grants";
 export const JUMP_KEY = "burrow.jump";
@@ -57,15 +58,51 @@ export function ago(ts: number, now = Date.now()): string {
   return w === 1 ? "a week ago" : `${w} weeks ago`;
 }
 
+export interface LearningNote {
+  title: string;
+  body: string;
+}
+
+const percent = (v: number): string => `${Math.round(v * 100)}%`;
+const list = (labels: string[]): string => (labels.length <= 1 ? labels.join("") : `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`);
+
+/** The learner diagnostics, in sentences a parent can use. Notes without evidence are left out. */
+export function learningNotes(snapshot: GraphSnapshot, kid: string, now = Date.now()): LearningNote[] {
+  const d = diagnose(KnowledgeGraph.fromJSON(snapshot), now);
+  const notes: LearningNote[] = [];
+  if (d.precision.value !== null) {
+    notes.push({ title: "Getting it right", body: `When ${kid} commits to an answer it is right ${percent(d.precision.value)} of the time (${d.precision.n} answers so far).` });
+  }
+  if (d.recall.value !== null) {
+    notes.push({ title: "Remembering it later", body: `When a topic comes back after time away, ${kid} recalls it without help ${percent(d.recall.value)} of the time (${d.recall.n} ${d.recall.n === 1 ? "check" : "checks"}).` });
+  }
+  if (d.fading.length) {
+    notes.push({ title: "Gets it, then loses it", body: `${list(d.fading.slice(0, 3).map((c) => c.label))}: right in the moment, gone a few days later. Short revisits help more than longer sessions.` });
+  }
+  if (d.dueForReview.length) {
+    notes.push({ title: "Fading", body: `${list(d.dueForReview.slice(0, 3).map((c) => c.label))} ${d.dueForReview.length === 1 ? "has" : "have"} not come up for a while. The rabbit will ask for a quick check.` });
+  }
+  if (d.interests.length) {
+    notes.push({ title: "Curious about", body: `${kid} keeps asking about and coming back to ${list(d.interests.slice(0, 3).map((c) => c.label))} without being told to.` });
+  }
+  if (d.help.independence.value !== null) {
+    const fixes = d.help.selfCorrections ? ` and caught ${d.help.selfCorrections === 1 ? "one mistake" : `${d.help.selfCorrections} mistakes`} alone` : "";
+    notes.push({ title: "Working alone", body: `${kid} solves ${percent(d.help.independence.value)} of problems without a hint${fixes}.` });
+  }
+  const modality = preferredModality(d);
+  if (modality) notes.push({ title: "What helps", body: `After a ${modality}, ${kid} usually gets the next question on that topic right, so the rabbit reaches for ${modality}s first.` });
+  return notes;
+}
+
 export function sampleGraph(now = Date.now()): GraphSnapshot {
   const H = 3_600_000;
   const D = 24 * H;
-  const node = (id: string, label: string, domain: string, mastery: number, exposures: number, asks: number, struggles: number, firstSeenAt: number, lastSeenAt: number, misconceptions: Misconception[] = []): ConceptNode => ({
+  const node = (id: string, label: string, domain: string, mastery: number, exposures: number, asks: number, struggles: number, firstSeenAt: number, lastSeenAt: number, misconceptions: Misconception[] = [], practice: Partial<LearnerConceptState> = {}): ConceptNode => ({
     id,
     label,
     aliases: [],
     domain,
-    state: { firstSeenAt, lastSeenAt, exposures, dwellMs: exposures * 90_000, asks, struggles, mastery },
+    state: { ...emptyConceptState(firstSeenAt), lastSeenAt, exposures, dwellMs: exposures * 90_000, asks, struggles, mastery, ...practice },
     sources: [],
     misconceptions,
   });
@@ -85,9 +122,9 @@ export function sampleGraph(now = Date.now()): GraphSnapshot {
           evidence: "Asked why a dry moat would stop anyone.",
           resolution: { at: now - 4 * D, method: "self", note: "remembered the dry moat picture and worked out that a deep ditch is enough to stop tunnels and towers." },
         },
-      ]),
+      ], { attempts: 5, correct: 4, recallOpportunities: 2, recallSuccesses: 2, lastPracticedAt: now - 2 * H, voluntary: 3, activeDays: 4 }),
       node("castle-walls", "Castle walls", "castles", 0.71, 3, 0, 0, now - 5 * D, now - D),
-      node("halves-and-quarters", "Halves and quarters", "fractions", 0.64, 3, 1, 0, now - 3 * D, now - D),
+      node("halves-and-quarters", "Halves and quarters", "fractions", 0.64, 3, 1, 0, now - 3 * D, now - D, [], { attempts: 4, correct: 3, lastPracticedAt: now - D }),
       node("siege-towers", "Siege towers", "castles", 0.52, 2, 1, 0, now - 4 * D, now - 3 * D),
       node("comparing-fractions", "Comparing fractions", "fractions", 0.22, 2, 2, 2, now - 6 * D, now - 6 * D, [
         {
@@ -100,7 +137,7 @@ export function sampleGraph(now = Date.now()): GraphSnapshot {
           occurrences: 2,
           evidence: "Said one fifth is bigger than one third because five is more than three.",
         },
-      ]),
+      ], { attempts: 4, correct: 1, hinted: 2, recallOpportunities: 1, recallSuccesses: 0, lastPracticedAt: now - 6 * D }),
     ],
     edges: [
       { from: "halves-and-quarters", to: "comparing-fractions", type: "prerequisite", weight: 0.8 },

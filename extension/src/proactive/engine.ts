@@ -3,10 +3,11 @@ import { validateIntervention } from "@shared/validate";
 import type { InterventionDecision } from "@shared/actions";
 import type { Misconception } from "@shared/graph";
 import { composeMisconceptionNudge } from "@shared/nudge";
-import { suggestNext, type PathSuggestion } from "@shared/path";
+import { suggestNext, suggestionKey, type PathKind } from "@shared/path";
 import { interveneMock, findAnswerInput } from "@shared/mock-agent";
-import { detectProblem } from "@shared/hints";
-import { judgeWorking } from "@shared/steps";
+import { detectProblem, problemKey } from "@shared/hints";
+import { judgeWorking, parseJudgement, splitWorking, type WorkingJudgement } from "@shared/steps";
+import { linearPlan, parsePlan, type StepPlan } from "@shared/plan";
 import { lineLocator } from "../actions/locate";
 import { computeLevel, SignalTracker, THRESHOLDS, type ClickRecord } from "./signals";
 import { store } from "../content/store";
@@ -19,6 +20,13 @@ import type { PageWatcher } from "../page-understanding/watcher";
 import { HOST_ID } from "../page-understanding/extract";
 
 const logger = log("proactive");
+/** Feedback that grades an answer as right — "Draft saved" and "Signed in" are successes but not attempts. */
+const CORRECT_RE = /\b(correct|that'?s right|you got it|well done)\b/i;
+/** Path kinds offered in a quiet moment rather than in response to something the student just did. */
+const AMBIENT_KINDS: PathKind[] = ["plan", "review", "explore"];
+const AMBIENT_GAP_MS = 10 * 60_000;
+const REMOTE_JUDGE_DEBOUNCE_MS = 1600;
+const PLAN_RETRY_MS = 30_000;
 const INTERACTIVE_SELECTOR = "button, a, [role=button], [role=link], [role=tab], [role=menuitem], [role=option], [role=checkbox], [role=radio], input, select, textarea, summary, label, [onclick], [tabindex]";
 
 interface NudgeRecord {
@@ -44,6 +52,8 @@ export interface EngineDeps {
   speak: (text: string) => Promise<void>;
   onOffer: (offer: PendingOffer) => void;
   onCelebrate: (say: string | null) => void;
+  /** The problem plan arrived or the student's working reached a new step of it. */
+  onPlanProgress?: () => void;
 }
 
 /**
@@ -75,6 +85,22 @@ export class ProactiveEngine {
   /** The element holding the student's written working, for step-judge cues. */
   private workingEl: (HTMLTextAreaElement | HTMLInputElement) | null = null;
   private judgeTimer: number | null = null;
+  /** What the on-screen offer is, so its outcome lands in the learner profile. */
+  private activeOffer: { kind: string; key?: string } | null = null;
+  /** Concepts answered wrong in this page-session (id → misses): what a finished quiz needs reconciled. */
+  private sessionMisses = new Map<string, number>();
+  /** Step plan for the problem on screen; planKey marks which problem it was resolved for (plan may be null). */
+  private plan: StepPlan | null = null;
+  private planKey: string | null = null;
+  private planLoading: string | null = null;
+  private planRetryAt = 0;
+  private reachedPlanStep: number | null = null;
+  private remoteJudgeTimer: number | null = null;
+  private remoteJudging = false;
+  private lastRemoteWorking = "";
+  /** Wrong step already counted as a struggle, and the hint count then — a later clean working with no new hints is a self-correction. */
+  private struggledStep: number | null = null;
+  private hintsAtStruggle = 0;
 
   constructor(deps: EngineDeps) {
     this.deps = deps;
@@ -105,7 +131,55 @@ export class ProactiveEngine {
     if (this.tickTimer) window.clearInterval(this.tickTimer);
     if (this.cueTimer) window.clearTimeout(this.cueTimer);
     if (this.judgeTimer) window.clearTimeout(this.judgeTimer);
+    if (this.remoteJudgeTimer) window.clearTimeout(this.remoteJudgeTimer);
     if (this.suggestTimer) window.clearTimeout(this.suggestTimer);
+  }
+
+  /** The plan for the problem on screen and how far the student's working has got, for the agent prompt. */
+  get planContext(): { plan: StepPlan | null; planStep: number | null } {
+    return { plan: this.plan, planStep: this.reachedPlanStep };
+  }
+
+  /** Where attempts and struggles land: the plan step being worked, else the page's top concept. */
+  private conceptLabel(): string | null {
+    const step = this.plan?.steps[Math.min(this.reachedPlanStep ?? 0, this.plan.steps.length - 1)];
+    if (step?.concept) return step.concept;
+    const top = this.currentConceptIds[0];
+    return top ? this.deps.session.graph.get(top)?.label ?? null : null;
+  }
+
+  /**
+   * Resolve the step plan for the current problem: instantly for shapes we solve locally, else
+   * from the server planner (any subject). Idempotent per problem; a page with no problem
+   * resolves to null once and isn't asked about again.
+   */
+  private async ensurePlan(page: PageSummary): Promise<StepPlan | null> {
+    const problem = detectProblem(page);
+    const key = problemKey(problem, page);
+    if (this.planKey === key) return this.plan;
+    const adopt = (plan: StepPlan | null) => {
+      this.plan = plan;
+      this.planKey = key;
+      this.reachedPlanStep = null;
+      this.deps.onPlanProgress?.();
+      return plan;
+    };
+    if (problem.kind === "linear-equation") return adopt(linearPlan(problem, key));
+    if (this.planLoading === key || Date.now() < this.planRetryAt) return null;
+    this.planLoading = key;
+    try {
+      const r = await sendToBackground({ type: "steps.plan", request: { key, url: page.url, title: page.title, headings: page.headings.slice(0, 12), text: page.textSummary.slice(0, 3000) } }, 25_000);
+      const plan = parsePlan(r.plan, { key, source: "llm" });
+      logger.info("step plan", { steps: plan?.steps.length ?? 0, source: plan?.source ?? "none" });
+      return this.planLoading === key ? adopt(plan) : null;
+    } catch (e) {
+      // Server down: the local judge and generic hints still work; try again later.
+      this.planRetryAt = Date.now() + PLAN_RETRY_MS;
+      logger.debug("step plan unavailable", { error: String(e) });
+      return null;
+    } finally {
+      if (this.planLoading === key) this.planLoading = null;
+    }
   }
 
   /** Debounced local step-judging of whatever multi-line working the student is typing. */
@@ -118,15 +192,63 @@ export class ProactiveEngine {
     this.judgeTimer = window.setTimeout(() => this.judgeNow(), 350);
   }
 
+  /** Local judge first (instant, no model); anything it can't parse goes to the server judge on a slower debounce. */
   private judgeNow(): void {
     const page = this.deps.getPage();
     const value = String(this.workingEl?.value ?? "");
-    if (!page || !value.includes("=")) return;
-    const judgement = judgeWorking(detectProblem(page), value);
+    if (!page || !value.trim()) return;
+    if (value.includes("=")) {
+      const local = judgeWorking(detectProblem(page), value);
+      if (local.judged) {
+        void this.ensurePlan(page);
+        this.applyJudgement(local);
+        return;
+      }
+    }
+    // Multi-line working in a textarea only: a search box or a one-line answer isn't "showing your work".
+    if (!(this.workingEl instanceof HTMLTextAreaElement) || splitWorking(value).length < 2) return;
+    if (!store.getState().settings.proactiveEnabled || value === this.lastRemoteWorking) return;
+    if (this.remoteJudgeTimer) window.clearTimeout(this.remoteJudgeTimer);
+    this.remoteJudgeTimer = window.setTimeout(() => void this.judgeRemotely(), REMOTE_JUDGE_DEBOUNCE_MS);
+  }
+
+  private async judgeRemotely(): Promise<void> {
+    const page = this.deps.getPage();
+    const working = String(this.workingEl?.value ?? "");
+    if (!page || this.remoteJudging || working === this.lastRemoteWorking) return;
+    this.remoteJudging = true;
+    // Marked before the plan check: a page with no plan must not re-enter from the finally below.
+    this.lastRemoteWorking = working;
+    try {
+      const plan = await this.ensurePlan(page);
+      if (!plan || plan.kind !== "problem") return;
+      const raw = await sendToBackground({ type: "steps.judge", request: { plan, text: page.textSummary.slice(0, 2000), working } }, 25_000);
+      // The student kept typing while the judge ran: this verdict is about text that's gone.
+      if (String(this.workingEl?.value ?? "") !== working) return;
+      this.applyJudgement(parseJudgement(raw, working, plan.steps.length));
+    } catch (e) {
+      logger.debug("remote judge unavailable", { error: String(e) });
+    } finally {
+      this.remoteJudging = false;
+      if (String(this.workingEl?.value ?? "") !== this.lastRemoteWorking) this.judgeNow();
+    }
+  }
+
+  private applyJudgement(judgement: WorkingJudgement): void {
     if (!judgement.judged) return;
-    this.deps.tracker.recordWorkingJudgement(judgement, Date.now());
-    logger.debug("working judged", { firstWrongStep: judgement.firstWrongStep, solved: judgement.solved });
+    const now = Date.now();
+    this.deps.tracker.recordWorkingJudgement(judgement, now);
+    logger.debug("working judged", { firstWrongStep: judgement.firstWrongStep, solved: judgement.solved, planStep: judgement.planStep });
     this.lastJudgementWrongStep = judgement.firstWrongStep;
+    if (judgement.planStep !== null && judgement.planStep !== this.reachedPlanStep) {
+      this.reachedPlanStep = judgement.planStep;
+      this.deps.onPlanProgress?.();
+    }
+    if (judgement.firstWrongStep === null && this.struggledStep !== null) {
+      const concept = this.conceptLabel();
+      if (concept && this.deps.session.student.hintsGiven === this.hintsAtStruggle) this.deps.session.record({ kind: "selfCorrection", concept, at: now });
+      this.struggledStep = null;
+    }
     this.applyConfusionCue();
     this.evaluate("working");
   }
@@ -173,31 +295,51 @@ export class ProactiveEngine {
   onPageChange(page: PageSummary, reason: string): void {
     const now = Date.now();
     if (reason === "url") this.deps.tracker.recordUrl(page.url, now);
-    const { newSuccesses, problemChanged } = this.deps.tracker.recordPage(page, now);
+    const { newSuccesses, problemChanged, incorrectCounted } = this.deps.tracker.recordPage(page, now);
     if (newSuccesses.length) this.maybeResolveNudged(now);
     if (problemChanged) {
       this.level = 0;
       this.hadTrouble = false;
+      this.struggledStep = null;
     }
+    if (page.hasQuizUi) void this.ensurePlan(page);
     const student = this.deps.session.student;
-    if (newSuccesses.length && (this.hadTrouble || student.hintsForCurrentProblem > 0) && this.celebratedProblem !== this.deps.tracker.currentProblemKey) {
+    this.recordAttempts(incorrectCounted, newSuccesses, student.hintsForCurrentProblem > 0, now);
+    const earned = this.hadTrouble || student.hintsForCurrentProblem > 0;
+    if (newSuccesses.length && (earned || this.sessionMisses.size > 0) && this.celebratedProblem !== this.deps.tracker.currentProblemKey) {
       this.celebratedProblem = this.deps.tracker.currentProblemKey;
       this.deps.session.updateStudent({ successes: student.successes + 1, hintsForCurrentProblem: 0, recentErrors: [] });
-      this.deps.onCelebrate(student.hintsForCurrentProblem > 0 ? "Nice—you got it." : null);
+      if (earned) this.deps.onCelebrate(student.hintsForCurrentProblem > 0 ? "Nice—you got it." : null);
       // A success is the cheapest moment to steer: suggest the next move once the cheer lands.
-      // Second attempt covers the case where the celebration is still being spoken at the first.
+      // Spoken celebrations run as long as the TTS takes, so wait for quiet rather than guess a delay.
       if (this.suggestTimer) window.clearTimeout(this.suggestTimer);
-      const suggest = () => this.offerPathSuggestion(["revisit", "advance"], { ignoreCooldown: true });
-      this.suggestTimer = window.setTimeout(() => {
-        suggest();
-        this.suggestTimer = window.setTimeout(suggest, 3000);
-      }, 2600);
+      const deadline = now + 20_000;
+      const suggest = () => {
+        if (this.deps.isBusy() && Date.now() < deadline) {
+          this.suggestTimer = window.setTimeout(suggest, 1000);
+          return;
+        }
+        this.offerPathSuggestion(["reconcile", "revisit", "plan", "advance"], { ignoreCooldown: true });
+      };
+      this.suggestTimer = window.setTimeout(suggest, 2600);
       this.hadTrouble = false;
       this.level = 0;
       return;
     }
     if (newSuccesses.length) this.deps.session.updateStudent({ successes: student.successes + 1 });
     window.setTimeout(() => this.evaluate("page"), 250);
+  }
+
+  /** Graded feedback → attempt events: the evidence precision, recall and resource efficacy are built on. */
+  private recordAttempts(incorrectCounted: boolean, newSuccesses: string[], hinted: boolean, now: number): void {
+    const concept = this.conceptLabel();
+    if (!concept) return;
+    if (incorrectCounted) {
+      this.deps.session.record({ kind: "attempt", concept, correct: false, hinted, at: now });
+      const id = this.deps.session.graph.resolve(concept);
+      if (id) this.sessionMisses.set(id, (this.sessionMisses.get(id) ?? 0) + 1);
+    }
+    if (newSuccesses.some((s) => CORRECT_RE.test(s))) this.deps.session.record({ kind: "attempt", concept, correct: true, hinted, at: now });
   }
 
   /**
@@ -217,7 +359,7 @@ export class ProactiveEngine {
     const nudge = composeMisconceptionNudge(m);
     logger.info("misconception nudge", { concept: m.concept, status: m.status, belief: m.belief.slice(0, 80) });
     this.activeNudge = { m, question: nudge.message, at: now, pathname: location.pathname };
-    this.offerActive = true;
+    this.presentOffer("misconception", now);
     store.setState({ attention: 2 });
     this.deps.session.setCooldown(now + THRESHOLDS.cooldownMs);
     this.deps.onOffer({ type: "nudge", message: nudge.message, elementId: null, at: now, goal: nudge.goal });
@@ -252,28 +394,49 @@ export class ProactiveEngine {
    * Fresh extraction landed for this page: remember its top concepts and, on arrival, check the
    * one suggestion that's worth an interruption — an unseen prerequisite of what they're reading.
    */
-  onConceptsExtracted(conceptIds: string[]): void {
+  onConceptsExtracted(conceptIds: string[], missedIds: string[] = []): void {
     this.currentConceptIds = conceptIds;
+    for (const id of missedIds) this.sessionMisses.set(id, (this.sessionMisses.get(id) ?? 0) + 1);
+    // Graded results just came up with misses on them: reconciling those beats any other move.
+    if (missedIds.length) this.offerPathSuggestion(["reconcile"], { ignoreCooldown: true });
     this.offerPathSuggestion(["prerequisite"], { ignoreCooldown: false });
+    // Nothing pressing and no problem on screen: the quiet moment for plan steps, reviews and curiosity.
+    if (!this.deps.getPage()?.hasQuizUi && this.ambientAllowed(Date.now())) this.offerPathSuggestion(AMBIENT_KINDS, { ignoreCooldown: false });
+  }
+
+  /** Ambient offers are rate-limited across tabs via the profile, not per page. */
+  private ambientAllowed(now: number): boolean {
+    const { offers, resources } = this.deps.session.graph.profile;
+    // A resource the rabbit just opened is the thing to be doing right now; don't talk over it.
+    const lastResourceAt = resources[resources.length - 1]?.at ?? 0;
+    return now - lastResourceAt >= AMBIENT_GAP_MS && AMBIENT_KINDS.every((k) => now - (offers[k]?.lastAt ?? 0) >= AMBIENT_GAP_MS);
+  }
+
+  private presentOffer(kind: string, now: number, key?: string): void {
+    this.offerActive = true;
+    this.activeOffer = { kind, key };
+    this.deps.session.record({ kind: "offer", offer: kind, outcome: "shown", key, at: now });
   }
 
   /** Offer the graph's best next move, respecting the same budget as every other offer. */
-  private offerPathSuggestion(kinds: PathSuggestion["kind"][], opts: { ignoreCooldown: boolean }): void {
+  private offerPathSuggestion(kinds: PathKind[], opts: { ignoreCooldown: boolean }): void {
     const s = store.getState();
     const now = Date.now();
     if (!s.settings.proactiveEnabled) return;
     if (this.offerActive || this.deps.isBusy() || (s.panelOpen && s.busy)) return;
     if (!opts.ignoreCooldown && now < this.deps.session.proactiveCooldownUntil) return;
-    const suggestion = suggestNext(this.deps.session.graph, { currentConceptIds: this.currentConceptIds, kinds });
+    const sessionMisses = [...this.sessionMisses].sort((a, b) => b[1] - a[1]).map(([id]) => id);
+    const suggestion = suggestNext(this.deps.session.graph, { currentConceptIds: this.currentConceptIds, kinds, sessionMisses, now });
     if (!suggestion) return;
-    const key = `${suggestion.kind}:${suggestion.conceptId}`;
+    const key = suggestionKey(suggestion);
     if (this.suggestedPaths.has(key)) return;
     this.suggestedPaths.add(key);
-    logger.info("path suggestion", { kind: suggestion.kind, concept: suggestion.conceptId, reason: suggestion.reason });
-    this.offerActive = true;
+    logger.info("path suggestion", { kind: suggestion.kind, concept: suggestion.conceptId, reason: suggestion.reason, resource: suggestion.resource?.query });
+    this.presentOffer(suggestion.kind, now, key);
     store.setState({ attention: 2 });
     this.deps.session.setCooldown(now + THRESHOLDS.cooldownMs);
-    this.deps.onOffer({ type: "nudge", message: suggestion.message, elementId: null, at: now, goal: suggestion.goal });
+    const path = { kind: suggestion.kind, conceptLabel: suggestion.conceptLabel, query: suggestion.resource?.query, prefer: suggestion.resource?.prefer };
+    this.deps.onOffer({ type: "nudge", message: suggestion.message, elementId: null, at: now, goal: suggestion.goal, path });
     const st = store.getState();
     if (st.settings.ttsEnabled && st.voice.mode === "listening") void this.deps.speak(suggestion.message);
   }
@@ -291,6 +454,13 @@ export class ProactiveEngine {
       now,
     });
     if (signals.strength >= 0.45) this.hadTrouble = true;
+    // A wrong step that outlived the grace window is a real struggle, not a half-typed line.
+    if (signals.wrongStep && signals.wrongStep.ageMs >= THRESHOLDS.wrongStepBubbleMs && this.struggledStep !== signals.wrongStep.step) {
+      this.struggledStep = signals.wrongStep.step;
+      this.hintsAtStruggle = student.hintsGiven;
+      const concept = this.conceptLabel();
+      if (concept) this.deps.session.record({ kind: "struggle", concept, at: now });
+    }
     if (signals.lastErrorText && !student.recentErrors.includes(signals.lastErrorText)) {
       this.deps.session.updateStudent({ recentErrors: [...student.recentErrors.slice(-4), signals.lastErrorText] });
     }
@@ -340,7 +510,7 @@ export class ProactiveEngine {
         return;
       }
       if (this.deps.isBusy()) return;
-      this.offerActive = true;
+      this.presentOffer(decision.type, Date.now());
       const offer: PendingOffer = { type: decision.type, message: decision.message, elementId: decision.elementId, at: Date.now() };
       store.setState({ attention: 2 });
       if (decision.elementId != null) {
@@ -391,6 +561,8 @@ export class ProactiveEngine {
     store.setState({ attention: 0 });
     const student = this.deps.session.student;
     const now = Date.now();
+    if (this.activeOffer) this.deps.session.record({ kind: "offer", offer: this.activeOffer.kind, outcome, key: this.activeOffer.key, at: now });
+    this.activeOffer = null;
     if (outcome === "declined") {
       this.deps.session.updateStudent({ declinedProactiveCount: student.declinedProactiveCount + 1, lastDeclineAt: now });
       this.deps.session.setCooldown(now + THRESHOLDS.declineCooldownMs);

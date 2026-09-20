@@ -31,6 +31,18 @@ export interface Bubble {
   expiresAt?: number;
 }
 
+/** One plan as the plan map draws it: the problem on screen, or a learning plan from long-term memory. */
+export interface PlanRoute {
+  key: string;
+  kind: "problem" | "topic";
+  goal: string;
+  steps: Array<{ title: string; state: "done" | "current" | "todo" }>;
+}
+
+export interface PlanView {
+  routes: PlanRoute[];
+}
+
 /** A worked example the rabbit "draws out" line by line on its chalkboard. */
 export interface SketchBoard {
   id: string;
@@ -65,6 +77,8 @@ export interface UIState {
   voice: VoiceState;
   bubble: Bubble | null;
   board: SketchBoard | null;
+  /** The plan map, when open. Shares the chalkboard's corner, so opening one closes the other. */
+  planView: PlanView | null;
   highlights: HighlightBox[];
   pointer: { from: { x: number; y: number }; to: { x: number; y: number } } | null;
   busy: boolean;
@@ -92,6 +106,7 @@ export const initialState: UIState = {
   voice: { mode: "off", ttsPlaying: false, serverOk: null },
   bubble: null,
   board: null,
+  planView: null,
   highlights: [],
   pointer: null,
   busy: false,

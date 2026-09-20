@@ -1,5 +1,7 @@
 import type { AgentDecision } from "@shared/actions";
 import type { ActionResult, PageSummary } from "@shared/types";
+import type { StepPlan } from "@shared/plan";
+import type { PendingLoop } from "../shared/messages";
 import { normalizeText } from "@shared/text";
 import { ElementRegistry } from "../page-understanding/registry";
 import { isSensitiveField, HOST_ID } from "../page-understanding/extract";
@@ -17,11 +19,18 @@ export interface ExecutorDeps {
   /** Resolves when the DOM/URL changed or the timeout elapsed. */
   waitForChange: (timeoutMs: number) => Promise<{ changed: boolean; urlChanged: boolean }>;
   navigate: (url: string) => Promise<void>;
-  openTab: (url: string) => Promise<void>;
+  /** `resume` hands the running loop to the new tab so the chain continues on the page it opened. */
+  openTab: (url: string, resume?: PendingLoop) => Promise<void>;
   switchTab: (tabId: number) => Promise<void>;
   goBack: () => Promise<void>;
   /** Server-side vetted lookup (no user cookies); returns pre-formatted result lines. */
-  lookup: (query: string) => Promise<string>;
+  lookup: (query: string, prefer?: string) => Promise<string>;
+  /** Server-side learning plan for a topic the student wants to learn. */
+  makePlan: (topic: string) => Promise<StepPlan | null>;
+  /** Open the plan map; false when there is no plan of any kind to show. */
+  showPlan: () => boolean;
+  /** Show a worked example on the rabbit's chalkboard (newline-separated lines). */
+  sketch: (spec: string) => void;
   /** Called right before an action that may unload the page. */
   beforeMaybeNavigate?: () => Promise<void> | void;
 }
@@ -389,6 +398,15 @@ export async function executeAction(decision: AgentDecision, deps: ExecutorDeps)
         // The current page stays put; the new tab gets its own content script and session.
         await deps.openTab(decision.url!);
         return { ok: true, message: "opened in a new tab" };
+      }
+
+      case "show_plan": {
+        return deps.showPlan() ? { ok: true, message: "plan map is showing" } : { ok: false, message: "there is no plan yet — offer to make one with make_plan", elementFound: true };
+      }
+
+      case "sketch": {
+        deps.sketch(decision.text!);
+        return { ok: true, message: "drawn on the board" };
       }
 
       case "switch_tab": {

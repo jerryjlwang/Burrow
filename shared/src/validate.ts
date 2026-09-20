@@ -94,7 +94,11 @@ export function validateDecision(raw: unknown): DecisionValidation {
     if ((d.action === "navigate" || d.action === "open_tab") && (!d.url || !/^https?:\/\//i.test(d.url))) return { ok: false, error: `${d.action} requires an absolute http(s) url` };
     if (d.action === "switch_tab" && d.tabId === null) return { ok: false, error: "switch_tab requires a tabId from the open tabs list" };
     if (d.action === "look_up" && (!d.text || !d.text.trim())) return { ok: false, error: "look_up requires text (the query)" };
+    if (d.action === "sketch" && (!d.text || !d.text.trim())) return { ok: false, error: "sketch requires text (the lines to draw)" };
+    if (d.action === "sketch" && d.text!.length > 600) return { ok: false, error: "sketch text too long" };
     if (d.action === "look_up" && d.text!.length > 200) return { ok: false, error: "look_up query too long" };
+    if (d.action === "make_plan" && (!d.text || !d.text.trim())) return { ok: false, error: "make_plan requires text (what the student wants to learn)" };
+    if (d.action === "make_plan" && d.text!.length > 200) return { ok: false, error: "make_plan goal too long" };
     if (d.action === "scroll" && d.direction === null) return { ok: false, error: "scroll requires direction" };
     if (d.action === "ask_confirmation") {
       if (!d.pendingAction) return { ok: false, error: "ask_confirmation requires pendingAction" };

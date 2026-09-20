@@ -18,9 +18,12 @@ export const ACTIONS = [
   "go_back",
   "wait",
   "look_up",
+  "make_plan",
+  "show_plan",
   "ask_user",
   "ask_confirmation",
   "explain",
+  "sketch",
   "finish",
 ] as const;
 export type ActionName = (typeof ACTIONS)[number];

@@ -1,6 +1,10 @@
 import { validateDecision } from "@shared/validate";
 import type { AgentDecision } from "@shared/actions";
-import type { ActionRecord, AgentInput, AgentOutput, PageSummary, PendingOffer } from "@shared/types";
+import type { ActionRecord, AgentInput, AgentOutput, PageSummary, PathContext, PendingOffer } from "@shared/types";
+import type { StepPlan } from "@shared/plan";
+import { diagnose, formatDiagnostics } from "@shared/diagnostics";
+import { resourceKindOf } from "@shared/events";
+import { pickLookupResult } from "@shared/mock-agent";
 import { decideMock } from "@shared/mock-agent";
 import { detectProblem, problemKey } from "@shared/hints";
 import { isAffirmative, isNegative, truncate } from "@shared/text";
@@ -14,6 +18,8 @@ import type { SignalTracker } from "../proactive/signals";
 
 const logger = log("agent");
 export const MAX_STEPS = 6;
+/** Hard ceiling across navigations and new tabs, so a resumed chain can't run away. */
+export const MAX_TOTAL_STEPS = 14;
 
 export interface LoopDeps {
   executor: ExecutorDeps;
@@ -27,12 +33,16 @@ export interface LoopDeps {
   /** Called when a decision references an element, so the UI knows what "it" means. */
   onReference?: (elementId: number, name: string) => void;
   onIdle?: () => void;
+  /** Step plan for the problem on screen (if one is ready) and how far the student's working has got. */
+  getPlan?: () => { plan: StepPlan | null; planStep: number | null };
 }
 
 export interface RunOptions {
   goal?: string;
   pendingOffer?: PendingOffer | null;
   resume?: PendingLoop | null;
+  /** The path suggestion being carried out, so resources opened get credited to its concept. */
+  path?: PathContext | null;
   source: "voice" | "text" | "proactive" | "resume";
 }
 
@@ -54,6 +64,9 @@ export class AgentLoop {
   private lastReferencedElementName: string | null = null;
   private pendingScreenshot: string | null = null;
   private pendingLookup: string | null = null;
+  private pendingPlan: string | null = null;
+  /** Last look_up's results, kept to title the resource that gets opened from them. */
+  private lastLookup: string | null = null;
   runCount = 0;
 
   constructor(deps: LoopDeps) {
@@ -87,6 +100,8 @@ export class AgentLoop {
     const history: ActionRecord[] = opts.resume?.history ? [...opts.resume.history] : [];
     let step = opts.resume?.step ?? 0;
     const pendingOffer = opts.pendingOffer ?? opts.resume?.pendingOffer ?? null;
+    let path: PathContext | null = opts.path ?? opts.resume?.path ?? null;
+    const learner = formatDiagnostics(diagnose(session.graph, Date.now()));
     if (opts.resume?.lastReferencedElementName) this.lastReferencedElementName = opts.resume.lastReferencedElementName;
     const taskType = classifyTask(utterance, store.getState().page);
     session.updateStudent({ currentGoal: goal });
@@ -98,7 +113,7 @@ export class AgentLoop {
     };
 
     try {
-      const maxStep = step + MAX_STEPS;
+      const maxStep = Math.min(step + MAX_STEPS, MAX_TOTAL_STEPS);
       for (; step < maxStep; step++) {
         check();
         const page = this.deps.observe();
@@ -120,15 +135,22 @@ export class AgentLoop {
           lastReferencedElementId: this.lastReferencedElementId,
           screenshot: this.pendingScreenshot,
           lookupResults: this.pendingLookup,
+          planResults: this.pendingPlan,
+          path,
+          ...this.deps.getPlan?.(),
+          learner,
           step,
           maxSteps: maxStep,
           resumedAfterNavigation: !!opts.resume && step === (opts.resume?.step ?? 0),
         };
         this.pendingScreenshot = null;
         this.pendingLookup = null;
+        this.pendingPlan = null;
 
         const output = await this.decide(input, signal);
         check();
+        // This page lived long enough to get a decision: the handoff is consumed.
+        if (opts.resume && step === opts.resume.step) await session.setPendingLoop(null);
         const decision = output.decision;
         store.setState({ debug: { ...store.getState().debug, lastDecision: decision, provider: output.provider, degraded: output.degraded, latencyMs: output.latencyMs }, offline: output.provider === "local-mock" });
         logger.info("decision", { step, action: decision.action, elementId: decision.elementId, say: decision.say, provider: output.provider, latencyMs: output.latencyMs });
@@ -196,7 +218,7 @@ export class AgentLoop {
         if (decision.action === "look_up") {
           let result: { ok: boolean; message: string };
           try {
-            this.pendingLookup = await this.deps.executor.lookup(decision.text!);
+            this.pendingLookup = this.lastLookup = await this.deps.executor.lookup(decision.text!, path?.prefer);
             result = { ok: true, message: "results attached to your next step" };
           } catch (e) {
             result = { ok: false, message: `lookup failed: ${e instanceof Error ? e.message : String(e)}` };
@@ -205,15 +227,47 @@ export class AgentLoop {
           continue;
         }
 
+        // make_plan builds a learning plan server-side, stores it in the learner profile, and turns
+        // its first step into this loop's path — so the very next steps go and open something.
+        if (decision.action === "make_plan") {
+          let result: { ok: boolean; message: string };
+          try {
+            const plan = await this.deps.executor.makePlan(decision.text!);
+            if (!plan) throw new Error("no plan came back");
+            session.record({ kind: "plan", plan: { key: plan.key, goal: plan.goal, steps: plan.steps }, at: Date.now() });
+            const first = plan.steps[0];
+            path = { kind: "plan", conceptLabel: first.concept ?? first.title, query: first.query ?? `${first.concept ?? first.title} for kids`, prefer: "lesson" };
+            this.pendingPlan = plan.steps.map((st, i) => `${i + 1}. ${st.title}${st.query ? ` (look_up: "${st.query}")` : ""}`).join("\n");
+            this.deps.executor.showPlan();
+            result = { ok: true, message: `plan saved and showing on the plan map: ${plan.steps.length} steps; start step 1 now` };
+          } catch (e) {
+            result = { ok: false, message: `planning failed: ${e instanceof Error ? e.message : String(e)}` };
+          }
+          history.push({ step, decision, result, at: Date.now() });
+          continue;
+        }
+
+        // open_tab moves the student to a new tab. A chain that isn't done continues THERE: the
+        // background seeds the new tab's session with this loop, and its content script resumes it.
+        if (decision.action === "open_tab") {
+          const record: ActionRecord = { step, decision, result: { ok: true, message: "opened in a new tab; you are now on that tab" }, at: Date.now() };
+          const resume = decision.done || step + 1 >= maxStep ? undefined : { utterance, goal, history: [...history.slice(-5), record], step: step + 1, at: Date.now(), pendingOffer: null, lastReferencedElementName: null, path };
+          await this.deps.executor.openTab(decision.url!, resume);
+          history.push(record);
+          this.creditResource(path, decision.url!);
+          break;
+        }
+
         // --- Execute + verify ---
         // Persist resume state BEFORE actions that may unload the page (a click on a link
         // navigates faster than we could save afterwards). Cleared again if nothing navigated.
         const mayNavigate = decision.action === "click" || decision.action === "navigate" || decision.action === "go_back";
         if (mayNavigate) {
-          await session.setPendingLoop({ utterance, goal, history: [...history.slice(-5), { step, decision, result: { ok: true, message: "action dispatched; page navigated" }, at: Date.now() }], step: step + 1, at: Date.now(), pendingOffer: null, lastReferencedElementName: this.lastReferencedElementName });
+          await session.setPendingLoop({ utterance, goal, history: [...history.slice(-5), { step, decision, result: { ok: true, message: "action dispatched; page navigated" }, at: Date.now() }], step: step + 1, at: Date.now(), pendingOffer: null, lastReferencedElementName: this.lastReferencedElementName, path });
         }
         const result = await this.executeSafely(decision, page, signal);
         history.push({ step, decision, result, at: Date.now() });
+        if (decision.action === "navigate" && result.ok) this.creditResource(path, decision.url!);
         store.setState({ debug: { ...store.getState().debug, lastResult: result } });
         logger.info("result", { action: decision.action, ok: result.ok, message: result.message, changed: result.changed, urlChanged: result.urlChanged });
         if (decision.action === "point_to" || decision.action === "highlight") {
@@ -221,7 +275,7 @@ export class AgentLoop {
         }
         if (result.urlChanged) {
           // The page is navigating; the next content script resumes with the state saved above.
-          await session.setPendingLoop({ utterance, goal, history: history.slice(-6), step: step + 1, at: Date.now(), pendingOffer: null, lastReferencedElementName: this.lastReferencedElementName });
+          await session.setPendingLoop({ utterance, goal, history: history.slice(-6), step: step + 1, at: Date.now(), pendingOffer: null, lastReferencedElementName: this.lastReferencedElementName, path });
           break;
         }
         if (mayNavigate) await session.setPendingLoop(null);
@@ -253,6 +307,14 @@ export class AgentLoop {
         this.deps.onIdle?.();
       }
     }
+  }
+
+  /** A resource opened for a path suggestion is remembered against its concept, so later attempts can say whether it helped. */
+  private creditResource(path: PathContext | null, url: string): void {
+    if (!path) return;
+    const listed = this.lastLookup?.split("\n").find((line) => line.includes(url));
+    const title = (listed && pickLookupResult(listed)?.title) || new URL(url).hostname;
+    this.deps.session.record({ kind: "resource", concept: path.conceptLabel, url, title, resourceKind: resourceKindOf(url), reason: path.kind, at: Date.now() });
   }
 
   private noteHint(page: PageSummary): void {
@@ -306,15 +368,30 @@ export class AgentLoop {
     } catch (e) {
       if (e instanceof Cancelled) throw e;
       const reason = e instanceof BgUnavailableError ? "background unavailable" : String(e);
-      logger.warn("decide failed; using local fallback", { reason });
+      // One immediate retry rides out a service-worker restart or a request that died mid-flight.
+      logger.warn("decide failed; retrying once", { reason });
+      try {
+        const out = await sendToBackground({ type: "agent.decide", input }, 40_000);
+        if (signal.aborted) throw new Cancelled();
+        const v = validateDecision(out.decision);
+        if (v.ok) return { ...out, decision: v.decision };
+      } catch (e2) {
+        if (e2 instanceof Cancelled) throw e2;
+        logger.warn("decide retry failed too", { error: String(e2) });
+      }
+      // The regex agent never silently stands in for the model in a live session: admit it.
       return { decision: this.localDecision(input), provider: "local-mock", degraded: true, latencyMs: Date.now() - started };
     }
   }
 
   private localDecision(input: AgentInput): AgentDecision {
-    const v = validateDecision(decideMock(input));
-    if (v.ok) return v.decision;
-    return { action: "speak", say: "I'm having trouble thinking right now. Try me again in a moment.", elementId: null, text: null, url: null, direction: null, amount: null, value: null, quote: null, line: null, tabId: null, pendingAction: null, taskType: "chat", reason: "fallback", done: true };
+    // Demo mode keeps the deterministic agent (it IS the configured brain there); live sessions
+    // get an honest miss instead of a different brain impersonating the model.
+    if (input.demoMode) {
+      const v = validateDecision(decideMock(input));
+      if (v.ok) return v.decision;
+    }
+    return { action: "speak", say: "I can't reach my brain right now—give me a moment and ask again.", elementId: null, text: null, url: null, direction: null, amount: null, value: null, quote: null, line: null, tabId: null, pendingAction: null, taskType: "chat", reason: "unreachable", done: true };
   }
 
   private async captureScreenshot(): Promise<string | null> {

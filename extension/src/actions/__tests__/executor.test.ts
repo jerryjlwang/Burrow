@@ -25,6 +25,9 @@ function setup(html: string) {
     openTab: vi.fn(async () => undefined),
     switchTab: vi.fn(async () => undefined),
     lookup: vi.fn(async () => ""),
+    makePlan: vi.fn(async () => null),
+    sketch: vi.fn(() => undefined),
+    showPlan: vi.fn(() => true),
     goBack: vi.fn(async () => undefined),
   };
   return { page, deps, overlay };

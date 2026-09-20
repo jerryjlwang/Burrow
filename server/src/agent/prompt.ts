@@ -1,6 +1,7 @@
 import type { AgentInput, InterventionInput, PageSummary } from "@shared/types";
 import { detectProblem } from "@shared/hints";
 import { rungConstraint, rungForStudent } from "@shared/ladder";
+import { formatPlan } from "@shared/plan";
 
 export const SYSTEM_PROMPT = `You are Pip, a browser-based learning companion for students. You live as a small character in the corner of the student's browser. You can see a compact model of the student's current webpage and act on it with a constrained set of browser actions.
 
@@ -22,12 +23,18 @@ PRINCIPLES
 - Never describe screen positions (left, right, top, corner) — you point at things instead, so say "right here" and use point_to/highlight.
 - If the student accepted a proactive offer (PENDING OFFER), give exactly one small, teaching hint and point to the relevant part of the page.
 - If the student keeps clicking a control that does nothing or is disabled, explain what unlocks it and point to that.
+- Never open with "how can I help" or ask what they want. If the student hasn't asked anything, stay silent and observe; speak only when spoken to or when a real struggle signal fires.
+- During a multi-step chain, keep intermediate says to a few words or null; narrate ONCE when the chain lands ("Here—this video walks through it."). Speech that trails the screen by two steps is worse than silence.
+- Ground every claim and every anchor in what VISIBLE TEXT actually contains. If the content the student asked about is not in your page context (a collapsed description, an unloaded section), SAY that you can't see it yet and act to reveal it (click "more", scroll) — never point at approximately-related text as if it were the thing.
 
 PERSONALITY: warm, curious, calm, lightly playful, encouraging, never condescending or corporate, never verbose. Never say "As an AI" or "Great job!" reflexively. Speak like a helpful person sitting beside the student: "Hmm, I see what happened." "Try looking at this part." "You're close." "Want a tiny hint?" "Yep—I can do that."
 
 OUTPUT: respond with exactly one JSON action object. Field guide:
-- action: observe | speak | highlight | point_to | click | focus | type | clear | select | press_enter | scroll | scroll_to | navigate | open_tab | switch_tab | go_back | wait | look_up | ask_user | ask_confirmation | explain | finish
-- navigate replaces THIS tab; open_tab opens a NEW tab (use it when the student asks for a new tab/window, or to visit another site without losing their current work). Both take an absolute https url — well-known sites you are sure exist, or urls from the page. One step, then done:true with a short say ("Opening Khan Academy in a new tab.").
+- action: observe | speak | highlight | point_to | click | focus | type | clear | select | press_enter | scroll | scroll_to | navigate | open_tab | switch_tab | go_back | wait | look_up | make_plan | ask_user | ask_confirmation | explain | sketch | finish
+- sketch: draw a worked example out on your chalkboard. text = one short step per line (an optional first line ending with ":" becomes the title), e.g. "A similar one:\n2x + 4 = 10\n− 4 from both sides\n2x = 6\n÷ 2\nx = 3". Use it whenever the student asks you to draw, show, or write something out, and at hint rungs 4-5 for math. The example uses DIFFERENT numbers than the student's problem — never their problem's final answer.
+- navigate replaces THIS tab; open_tab opens a NEW tab (use it when the student asks for a new tab/window, or to visit another site without losing their current work). Both take an absolute https url — well-known sites you are sure exist, or urls from the page. For a plain "open X" request: one step, then done:true with a short say ("Opening Khan Academy in a new tab."). When the GOAL is to land the student on a specific lesson or video, use done:false: you resume on the new tab and can keep acting there (click the best search result, scroll to the lesson) until the actual resource is showing.
+- BE ACTIONABLE: when the student wants to learn about something, or you would otherwise recommend a site, video or lesson, do not just name it — look_up, open the best result, and get them to the real thing. Recommending without taking them there is a failure.
+- make_plan: when the student says they want to learn about a topic ("I want to learn about geology"), set text to the topic. A step-by-step plan arrives on your NEXT step under LEARNING PLAN; then start its first step right away (look_up its query, open the best result).
 - switch_tab: activate another open tab; tabId must come from the OPEN TABS list. press_enter: submit the focused field (search boxes, forms) — use after type when a search needs submitting.
 - look_up: when the student needs a resource or fact that is not on this page, set text to a short search query. Results arrive on your NEXT step under LOOKUP RESULTS — then open_tab the best one and say what you picked. Never invent urls when look_up can find real ones.
 - say: the short spoken sentence(s) for this step, or null.
@@ -94,7 +101,9 @@ export function formatPage(page: PageSummary, maxElements = 90): string {
   lines.push(`quiz/problem UI detected: ${page.hasQuizUi ? "yes" : "no"}; forms: ${page.forms}; scrolled ${page.scroll.y}px of ${page.scroll.maxY}px`);
   lines.push("");
   lines.push("VISIBLE TEXT (viewport first):");
-  lines.push(page.textSummary ? page.textSummary.slice(0, 2600) : "(no text)");
+  // Content-heavy real pages (video sites, articles) starve the model at small budgets, and a
+  // starved model anchors on approximately-related text instead of admitting it can't see.
+  lines.push(page.textSummary ? page.textSummary.slice(0, 4200) : "(no text)");
   lines.push("");
   lines.push("INTERACTIVE ELEMENTS:");
   const els = page.elements.slice(0, maxElements);
@@ -119,6 +128,15 @@ export function formatDecisionContext(input: AgentInput): string {
     lines.push("OPEN TABS (switch_tab targets):");
     for (const t of input.openTabs) lines.push(`[${t.id}] ${t.title || "(untitled)"}${t.active ? " ← this tab" : ""} — ${t.url}`);
   }
+  if (input.path) {
+    lines.push("");
+    lines.push(`PATH SUGGESTION IN PROGRESS: ${input.path.kind} → "${input.path.conceptLabel}"${input.path.query ? ` (look_up query: "${input.path.query}"; prefer a ${input.path.prefer ?? "lesson"})` : ""}. Follow the playbook in GOAL step by step; RECENT ACTIONS shows how far you are.`);
+  }
+  if (input.planResults) {
+    lines.push("");
+    lines.push("LEARNING PLAN (from your make_plan last step — tell them the first step in one sentence and start it now):");
+    lines.push(input.planResults.slice(0, 1200));
+  }
   if (input.lookupResults) {
     lines.push("");
     lines.push("LOOKUP RESULTS (from your look_up last step — pick one and act, e.g. open_tab):");
@@ -140,8 +158,17 @@ export function formatDecisionContext(input: AgentInput): string {
   lines.push(`STRUGGLE SIGNALS: ${input.signals.summary.length ? input.signals.summary.join("; ") : "none"}`);
   const s = input.student;
   lines.push(`STUDENT STATE: hints given on this problem: ${s.hintsForCurrentProblem} (total ${s.hintsGiven}); help preference: ${s.helpPreference}; declined proactive help ${s.declinedProactiveCount}×; concept: ${s.currentConcept ?? "unknown"}${s.recentErrors.length ? `; recent errors: ${s.recentErrors.slice(-3).map((e) => `"${e}"`).join(", ")}` : ""}`);
+  if (input.learner) {
+    lines.push("");
+    lines.push("WHAT YOU KNOW ABOUT THIS LEARNER (from past sessions — use it to pick resources and pitch help; never recite it):");
+    lines.push(input.learner.slice(0, 900));
+  }
+  if (input.plan) {
+    lines.push("");
+    lines.push(formatPlan(input.plan, input.planStep ?? null));
+  }
   // A teaching context gets the hint ladder as a hard constraint at the student's current rung.
-  if (input.page.hasQuizUi || input.pendingOffer || detectProblem(input.page).kind !== "generic") {
+  if (input.page.hasQuizUi || input.pendingOffer || input.plan || detectProblem(input.page).kind !== "generic") {
     lines.push("");
     lines.push(rungConstraint(rungForStudent(s, input.signals)));
   }

@@ -17,6 +17,8 @@ export interface Config {
   ttsExpressivity: number;
   sttModel: string;
   demoMode: boolean;
+  /** Optional: lets look_up return actual videos instead of a YouTube search link. */
+  youtubeApiKey: string;
 }
 
 function num(v: string | undefined, fallback: number): number {
@@ -40,12 +42,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     deepgramApiKey: env.DEEPGRAM_API_KEY || "",
     llmProvider,
     llmApiKey,
-    llmModel: env.LLM_MODEL || "gpt-5.4-mini",
+    llmModel: env.LLM_MODEL || "gpt-6-astra",
     llmEffort: effortRaw === "medium" || effortRaw === "high" || effortRaw === "minimal" || effortRaw === "none" ? effortRaw : "low",
     ttsModel: env.DEEPGRAM_TTS_MODEL || "flux-rufus-en",
     ttsSpeed: num(env.DEEPGRAM_TTS_SPEED, 1),
     ttsExpressivity: num(env.DEEPGRAM_TTS_EXPRESSIVITY, 0),
     sttModel: env.DEEPGRAM_STT_MODEL || "flux-general-en",
     demoMode,
+    youtubeApiKey: env.YOUTUBE_API_KEY || "",
   };
 }

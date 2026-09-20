@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import type { GraphSnapshot, Misconception } from "@shared/graph";
 import { mountCompanion } from "../content/mount";
 import { getSettings } from "../shared/settings";
-import { GRANTS_KEY, GRAPH_KEY, JUMP_KEY, SKILLS, ago, isGraph, isJump, sampleGraph, type Grants, type Jump, type SkillId } from "./data";
+import { GRANTS_KEY, GRAPH_KEY, JUMP_KEY, SKILLS, ago, isGraph, isJump, learningNotes, sampleGraph, type Grants, type Jump, type SkillId } from "./data";
 
 /** Below this the rabbit has forgotten the room (MASTERY.unseenThreshold in shared/src/graph.ts). */
 const FORGOTTEN = 0.3;
@@ -119,6 +119,7 @@ function Parent() {
   const open = spots.filter((m) => m.status !== "resolved");
   const fixed = spots.filter((m) => m.status === "resolved" && m.resolution);
   const here = jump?.to === "parent" && jump.stage === "arrived";
+  const notes = learningNotes(graph, kid, now);
 
   return (
     <main>
@@ -204,6 +205,21 @@ function Parent() {
           ))}
         </div>
       </section>
+
+      {notes.length > 0 && (
+        <section aria-labelledby="learns-h">
+          <h2 id="learns-h">How {kid} learns</h2>
+          <p className="lede plain">Patterns across days, not just today. The rabbit uses these to decide what to suggest next.</p>
+          <div className="spots">
+            {notes.map((n) => (
+              <article key={n.title} className="spot px-frame">
+                <h3>{n.title}</h3>
+                <p className="plain">{n.body}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section aria-labelledby="skills-h">
         <h2 id="skills-h">What the rabbit may do</h2>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decideMock, interveneMock } from "../mock-agent";
+import { decideMock, interveneMock, pickLookupResult } from "../mock-agent";
 import { emptySignals, emptyStudentState, type AgentInput, type PageSummary, type PageElement } from "../types";
 import { validateDecision } from "../validate";
 
@@ -114,5 +114,38 @@ describe("mock intervention", () => {
   it("stays quiet without signals", () => {
     const d = interveneMock({ page, signals: emptySignals(), student: emptyStudentState(), conversation: [], level: 0 });
     expect(d.intervene).toBe(false);
+  });
+});
+
+describe("path playbook and learning plans", () => {
+  const RESULTS = [
+    '1. [article] Axial tilt (Wikipedia) — https://en.wikipedia.org/wiki/Axial_tilt — the angle',
+    '2. [lesson] Khan Academy search for "axial tilt" — https://www.khanacademy.org/search?page_search_query=axial%20tilt',
+    '3. [video] YouTube search for "axial tilt" — https://www.youtube.com/results?search_query=axial%20tilt',
+  ].join("\n");
+
+  it("pickLookupResult honours the preferred modality and falls back to the first", () => {
+    expect(pickLookupResult(RESULTS, "video")?.url).toContain("youtube.com");
+    expect(pickLookupResult(RESULTS, "practice")?.url).toContain("wikipedia.org");
+    expect(pickLookupResult("No results for \"x\".")).toBeNull();
+  });
+
+  it("runs look_up → open_tab for a resource-backed path suggestion, then stops", () => {
+    const path = { kind: "reconcile", conceptLabel: "Axial tilt", query: "Axial tilt explained", prefer: "video" };
+    const base = { ...input("Yes please"), path };
+    const first = decideMock(base);
+    expect(first).toMatchObject({ action: "look_up", text: "Axial tilt explained", done: false });
+    const looked = { step: 0, decision: first, result: { ok: true, message: "ok" }, at: 0 };
+    const second = decideMock({ ...base, step: 1, history: [looked], lookupResults: RESULTS });
+    expect(second.action).toBe("open_tab");
+    expect(second.url).toContain("youtube.com");
+    const opened = { step: 1, decision: second, result: { ok: true, message: "ok" }, at: 0 };
+    expect(decideMock({ ...base, step: 2, history: [looked, opened], resumedAfterNavigation: true }).action).toBe("finish");
+  });
+
+  it("turns 'I want to learn about X' into make_plan, without hijacking help requests", () => {
+    expect(decideMock(input("I want to learn more about geology"))).toMatchObject({ action: "make_plan", text: "geology" });
+    expect(decideMock(input("teach me about volcanoes"))).toMatchObject({ action: "make_plan", text: "volcanoes" });
+    expect(decideMock(input("help me, I'm stuck")).action).not.toBe("make_plan");
   });
 });

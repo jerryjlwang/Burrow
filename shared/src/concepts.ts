@@ -41,6 +41,8 @@ export interface ConceptExtraction {
   concepts: ExtractedConcept[];
   edges: ExtractedEdge[];
   misconceptions: ExtractedMisconception[];
+  /** Results/feedback pages only: concepts of the questions the page marks as answered wrong. */
+  missed?: string[];
 }
 
 export interface ExtractionInput {
@@ -197,5 +199,6 @@ export function applyExtraction(graph: KnowledgeGraph, extraction: ConceptExtrac
       source: { url: ctx.url, title: ctx.title, at: now, kind: "query" },
     });
   }
+  for (const label of extraction.missed ?? []) graph.recordAttempt(label, now, { correct: false });
   return { concepts: extraction.concepts.length, edges: extraction.edges.length, misconceptions: extraction.misconceptions.length };
 }

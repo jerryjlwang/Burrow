@@ -28,7 +28,7 @@ export const DECISION_JSON_SCHEMA = {
     action: { type: "string", enum: [...ACTIONS], description: "The single browser/companion action to take this step." },
     say: nullable(str(), "What the companion says out loud right now, if anything. Conversational, at most ~30 words. null to stay silent."),
     elementId: nullable({ type: "integer" }, "Target element id from INTERACTIVE ELEMENTS. Required for highlight, point_to, click, focus, type, clear, select, scroll_to. Otherwise null."),
-    text: nullable(str(), "Text to type (type); the question (ask_user); a longer written explanation for the panel (explain); or 'screenshot' to request visual context (observe). Otherwise null."),
+    text: nullable(str(), "Text to type (type); the question (ask_user); a longer written explanation for the panel (explain); 'screenshot' to request visual context (observe); the search query (look_up); or the topic the student wants to learn (make_plan). Otherwise null."),
     url: nullable(str(), "Absolute http(s) URL for navigate. Otherwise null."),
     direction: nullable({ type: "string", enum: ["up", "down"] }, "Scroll direction for scroll. Otherwise null."),
     amount: nullable({ type: "number" }, "Pixels for scroll or milliseconds for wait. Otherwise null."),

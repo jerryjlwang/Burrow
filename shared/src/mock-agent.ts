@@ -103,11 +103,41 @@ function resolveTarget(input: AgentInput, phrase: string, prefer: "clickable" | 
   return findBestElement(input.page.elements, p, opts);
 }
 
+/** Pick a line from formatted LOOKUP RESULTS ("1. [video] Title — https://…"), preferring a modality. */
+export function pickLookupResult(results: string, prefer?: string): { title: string; url: string } | null {
+  const parsed = results
+    .split("\n")
+    .map((line) => line.match(/^\d+\.\s*(?:\[(\w+)\]\s*)?(.+?) — (https?:\/\/\S+)/))
+    .filter((m): m is RegExpMatchArray => m !== null)
+    .map((m) => ({ kind: m[1] ?? "", title: m[2], url: m[3] }));
+  return parsed.find((r) => prefer && r.kind === prefer) ?? parsed[0] ?? null;
+}
+
+/** Runs a resource-backed path suggestion's playbook: look_up, then open the best result. */
+function pathDecision(input: AgentInput): AgentDecision | null {
+  const path = input.path;
+  if (!path?.query) return null;
+  const lookedUp = input.history.find((h) => h.decision.action === "look_up");
+  if (!lookedUp) {
+    return d({ action: "look_up", text: path.query, say: `Let me find something good on ${truncate(path.conceptLabel, 40)}.`, taskType: "learning", reason: "path playbook: look up a resource" });
+  }
+  // Resumed on the tab it opened: the offline brain can't vet a results page, so it hands over.
+  if (input.history.some((h) => h.decision.action === "open_tab")) return d({ action: "finish", say: "Here we are. Pick the one that looks best, and tell me what you notice.", done: true, taskType: "learning" });
+  const pick = lookedUp.result.ok && input.lookupResults ? pickLookupResult(input.lookupResults, path.prefer) : null;
+  if (!pick) return d({ action: "speak", say: "I couldn't find a good one just now. Want to try again in a bit?", done: true, taskType: "learning" });
+  return d({ action: "open_tab", url: pick.url, say: `This one looks right for ${truncate(path.conceptLabel, 40)}. Opening it.`, done: false, taskType: "learning", reason: "path playbook: open the chosen resource" });
+}
+
+const LEARN_GOAL_RE = /\b(?:i (?:want|wanna|would like|d like) to|help me|teach me|let s|lets|can we)\s+(?:learn|study|understand|know)?\s*(?:more\s+)?(?:about\s+)?(.{3,80})$/;
+
 export function decideMock(input: AgentInput): AgentDecision {
   const utterance = input.utterance;
   const u = normalizeText(utterance);
   const page = input.page;
   const last = input.history[input.history.length - 1];
+
+  const pathStep = pathDecision(input);
+  if (pathStep) return pathStep;
 
   // ---- Continuation steps (after an action was executed) ----
   if (input.step > 0 && last) {
@@ -121,6 +151,7 @@ export function decideMock(input: AgentInput): AgentDecision {
     if (a === "type") return d({ action: "finish", say: last.result.ok ? "Typed it in." : "I couldn't type there.", done: true });
     if (a === "navigate" || a === "go_back") return d({ action: "finish", say: "Here we are.", done: true, taskType: "navigation" });
     if (a === "select") return d({ action: "finish", say: last.result.ok ? "Selected." : "I couldn't select that.", done: true });
+    if (a === "make_plan") return d({ action: "finish", say: last.result.ok ? "I made us a plan. Want to start with the first step?" : "I couldn't plan that one right now.", done: true, taskType: "learning" });
     if (a !== "observe") return d({ action: "finish", done: true });
   }
 
@@ -135,6 +166,12 @@ export function decideMock(input: AgentInput): AgentDecision {
     if (isNegative(u)) return d({ action: "finish", say: "Okay—I'm here if you need me.", done: true });
   }
   if (isStopCommand(u)) return d({ action: "finish", say: null, done: true });
+
+  // ---- "I want to learn about X" → a learning plan the path consumer then walks ----
+  const learnGoal = /\b(learn|study|teach me|understand more)\b/.test(u) ? u.match(LEARN_GOAL_RE) : null;
+  if (learnGoal && input.step === 0) {
+    return d({ action: "make_plan", text: learnGoal[1].trim(), say: "Ooh, let's map that out.", taskType: "learning", reason: "learning goal → plan" });
+  }
 
   // ---- Greetings ----
   if (/^(hi|hello|hey|yo|hiya|good (morning|afternoon|evening))( pip)?$/.test(u)) {
@@ -199,6 +236,17 @@ export function decideMock(input: AgentInput): AgentDecision {
   if (/^(go|take me|head) back$/.test(u) || /^back$/.test(u)) return d({ action: "go_back", say: "Going back.", taskType: "navigation" });
 
   // ---- Clicking / navigating ----
+  // ---- Sketch: draw a worked example on the chalkboard ----
+  if (/\b(draw|sketch|write (it|this) out|draw (it|this) out|show me how to (solve|do))\b/i.test(u)) {
+    const problem = detectProblem(page);
+    if (problem.kind === "linear-equation") {
+      // Analogous numbers on purpose: the board teaches the moves, never this problem's answer.
+      const spec = "A similar one:\n2x + 4 = 10\n− 4 from both sides\n2x = 6\n÷ 2 on both sides\nx = 3";
+      return d({ action: "sketch", text: spec, say: "Here—same moves, different numbers.", done: true, taskType: "learning", reason: "drawn worked example" });
+    }
+    return d({ action: "speak", say: "I can draw out worked examples for equations—want one for the problem on this page?", done: true, taskType: "learning" });
+  }
+
   // ---- Tab switching / enter (must outrank plain click/open handling) ----
   const switchTo = /\bswitch (?:to|back to)\s+(?:the\s+)?(.+?)\s+tab\b/i.exec(utterance);
   if (switchTo && input.openTabs?.length) {
