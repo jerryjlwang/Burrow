@@ -424,6 +424,34 @@ try {
     const practiced = nodes.filter((n) => n.state.attempts > 0).map((n) => `${n.id}:${n.state.correct}/${n.state.attempts}`);
     check("graded feedback is recorded as attempts (precision evidence)", practiced.length > 0, practiced.join(", ") || "(no attempts recorded)");
     await wp.close();
+
+    // Plans are long-term memory with provenance: the worked problem's plan outlives its tab, with
+    // where it came from and the trail of what happened (wrong line → steps reached → solved).
+    await new Promise((r) => setTimeout(r, 2000)); // debounced graph save
+    const storedPlans = sw ? await sw.evaluate(async () => (await chrome.storage.local.get("pip.graph"))["pip.graph"]?.profile?.plans ?? []) : [];
+    // Keyed by the problem itself, so the algebra page and the working page share one record;
+    // provenance is wherever it was first met.
+    const worked = storedPlans.find((p) => p.kind === "problem" && /3x \+ 5 = 20/.test(p.key));
+    const trail = (worked?.history ?? []).map((e) => e.type);
+    check(
+      "a worked problem's plan persists after its tab closes, with provenance and history",
+      !!worked && worked.provenance?.origin === "page" && /\/demo\//.test(worked.provenance?.url ?? "") && !!worked.solvedAt && trail[0] === "created" && trail.includes("wrong_step") && trail.includes("solved") && worked.steps.every((st) => st.done && st.completion),
+      JSON.stringify(worked ? { provenance: worked.provenance, trail, steps: worked.steps.map((st) => st.completion?.by ?? null) } : { stored: storedPlans.map((p) => `${p.kind}:${p.key}`) }),
+    );
+
+    // A brand-new tab on the same problem picks up from memory instead of starting over.
+    const back = await context.newPage();
+    await back.goto(`http://localhost:${PORT}/demo/working.html`, { waitUntil: "load" });
+    await back.locator("#pip-companion-host").waitFor({ state: "attached", timeout: 10000 });
+    await new Promise((r) => setTimeout(r, 1200));
+    await back.evaluate(() => document.getElementById("pip-companion-host").shadowRoot.querySelector(".pip-char-btn")?.click());
+    await back.locator(".pip-panel").waitFor({ timeout: 5000 });
+    await back.locator(".pip-input").fill("where am I in the plan?");
+    await back.locator(".pip-send").click();
+    await back.locator(".pip-plan").waitFor({ timeout: 8000 }).catch(() => null);
+    const restored = await back.evaluate(() => [...(document.getElementById("pip-companion-host")?.shadowRoot?.querySelectorAll(".pip-plan-route[data-kind='problem'] .pip-plan-step") ?? [])].map((li) => li.className.replace("pip-plan-step ", "")));
+    check("coming back to the problem in a new tab restores its progress from memory", restored.length >= 2 && restored.every((st) => st === "done"), JSON.stringify(restored));
+    await back.close();
   }
 
   // "I want to learn about X": make_plan → the plan is saved to the learner profile → its first step
@@ -445,6 +473,11 @@ try {
     const plans = sw ? await sw.evaluate(async () => (await chrome.storage.local.get("pip.graph"))["pip.graph"]?.profile?.plans ?? []) : [];
     const volcano = plans.find((p) => /volcano/i.test(p.goal));
     check("the learning plan persists with its first step done", !!volcano && volcano.steps.length >= 3 && volcano.steps[0].done && !volcano.steps[1].done, JSON.stringify(volcano ?? null));
+    check(
+      "the plan records who asked for it and what completed the step (provenance)",
+      volcano?.provenance?.origin === "asked" && /volcanoes/i.test(volcano?.provenance?.utterance ?? "") && volcano?.steps[0].completion?.by === "resource" && /khanacademy|youtube|wikipedia/.test(volcano?.steps[0].completion?.url ?? ""),
+      JSON.stringify({ provenance: volcano?.provenance, completion: volcano?.steps[0].completion }),
+    );
     if (planTab) {
       // The opened tab inherited the loop and the conversation: its content script consumes the
       // pending loop and the rabbit's next line lands in THAT tab's session.
@@ -486,6 +519,30 @@ try {
     check("tapping a step on the map starts it (look_up → open_tab for that step)", /volcanoes explained with examples/i.test(stepUrl), stepUrl || "(no new tab)");
     await (await stepTab)?.close().catch(() => undefined);
     await lp.close();
+  }
+
+  // Region inspector: observe with a quote reads a region IN FULL — the reply carries content from
+  // deep inside the description, far past what the page summary or a spoken line would include.
+  {
+    const rp = await context.newPage();
+    await rp.goto(`http://localhost:${PORT}/demo/assignment.html`, { waitUntil: "load" });
+    await rp.locator("#pip-companion-host").waitFor({ state: "attached", timeout: 10000 });
+    await new Promise((r) => setTimeout(r, 800));
+    await rp.evaluate(() => document.getElementById("pip-companion-host").shadowRoot.querySelector(".pip-char-btn")?.click());
+    await rp.locator(".pip-panel").waitFor({ timeout: 5000 });
+    await rp.locator(".pip-input").fill("What does the description say?");
+    await rp.locator(".pip-send").click();
+    let regionReply = "";
+    for (const t0 = Date.now(); Date.now() - t0 < 15000; ) {
+      regionReply = await rp.evaluate(() => {
+        const sr = document.getElementById("pip-companion-host")?.shadowRoot;
+        return [...(sr?.querySelectorAll(".pip-msg.companion") ?? [])].map((m) => m.textContent ?? "").join("\n");
+      });
+      if (/golden ratio/i.test(regionReply)) break;
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    check("observe with a quote reads the whole region (deep content reaches the reply)", /golden ratio/i.test(regionReply), regionReply.slice(0, 160) || "(no reply)");
+    await rp.close();
   }
 
   // Consequential action asks for confirmation.

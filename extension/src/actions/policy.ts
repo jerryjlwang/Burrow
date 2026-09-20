@@ -29,7 +29,8 @@ export function requiresConfirmation(decision: AgentDecision, ctx: PolicyContext
 
   if (decision.action === "ask_confirmation") return { required: false };
 
-  if (decision.action === "click" && el) {
+  // A double-click, or a click aimed by coordinates (the loop resolves the element under the point), is judged like any click.
+  if ((decision.action === "click" || decision.action === "double_click") && el) {
     const label = `${el.name} ${el.context ?? ""}`;
     if (SAFE_WORD_RE.test(el.name) && !SUBMIT_WORK_RE.test(el.name)) return { required: false };
     if (SUBMIT_WORK_RE.test(label) || (page?.hasQuizUi && /\b(submit|turn in|finish)\b/i.test(el.name))) {
@@ -46,7 +47,7 @@ export function requiresConfirmation(decision: AgentDecision, ctx: PolicyContext
       return { required: true, reason: "form submission", message: `This looks like it sends the form. Want me to go ahead?` };
     }
   }
-  if (decision.action === "press_enter" && page?.hasQuizUi) {
+  if ((decision.action === "press_enter" || (decision.action === "press_key" && /(^|\+)\s*(enter|return)\s*$/i.test(decision.text ?? ""))) && page?.hasQuizUi) {
     // Enter inside quiz UI can submit graded work; a search box on a content page is fine.
     return { required: true, reason: "enter may submit assessed work", message: "Pressing Enter here might submit your answer. Want me to go ahead?" };
   }

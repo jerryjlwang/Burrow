@@ -89,6 +89,13 @@ export class CompanionController {
           return parsePlan(r.plan, { key: topicPlanKey(topic), source: "llm" });
         },
         showPlan: () => this.showPlan(),
+        input: async (ops) => {
+          try {
+            return await sendToBackground({ type: "input", ops }, 8000);
+          } catch (e) {
+            return { ok: false, error: String(e) };
+          }
+        },
         sketch: (spec) => {
           const [first, ...rest] = spec.split("\n").map((l) => l.trim()).filter(Boolean);
           const titled = first !== undefined && first.endsWith(":") && rest.length > 0;
@@ -114,6 +121,7 @@ export class CompanionController {
       onIdle: () => this.afterLoopIdle(),
       onError: (message) => this.showAgentError(message),
       getPlan: () => this.engine.planContext,
+      onHint: () => this.engine.notePlanEngaged(),
       getVideo: () => {
         const context = this.video.context();
         return context ? { context, frame: () => this.video.watcher.frame() } : null;
@@ -553,7 +561,7 @@ export class CompanionController {
       const reached = planStep ?? 0;
       routes.push({ key: plan.key, kind: "problem", goal: plan.goal, steps: plan.steps.map((s, i) => ({ title: s.title, state: i < reached ? "done" : i === reached ? "current" : "todo" })) });
     }
-    for (const p of [...this.session.graph.profile.plans].sort((a, b) => b.updatedAt - a.updatedAt)) {
+    for (const p of this.session.graph.profile.plans.filter((x) => x.kind === "topic").sort((a, b) => b.updatedAt - a.updatedAt)) {
       const next = p.steps.findIndex((s) => !s.done);
       routes.push({ key: p.key, kind: "topic", goal: p.goal, steps: p.steps.map((s, i) => ({ title: s.title, state: s.done ? "done" : i === next ? "current" : "todo" })) });
     }
@@ -562,6 +570,7 @@ export class CompanionController {
 
   /** Open the plan map (it shares the chalkboard's corner). False when there is nothing to show. */
   showPlan(): boolean {
+    this.engine.recallPlan();
     const routes = this.planRoutes();
     if (!routes.length) return false;
     store.setState({ planView: { routes }, board: null });

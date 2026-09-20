@@ -138,13 +138,59 @@ export interface ResourceRecord {
   helped: boolean | null;
 }
 
-/** A multi-session learning plan ("learn about geology") and how far the learner has got. */
+/** Where a plan came from — enough to answer "why does this exist?" months later. */
+export interface PlanProvenance {
+  /** "asked": the learner asked to learn it. "page": the route through a problem they worked on. */
+  origin: "asked" | "page";
+  planner: "deterministic" | "llm" | "scaffold";
+  /** The learner's own words that started it. */
+  utterance?: string;
+  /** The page it was made on. */
+  url?: string;
+  title?: string;
+}
+
+/** What completed a step. Always evidence — a resource opened, an answer graded, working judged — never chat. */
+export interface StepCompletion {
+  at: number;
+  by: "resource" | "attempt" | "working";
+  url?: string;
+  title?: string;
+}
+
+/** One line of a plan's history, oldest first: the audit trail a future study-plan console reads. */
+export interface PlanEvent {
+  at: number;
+  type: "created" | "step_done" | "wrong_step" | "solved";
+  /** 1-based plan step (step_done) or line of the working (wrong_step). */
+  step?: number;
+  detail?: string;
+}
+
+export interface PlanStepRecord {
+  title: string;
+  concept?: string;
+  query?: string;
+  done: boolean;
+  completion?: StepCompletion;
+}
+
+/**
+ * A plan in long-term memory. "topic" = a multi-session route the learner asked for ("learn about
+ * geology"); "problem" = the route through a problem they actually worked on, kept so coming back
+ * to it (or reviewing it later) picks up where they left off.
+ */
 export interface LearningPlan {
   key: string;
+  kind: "topic" | "problem";
   goal: string;
-  steps: Array<{ title: string; concept?: string; query?: string; done: boolean }>;
+  steps: PlanStepRecord[];
   createdAt: number;
   updatedAt: number;
+  solvedAt?: number;
+  /** Absent only on plans stored before provenance existed. */
+  provenance?: PlanProvenance;
+  history: PlanEvent[];
 }
 
 /** Learner-level memory that isn't about any one concept: how they take help, what worked. */
@@ -204,7 +250,10 @@ const CAP = {
   resolutionsPerMisconception: 5,
   resources: 40,
   suggested: 30,
-  plans: 5,
+  /** Separate budgets, so a week of homework problems can't evict the plans the learner asked for. */
+  topicPlans: 12,
+  problemPlans: 40,
+  planHistory: 30,
 } as const;
 
 const DAY_MS = 24 * 3_600_000;
@@ -246,6 +295,40 @@ function parseState(v: unknown): LearnerConceptState | null {
 
 const RESOURCE_KINDS = new Set<string>(["video", "lesson", "article", "practice", "page"]);
 
+const PLANNERS = new Set<string>(["deterministic", "llm", "scaffold"]);
+const COMPLETED_BY = new Set<string>(["resource", "attempt", "working"]);
+const PLAN_EVENTS = new Set<string>(["created", "step_done", "wrong_step", "solved"]);
+const optStr = (v: unknown): string | undefined => (typeof v === "string" && v ? v : undefined);
+
+function parsePlanRecord(raw: unknown): LearningPlan | null {
+  if (!isObj(raw) || typeof raw.key !== "string" || typeof raw.goal !== "string" || !Array.isArray(raw.steps)) return null;
+  const steps: PlanStepRecord[] = [];
+  for (const st of raw.steps) {
+    if (!isObj(st) || typeof st.title !== "string") continue;
+    const step: PlanStepRecord = { title: st.title, concept: optStr(st.concept), query: optStr(st.query), done: st.done === true };
+    const c = st.completion;
+    const at = isObj(c) ? finiteNum(c.at) : null;
+    if (isObj(c) && at !== null && typeof c.by === "string" && COMPLETED_BY.has(c.by)) step.completion = { at, by: c.by as StepCompletion["by"], url: optStr(c.url), title: optStr(c.title) };
+    steps.push(step);
+  }
+  if (!steps.length) return null;
+  const plan: LearningPlan = { key: raw.key, kind: raw.kind === "problem" ? "problem" : "topic", goal: raw.goal, steps, createdAt: finiteNum(raw.createdAt) ?? 0, updatedAt: finiteNum(raw.updatedAt) ?? 0, history: [] };
+  const solvedAt = finiteNum(raw.solvedAt);
+  if (solvedAt !== null) plan.solvedAt = solvedAt;
+  const pv = raw.provenance;
+  if (isObj(pv) && (pv.origin === "asked" || pv.origin === "page") && typeof pv.planner === "string" && PLANNERS.has(pv.planner)) {
+    plan.provenance = { origin: pv.origin, planner: pv.planner as PlanProvenance["planner"], utterance: optStr(pv.utterance), url: optStr(pv.url), title: optStr(pv.title) };
+  }
+  if (Array.isArray(raw.history)) {
+    for (const e of raw.history) {
+      const at = isObj(e) ? finiteNum(e.at) : null;
+      if (!isObj(e) || at === null || typeof e.type !== "string" || !PLAN_EVENTS.has(e.type)) continue;
+      plan.history.push({ at, type: e.type as PlanEvent["type"], step: finiteNum(e.step) ?? undefined, detail: optStr(e.detail) });
+    }
+  }
+  return plan;
+}
+
 /** Tolerant like the rest of the snapshot: drop malformed entries, never throw. */
 function parseProfile(v: unknown): LearnerProfile {
   const p = emptyProfile();
@@ -270,14 +353,9 @@ function parseProfile(v: unknown): LearnerProfile {
       if (isObj(x) && at !== null && typeof x.key === "string") p.suggested.push({ key: x.key, at });
     }
   }
-  if (Array.isArray(v.plans)) {
-    for (const raw of v.plans) {
-      if (!isObj(raw) || typeof raw.key !== "string" || typeof raw.goal !== "string" || !Array.isArray(raw.steps)) continue;
-      const steps = raw.steps
-        .filter((st): st is Record<string, unknown> => isObj(st) && typeof st.title === "string")
-        .map((st) => ({ title: st.title as string, concept: typeof st.concept === "string" ? st.concept : undefined, query: typeof st.query === "string" ? st.query : undefined, done: st.done === true }));
-      if (steps.length) p.plans.push({ key: raw.key, goal: raw.goal, steps, createdAt: finiteNum(raw.createdAt) ?? 0, updatedAt: finiteNum(raw.updatedAt) ?? 0 });
-    }
+  if (Array.isArray(v.plans)) for (const raw of v.plans) {
+    const plan = parsePlanRecord(raw);
+    if (plan) p.plans.push(plan);
   }
   return p;
 }
@@ -532,7 +610,7 @@ export class KnowledgeGraph {
     this.touch(node, now);
     const resource = [...this.learner.resources].reverse().find((r) => r.concept === node.id && r.helped === null && r.at <= now && now - r.at <= RECALL.resourceCreditMs);
     if (resource) resource.helped = opts.correct;
-    if (opts.correct) this.completePlanSteps(node.id, now);
+    if (opts.correct) this.completePlanSteps(node.id, now, { at: now, by: "attempt" });
     return node;
   }
 
@@ -568,36 +646,84 @@ export class KnowledgeGraph {
     this.touch(node, now);
     const rec: ResourceRecord = { concept: node.id, url: resource.url, title: resource.title.slice(0, 120), kind: resource.kind, reason: resource.reason, at: now, helped: null };
     this.learner.resources = [...this.learner.resources, rec].slice(-CAP.resources);
-    this.completePlanSteps(node.id, now);
+    this.completePlanSteps(node.id, now, { at: now, by: "resource", url: rec.url, title: rec.title });
     return rec;
   }
 
-  /** Store (or replace, by key) a learning plan, keeping done-flags of steps that survive. */
-  savePlan(plan: { key: string; goal: string; steps: Array<{ title: string; concept?: string; query?: string }> }, now: number): LearningPlan {
+  /**
+   * Store a plan (or refresh it, by key). Re-saving never loses memory: done steps keep their
+   * completion, and the history and original provenance carry over.
+   */
+  savePlan(plan: { key: string; kind?: LearningPlan["kind"]; goal: string; steps: Array<{ title: string; concept?: string; query?: string }>; provenance?: PlanProvenance }, now: number): LearningPlan {
     const prior = this.learner.plans.find((p) => p.key === plan.key);
+    const provenance = prior?.provenance ?? plan.provenance;
     const saved: LearningPlan = {
       key: plan.key,
+      kind: plan.kind ?? prior?.kind ?? "topic",
       goal: plan.goal,
-      steps: plan.steps.map((s) => ({ ...s, done: prior?.steps.find((x) => x.title === s.title)?.done ?? false })),
+      steps: plan.steps.map((s) => {
+        const before = prior?.steps.find((x) => x.title === s.title);
+        return { ...s, done: before?.done ?? false, completion: before?.completion };
+      }),
       createdAt: prior?.createdAt ?? now,
       updatedAt: now,
+      solvedAt: prior?.solvedAt,
+      provenance: provenance && { ...provenance, utterance: provenance.utterance?.slice(0, 160), title: provenance.title?.slice(0, 120) },
+      history: prior?.history ?? [{ at: now, type: "created", detail: provenance?.origin === "asked" ? provenance.utterance?.slice(0, 120) : provenance?.title?.slice(0, 120) }],
     };
-    this.learner.plans = [...this.learner.plans.filter((p) => p.key !== plan.key), saved].slice(-CAP.plans);
+    const others = this.learner.plans.filter((p) => p.key !== plan.key);
+    const keep = (kind: LearningPlan["kind"], cap: number) => [...others.filter((p) => p.kind === kind), ...(saved.kind === kind ? [saved] : [])].sort((a, b) => a.updatedAt - b.updatedAt).slice(-cap);
+    this.learner.plans = [...keep("topic", CAP.topicPlans), ...keep("problem", CAP.problemPlans)];
     return saved;
   }
 
-  /** The most recently touched plan that still has an open step. */
-  activePlan(): LearningPlan | null {
-    return [...this.learner.plans].sort((a, b) => b.updatedAt - a.updatedAt).find((p) => p.steps.some((s) => !s.done)) ?? null;
+  plan(key: string): LearningPlan | null {
+    return this.learner.plans.find((p) => p.key === key) ?? null;
   }
 
-  private completePlanSteps(conceptId: string, now: number): void {
+  /** The most recently touched plan the learner asked for that still has an open step. */
+  activePlan(): LearningPlan | null {
+    return [...this.learner.plans].sort((a, b) => b.updatedAt - a.updatedAt).find((p) => p.kind === "topic" && p.steps.some((s) => !s.done)) ?? null;
+  }
+
+  /**
+   * Progress on a stored problem plan, from the step judge or a graded answer: the first `reached`
+   * steps are done, optionally a wrong line was found, optionally it is solved. No-op for unknown keys.
+   */
+  recordPlanProgress(key: string, now: number, progress: { reached?: number; solved?: boolean; wrongStep?: number; by: StepCompletion["by"] }): LearningPlan | null {
+    const plan = this.plan(key);
+    if (!plan) return null;
+    const log = (e: PlanEvent) => {
+      plan.history = [...plan.history, e].slice(-CAP.planHistory);
+      plan.updatedAt = now;
+    };
+    const reached = progress.solved ? plan.steps.length : Math.min(progress.reached ?? 0, plan.steps.length);
+    plan.steps.slice(0, reached).forEach((step, i) => {
+      if (step.done) return;
+      step.done = true;
+      step.completion = { at: now, by: progress.by, url: plan.provenance?.url, title: plan.provenance?.title };
+      log({ at: now, type: "step_done", step: i + 1, detail: progress.by });
+    });
+    const last = plan.history[plan.history.length - 1];
+    if (progress.wrongStep !== undefined && !(last?.type === "wrong_step" && last.step === progress.wrongStep)) log({ at: now, type: "wrong_step", step: progress.wrongStep });
+    if (progress.solved && plan.solvedAt === undefined) {
+      plan.solvedAt = now;
+      log({ at: now, type: "solved", detail: progress.by });
+    }
+    return plan;
+  }
+
+  /** Evidence on a concept completes the matching steps of the plans the learner asked for. */
+  private completePlanSteps(conceptId: string, now: number, completion: StepCompletion): void {
     for (const plan of this.learner.plans) {
-      for (const step of plan.steps) {
-        if (step.done || !step.concept || this.resolve(step.concept) !== conceptId) continue;
+      if (plan.kind !== "topic") continue; // problem plans progress through recordPlanProgress, by key
+      plan.steps.forEach((step, i) => {
+        if (step.done || !step.concept || this.resolve(step.concept) !== conceptId) return;
         step.done = true;
+        step.completion = completion;
         plan.updatedAt = now;
-      }
+        plan.history = [...plan.history, { at: now, type: "step_done" as const, step: i + 1, detail: completion.title ?? completion.by }].slice(-CAP.planHistory);
+      });
     }
   }
 

@@ -5,6 +5,7 @@ import type { LearnerEvent } from "@shared/events";
 import type { StepPlan } from "@shared/plan";
 import type { WorkingJudgement } from "@shared/steps";
 import type { TranscriptSegment, WatchNote } from "@shared/video";
+import type { KeyChord } from "@shared/keys";
 import type { Settings } from "./settings";
 
 /**
@@ -64,6 +65,15 @@ export type OffscreenEvent =
   | { type: "tts.state"; id: string; state: "started" | "ended" | "error" | "interrupted"; error?: string }
   | { type: "tts.level"; level: number };
 
+/** Trusted input, replayed by the background through the DevTools protocol (content-script events are untrusted: no :hover, no native drag). Points are viewport CSS px. */
+export type InputOp =
+  | { kind: "move"; x: number; y: number }
+  | { kind: "click"; x: number; y: number; button: "left" | "right"; count: number }
+  | { kind: "drag"; x: number; y: number; toX: number; toY: number }
+  | { kind: "wheel"; x: number; y: number; deltaY: number }
+  | { kind: "key"; chord: KeyChord }
+  | { kind: "text"; text: string };
+
 export type BgRequest =
   | { type: "agent.decide"; input: AgentInput }
   | { type: "agent.intervene"; input: InterventionInput }
@@ -85,7 +95,9 @@ export type BgRequest =
   | { type: "steps.plan"; request: { key?: string; topic?: string; url?: string; title?: string; headings?: string[]; text?: string } }
   | { type: "steps.judge"; request: { plan: StepPlan; text?: string; working: string } }
   | { type: "video.analyze"; request: { url: string; title?: string; segments?: TranscriptSegment[] } }
-  | { type: "screenshot" }
+  /** `viewport` (CSS px) makes the image exactly viewport-sized, so its pixels are click coordinates. */
+  | { type: "screenshot"; viewport?: { width: number; height: number } }
+  | { type: "input"; ops: InputOp[] }
   | { type: "open.onboarding" }
   | { type: "open.demo" }
   | { type: "offscreen.event"; event: OffscreenEvent }
@@ -125,6 +137,7 @@ export type BgResponseMap = {
   "steps.judge": WorkingJudgement;
   "video.analyze": { segments: TranscriptSegment[]; notes: WatchNote[]; transcript: "page" | "service" | "none"; notesBy: "llm" | "heuristic" | "none" };
   screenshot: { ok: boolean; dataUrl?: string; error?: string };
+  input: { ok: boolean; error?: string };
   "open.onboarding": { ok: boolean };
   "open.demo": { ok: boolean };
   "offscreen.event": { ok: boolean };

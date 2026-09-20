@@ -1,6 +1,6 @@
 import { validateDecision } from "@shared/validate";
 import type { AgentDecision } from "@shared/actions";
-import type { ActionRecord, AgentInput, AgentOutput, PageSummary, PathContext, PendingOffer } from "@shared/types";
+import type { ActionRecord, ActionResult, AgentInput, AgentOutput, PageSummary, PathContext, PendingOffer } from "@shared/types";
 import type { StepPlan } from "@shared/plan";
 import type { VideoContext } from "@shared/video";
 import { diagnose, formatDiagnostics } from "@shared/diagnostics";
@@ -9,7 +9,10 @@ import { pickLookupResult } from "@shared/mock-agent";
 import { detectProblem, problemKey } from "@shared/hints";
 import { isAffirmative, isNegative, truncate } from "@shared/text";
 import { executeAction, type ExecutorDeps } from "../actions/executor";
+import { MAX_REGION_CHARS, quoteRegion, regionText } from "../actions/inspect";
 import { classifyTask, isForbidden, requiresConfirmation } from "../actions/policy";
+import { HOST_ID } from "../page-understanding/extract";
+import { registeredIdAt } from "../actions/surface";
 import { store } from "../content/store";
 import { sendToBackground, BgUnavailableError, type PendingLoop } from "../shared/messages";
 import { log } from "../shared/logger";
@@ -39,6 +42,8 @@ export interface LoopDeps {
   getPlan?: () => { plan: StepPlan | null; planStep: number | null };
   /** The video being watched, as the rabbit has followed it, and a way to grab the exact frame on screen. */
   getVideo?: () => { context: VideoContext; frame: () => string | null } | null;
+  /** A learning hint was just given on the problem on screen. */
+  onHint?: () => void;
 }
 
 export interface RunOptions {
@@ -77,6 +82,7 @@ export class AgentLoop {
   private pendingScreenshot: string | null = null;
   private pendingLookup: string | null = null;
   private pendingPlan: string | null = null;
+  private pendingReadout: string | null = null;
   /** Last look_up's results, kept to title the resource that gets opened from them. */
   private lastLookup: string | null = null;
   runCount = 0;
@@ -137,6 +143,7 @@ export class AgentLoop {
           this.lastReferencedElementId = byName?.id ?? null;
         }
         const video = this.deps.getVideo?.() ?? null;
+        const frame = video && firstStep && !this.pendingScreenshot && taskType !== "navigation" && taskType !== "administrative" ? video.frame() : null;
         const input: AgentInput = {
           utterance,
           goal,
@@ -148,10 +155,13 @@ export class AgentLoop {
           pendingOffer,
           lastReferencedElementId: this.lastReferencedElementId,
           // On a video the rabbit already has eyes: the frame rides along with the first step, so there is no "let me look" round trip.
-          screenshot: this.pendingScreenshot ?? (video && firstStep && taskType !== "navigation" && taskType !== "administrative" ? video.frame() : null),
+          // An explicit observe:screenshot stays a viewport capture — its pixels are click coordinates, a video frame's are not.
+          screenshot: this.pendingScreenshot ?? frame,
+          screenshotIsVideoFrame: !this.pendingScreenshot && !!frame,
           video: video?.context ?? null,
           lookupResults: this.pendingLookup,
           planResults: this.pendingPlan,
+          readout: this.pendingReadout,
           path,
           ...this.deps.getPlan?.(),
           learner,
@@ -163,16 +173,19 @@ export class AgentLoop {
         this.pendingScreenshot = null;
         this.pendingLookup = null;
         this.pendingPlan = null;
+        this.pendingReadout = null;
 
         const output = await this.decide(input, signal);
         check();
         // This page lived long enough to get a decision: the handoff is consumed.
         if (opts.resume && step === opts.resume.step) await session.setPendingLoop(null);
         const decision = output.decision;
-        store.setState({ debug: { ...store.getState().debug, lastDecision: decision, provider: output.provider, degraded: output.degraded, latencyMs: output.latencyMs }, offline: output.provider === "local-mock" });
+        store.setState({ debug: { ...store.getState().debug, lastDecision: decision, provider: output.provider, degraded: output.degraded, latencyMs: output.latencyMs } });
         logger.info("decision", { step, action: decision.action, elementId: decision.elementId, say: decision.say, provider: output.provider, latencyMs: output.latencyMs });
 
-        const element = decision.elementId != null ? page.elements.find((e) => e.id === decision.elementId) ?? null : null;
+        // A point is judged by what it lands on, so coordinates can't route around the policy gates.
+        const targetId = decision.elementId ?? (decision.x != null && decision.y != null ? registeredIdAt(this.deps.executor.registry, { x: decision.x, y: decision.y }) : null);
+        const element = targetId != null ? page.elements.find((e) => e.id === targetId) ?? null : null;
         if (element) {
           this.lastReferencedElementId = element.id;
           this.lastReferencedElementName = element.name;
@@ -226,8 +239,10 @@ export class AgentLoop {
         }
 
         if (decision.action === "observe") {
-          if (decision.text === "screenshot") this.pendingScreenshot = video?.frame() ?? (await this.captureScreenshot());
-          history.push({ step, decision, result: { ok: true, message: "observed" }, at: Date.now() });
+          let result: ActionResult = { ok: true, message: "observed" };
+          if (decision.text === "screenshot") this.pendingScreenshot = await this.captureScreenshot();
+          else if (decision.elementId != null || decision.quote) result = this.readRegion(decision);
+          history.push({ step, decision, result, at: Date.now() });
           continue;
         }
 
@@ -251,7 +266,7 @@ export class AgentLoop {
           try {
             const plan = await this.deps.executor.makePlan(decision.text!);
             if (!plan) throw new Error("no plan came back");
-            session.record({ kind: "plan", plan: { key: plan.key, goal: plan.goal, steps: plan.steps }, at: Date.now() });
+            session.record({ kind: "plan", plan: { key: plan.key, kind: "topic", goal: plan.goal, steps: plan.steps, provenance: { origin: "asked", planner: plan.source, utterance, url: page.url, title: page.title } }, at: Date.now() });
             const first = plan.steps[0];
             path = { kind: "plan", conceptLabel: first.concept ?? first.title, query: first.query ?? `${first.concept ?? first.title} for kids`, prefer: "lesson" };
             this.pendingPlan = plan.steps.map((st, i) => `${i + 1}. ${st.title}${st.query ? ` (look_up: "${st.query}")` : ""}`).join("\n");
@@ -278,7 +293,7 @@ export class AgentLoop {
         // --- Execute + verify ---
         // Persist resume state BEFORE actions that may unload the page (a click on a link
         // navigates faster than we could save afterwards). Cleared again if nothing navigated.
-        const mayNavigate = decision.action === "click" || decision.action === "navigate" || decision.action === "go_back";
+        const mayNavigate = decision.action === "click" || decision.action === "double_click" || decision.action === "press_key" || decision.action === "navigate" || decision.action === "go_back";
         if (mayNavigate) {
           await session.setPendingLoop({ utterance, goal, history: [...history.slice(-5), { step, decision, result: { ok: true, message: "action dispatched; page navigated" }, at: Date.now() }], step: step + 1, at: Date.now(), pendingOffer: null, lastReferencedElementName: this.lastReferencedElementName, path });
         }
@@ -296,6 +311,8 @@ export class AgentLoop {
           break;
         }
         if (mayNavigate) await session.setPendingLoop(null);
+        // Aiming by eye needs eyes: after acting on a raw point, show the model what happened.
+        if ((decision.x != null || decision.toX != null) && !decision.done) this.pendingScreenshot = await this.captureScreenshot();
         if (!result.ok && !result.elementFound) {
           // Element vanished: re-observe on the next iteration (the model sees the failure in history).
           continue;
@@ -337,6 +354,7 @@ export class AgentLoop {
 
   private noteHint(page: PageSummary): void {
     const { session } = this.deps;
+    this.deps.onHint?.();
     const key = problemKey(detectProblem(page), page);
     const same = session.student.currentProblemKey === key;
     session.updateStudent({
@@ -405,9 +423,22 @@ export class AgentLoop {
     }
   }
 
+  /** observe with a target reads that region in full; the text rides to the next decide as REGION TEXT. */
+  private readRegion(decision: AgentDecision): ActionResult {
+    const scope = decision.elementId != null ? this.deps.executor.registry.get(decision.elementId) : null;
+    if (decision.elementId != null && !scope) return { ok: false, message: "That element isn't on the page anymore—let me look again.", elementFound: false };
+    const el = decision.quote ? quoteRegion(scope ?? document.body, decision.quote, HOST_ID) ?? (scope ? quoteRegion(document.body, decision.quote, HOST_ID) : null) : scope;
+    if (!el) return { ok: false, message: `nothing on the page contains "${decision.quote!.slice(0, 60)}"`, elementFound: false };
+    const text = regionText(el);
+    if (!text) return { ok: false, message: "that region has no readable text — it may need revealing first (click 'more' / expand it)", elementFound: true };
+    const label = decision.quote ? `region containing "${decision.quote.slice(0, 60)}"` : `element [${decision.elementId}]`;
+    this.pendingReadout = `${label}:\n${text.slice(0, MAX_REGION_CHARS)}`;
+    return { ok: true, message: `read ${Math.min(text.length, MAX_REGION_CHARS)} chars; the full text is attached to your next step`, elementFound: true };
+  }
+
   private async captureScreenshot(): Promise<string | null> {
     try {
-      const r = await sendToBackground({ type: "screenshot" }, 5000);
+      const r = await sendToBackground({ type: "screenshot", viewport: { width: window.innerWidth, height: window.innerHeight } }, 5000);
       return r.ok ? r.dataUrl ?? null : null;
     } catch {
       return null;

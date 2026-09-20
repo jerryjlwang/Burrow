@@ -81,7 +81,7 @@ export class OpenAIProvider implements AgentProvider {
   async decide(input: AgentInput): Promise<AgentDecision> {
     const parts: ContentPart[] = [];
     if (input.screenshot && /^data:image\/(jpeg|png|webp|gif);base64,/.test(input.screenshot)) {
-      parts.push({ type: "image_url", image_url: { url: input.screenshot, detail: "low" } });
+      parts.push({ type: "image_url", image_url: { url: input.screenshot, detail: "high" } });
     }
     parts.push({ type: "text", text: formatDecisionContext(input) });
     return this.complete<AgentDecision>(SYSTEM_PROMPT, parts, "agent_decision", DECISION_JSON_SCHEMA as unknown as Record<string, unknown>, 900);

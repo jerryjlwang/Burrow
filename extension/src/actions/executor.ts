@@ -1,12 +1,14 @@
 import type { AgentDecision } from "@shared/actions";
 import type { ActionResult, PageSummary } from "@shared/types";
 import type { StepPlan } from "@shared/plan";
-import type { PendingLoop } from "../shared/messages";
+import type { InputOp, PendingLoop } from "../shared/messages";
+import { parseKeyChord } from "@shared/keys";
 import { normalizeText } from "@shared/text";
 import { ElementRegistry } from "../page-understanding/registry";
 import { isSensitiveField, HOST_ID } from "../page-understanding/extract";
 import { OverlayController } from "./overlay";
 import { lineLocator, quoteLocator, type RectLocator } from "./locate";
+import { deepActiveElement, describeElement, elementAtPoint, isOwnUi, syntheticContextMenu, syntheticDoubleClick, syntheticDrag, syntheticHover, syntheticKey, syntheticWheel, type Point } from "./surface";
 import { log } from "../shared/logger";
 
 const logger = log("action");
@@ -31,6 +33,8 @@ export interface ExecutorDeps {
   showPlan: () => boolean;
   /** Show a worked example on the rabbit's chalkboard (newline-separated lines). */
   sketch: (spec: string) => void;
+  /** Trusted mouse/keyboard input via the background; `ok: false` means fall back to DOM events. */
+  input: (ops: InputOp[]) => Promise<{ ok: boolean; error?: string }>;
   /** Called right before an action that may unload the page. */
   beforeMaybeNavigate?: () => Promise<void> | void;
 }
@@ -75,8 +79,8 @@ function coveredBy(el: Element): Element | null {
   return top;
 }
 
-export function dispatchClickSequence(el: Element): void {
-  const { x, y } = center(el);
+export function dispatchClickSequence(el: Element, at?: Point): void {
+  const { x, y } = at ?? center(el);
   const view = el.ownerDocument.defaultView ?? undefined;
   const base = { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, button: 0 } as const;
   const make = <T extends Event>(ctor: new (type: string, init: Record<string, unknown>) => T, type: string, init: Record<string, unknown>): T => {
@@ -204,6 +208,8 @@ function findScrollableRoot(): Element | null {
   return best;
 }
 
+const UNTRUSTED_NOTE = " (sent as untrusted events — this page may ignore them)";
+
 export async function executeAction(decision: AgentDecision, deps: ExecutorDeps): Promise<ActionResult> {
   const { registry, overlay } = deps;
   const reduced = prefersReducedMotion();
@@ -213,6 +219,61 @@ export async function executeAction(decision: AgentDecision, deps: ExecutorDeps)
     if (!el) return { error: { ok: false, message: "That element isn't on the page anymore—let me look again.", elementFound: false } };
     return { el };
   };
+  /** Where a pointer action lands: a listed element's centre (brought into view), or a raw viewport point. */
+  const resolvePoint = async (id: number | null, x: number | null, y: number | null): Promise<{ point: Point; el: Element | null } | { error: ActionResult }> => {
+    if (id != null) {
+      const el = registry.get(id);
+      if (!el) return { error: { ok: false, message: "That element isn't on the page anymore—let me look again.", elementFound: false } };
+      await overlay.scrollIntoViewIfNeeded(el);
+      return { point: center(el), el };
+    }
+    const point = { x: x!, y: y! };
+    if (point.x > window.innerWidth || point.y > window.innerHeight) {
+      return { error: { ok: false, message: `(${point.x}, ${point.y}) is outside the visible page, which is ${window.innerWidth}x${window.innerHeight}. Scroll it into view first.`, elementFound: false } };
+    }
+    const el = elementAtPoint(point);
+    if (isOwnUi(el)) return { error: { ok: false, message: "That point is on me, not the page.", elementFound: true } };
+    return { point, el };
+  };
+  const clickElement = async (): Promise<ActionResult> => {
+    const r = getEl();
+    if ("error" in r) return r.error;
+    const el = r.el;
+    if ((el as HTMLButtonElement).disabled || el.getAttribute("aria-disabled") === "true") {
+      overlay.highlight(decision.elementId!, { durationMs: 3000 });
+      return { ok: false, message: "That control is disabled right now.", elementFound: true };
+    }
+    await overlay.scrollIntoViewIfNeeded(el);
+    let blocker = coveredBy(el);
+    if (blocker) {
+      window.scrollBy({ top: -120, behavior: "auto" });
+      await sleep(80);
+      blocker = coveredBy(el);
+    }
+    if (blocker) {
+      const desc = (blocker.getAttribute("aria-label") || blocker.textContent || blocker.tagName).trim().slice(0, 40);
+      return { ok: false, message: `Something is covering it (${desc})—maybe a dialog needs closing first.`, elementFound: true };
+    }
+    overlay.highlight(decision.elementId!, { durationMs: 1600, kind: "acting" });
+    await sleep(reduced ? 30 : 260);
+    const urlBefore = location.href;
+    const errorsBefore = new Set(deps.rescan().errors);
+    await deps.beforeMaybeNavigate?.();
+    dispatchClickSequence(el);
+    const change = await deps.waitForChange(1400);
+    const after = deps.rescan();
+    const newErrors = after.errors.filter((e) => !errorsBefore.has(e));
+    const urlChanged = change.urlChanged || location.href !== urlBefore;
+    return {
+      ok: true,
+      message: urlChanged ? "clicked; page navigated" : change.changed ? "clicked; page updated" : "clicked; no visible change",
+      changed: change.changed || urlChanged,
+      urlChanged,
+      newErrors,
+      elementFound: true,
+    };
+  };
+  const markPoint = (p: Point, durationMs = 1600) => overlay.highlight(registry.idFor(document.body), { durationMs, kind: "acting", locator: () => ({ x: p.x - 14, y: p.y - 14, width: 28, height: 28 }) });
 
   try {
     switch (decision.action) {
@@ -277,6 +338,14 @@ export async function executeAction(decision: AgentDecision, deps: ExecutorDeps)
       case "scroll": {
         const amount = decision.amount ?? 600;
         const delta = decision.direction === "up" ? -amount : amount;
+        if (decision.x != null && decision.y != null) {
+          // Wheel over an exact spot: scrolls that inner pane, or zooms that map/graph.
+          const point = { x: decision.x, y: decision.y };
+          const sent = await deps.input([{ kind: "wheel", ...point, deltaY: delta }]);
+          const moved = sent.ok || syntheticWheel(point, delta);
+          await sleep(reduced ? 50 : 350);
+          return { ok: moved, message: moved ? `wheeled ${decision.direction} over ${describeElement(elementAtPoint(point))}` : "nothing there scrolls", changed: moved };
+        }
         const target = findScrollableRoot();
         const before = target ? target.scrollTop : window.scrollY;
         if (target && target !== document.scrollingElement && target !== document.documentElement) target.scrollBy({ top: delta, behavior });
@@ -296,46 +365,85 @@ export async function executeAction(decision: AgentDecision, deps: ExecutorDeps)
         return { ok: document.activeElement === r.el, message: "focused", elementFound: true };
       }
 
-      case "click": {
-        const r = getEl();
-        if ("error" in r) return r.error;
-        const el = r.el;
-        if ((el as HTMLButtonElement).disabled || el.getAttribute("aria-disabled") === "true") {
-          overlay.highlight(decision.elementId!, { durationMs: 3000 });
-          return { ok: false, message: "That control is disabled right now.", elementFound: true };
-        }
-        await overlay.scrollIntoViewIfNeeded(el);
-        let blocker = coveredBy(el);
-        if (blocker) {
-          window.scrollBy({ top: -120, behavior: "auto" });
-          await sleep(80);
-          blocker = coveredBy(el);
-        }
-        if (blocker) {
-          const desc = (blocker.getAttribute("aria-label") || blocker.textContent || blocker.tagName).trim().slice(0, 40);
-          return { ok: false, message: `Something is covering it (${desc})—maybe a dialog needs closing first.`, elementFound: true };
-        }
-        overlay.highlight(decision.elementId!, { durationMs: 1600, kind: "acting" });
-        await sleep(reduced ? 30 : 260);
+      case "click":
+      case "double_click":
+      case "right_click":
+      case "hover": {
+        // A plain click on a listed element keeps the DOM path below: it needs no debugger session.
+        if (decision.action === "click" && decision.elementId != null) return clickElement();
+        const t = await resolvePoint(decision.elementId, decision.x, decision.y);
+        if ("error" in t) return t.error;
+        const { point, el } = t;
+        const hover = decision.action === "hover";
+        if (!hover && el && ((el as HTMLButtonElement).disabled || el.closest('[aria-disabled="true"]'))) return { ok: false, message: "That control is disabled right now.", elementFound: true };
+        markPoint(point);
+        await sleep(reduced ? 30 : 200);
         const urlBefore = location.href;
-        const errorsBefore = new Set(deps.rescan().errors);
-        await deps.beforeMaybeNavigate?.();
-        dispatchClickSequence(el);
-        const change = await deps.waitForChange(1400);
-        const after = deps.rescan();
-        const newErrors = after.errors.filter((e) => !errorsBefore.has(e));
+        if (!hover) await deps.beforeMaybeNavigate?.();
+        const op: InputOp = hover ? { kind: "move", ...point } : { kind: "click", ...point, button: decision.action === "right_click" ? "right" : "left", count: decision.action === "double_click" ? 2 : 1 };
+        const sent = await deps.input([op]);
+        if (!sent.ok && el) {
+          if (hover) syntheticHover(el, point);
+          else if (decision.action === "right_click") syntheticContextMenu(el, point);
+          else {
+            dispatchClickSequence(el, point);
+            if (decision.action === "double_click") {
+              dispatchClickSequence(el, point);
+              syntheticDoubleClick(el, point);
+            }
+          }
+        }
+        const change = await deps.waitForChange(hover ? 700 : 1400);
         const urlChanged = change.urlChanged || location.href !== urlBefore;
-        return {
-          ok: true,
-          message: urlChanged ? "clicked; page navigated" : change.changed ? "clicked; page updated" : "clicked; no visible change",
-          changed: change.changed || urlChanged,
-          urlChanged,
-          newErrors,
-          elementFound: true,
-        };
+        const verb = { click: "clicked", double_click: "double-clicked", right_click: "right-clicked", hover: "hovering over" }[decision.action];
+        const outcome = urlChanged ? "page navigated" : change.changed ? "page updated" : "no visible change";
+        return { ok: true, message: `${verb} ${describeElement(el)} at (${Math.round(point.x)}, ${Math.round(point.y)}); ${outcome}${sent.ok ? "" : UNTRUSTED_NOTE}`, changed: change.changed || urlChanged, urlChanged, elementFound: true };
+      }
+
+      case "drag": {
+        const from = await resolvePoint(decision.elementId, decision.x, decision.y);
+        if ("error" in from) return from.error;
+        const toEl = decision.toElementId != null ? registry.get(decision.toElementId) : null;
+        if (decision.toElementId != null && !toEl) return { ok: false, message: "The place to drop it isn't on the page anymore—let me look again.", elementFound: false };
+        const to = toEl ? center(toEl) : { x: decision.toX!, y: decision.toY! };
+        if (to.x < 0 || to.y < 0 || to.x > window.innerWidth || to.y > window.innerHeight) return { ok: false, message: "Both ends of a drag have to be on screen at once; scroll so they are.", elementFound: true };
+        markPoint(from.point, 2200);
+        markPoint(to, 2200);
+        await sleep(reduced ? 30 : 200);
+        const sent = await deps.input([{ kind: "drag", ...from.point, toX: to.x, toY: to.y }]);
+        if (!sent.ok) syntheticDrag(from.point, to);
+        const change = await deps.waitForChange(1200);
+        return { ok: true, message: `dragged ${describeElement(from.el)} to (${Math.round(to.x)}, ${Math.round(to.y)}); ${change.changed ? "page updated" : "no visible change"}${sent.ok ? "" : UNTRUSTED_NOTE}`, changed: change.changed, elementFound: true };
+      }
+
+      case "press_key": {
+        const chord = parseKeyChord(decision.text!)!;
+        if (decision.elementId != null) {
+          const r = getEl();
+          if ("error" in r) return r.error;
+          (r.el as HTMLElement).focus?.();
+        }
+        if (chord.key === "Enter") await deps.beforeMaybeNavigate?.();
+        const sent = await deps.input([{ kind: "key", chord }]);
+        if (!sent.ok) syntheticKey(deepActiveElement() ?? document.body, chord);
+        const { changed, urlChanged } = await deps.waitForChange(chord.key === "Enter" ? 2500 : 800);
+        return { ok: true, message: `pressed ${decision.text}; ${urlChanged ? "page navigated" : changed ? "page updated" : "no visible change"}${sent.ok ? "" : UNTRUSTED_NOTE}`, changed, urlChanged, elementFound: true };
       }
 
       case "type": {
+        if (decision.elementId == null) {
+          // Typing at the focus: canvas tools, spreadsheet cells and editors the element list can't name.
+          const active = deepActiveElement();
+          if (!active) return { ok: false, message: "Nothing is focused to type into. Click the spot first.", elementFound: false };
+          if (isSensitiveField(active)) return { ok: false, message: "That field is private (password/payment/code)—please type it yourself.", elementFound: true };
+          const sent = await deps.input([{ kind: "text", text: decision.text ?? "" }]);
+          if (!sent.ok) {
+            if (!isEditable(active)) return { ok: false, message: "I can't type into that here.", elementFound: true };
+            typeInto(active, decision.text ?? "", { clear: false });
+          }
+          await deps.waitForChange(300);
+          return { ok: true, message: `typed into the focused ${describeElement(active)}${sent.ok ? "" : UNTRUSTED_NOTE}`, changed: true, elementFound: true };
+        }
         const r = getEl();
         if ("error" in r) return r.error;
         const el = r.el;

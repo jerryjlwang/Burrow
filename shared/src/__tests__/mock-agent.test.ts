@@ -28,6 +28,34 @@ function input(utterance: string, extra: Partial<AgentInput> = {}): AgentInput {
   return { utterance, goal: utterance, conversation: [], page, history: [], signals: emptySignals(), student: emptyStudentState(), pendingOffer: null, lastReferencedElementId: null, step: 0, maxSteps: 6, ...extra };
 }
 
+describe("mock agent: the visible surface", () => {
+  it("hovers, double-clicks and right-clicks a named element", () => {
+    for (const [said, action] of [["hover over the dashboard", "hover"], ["Double-click the dashboard", "double_click"], ["right click on Dashboard", "right_click"]] as const) {
+      const dec = decideMock(input(said));
+      expect(dec.action, said).toBe(action);
+      expect(dec.elementId, said).toBe(1);
+      expect(validateDecision(dec).ok, said).toBe(true);
+    }
+  });
+  it("drags one named element onto another", () => {
+    const dec = decideMock(input("drag the dashboard to sign in"));
+    expect(dec).toMatchObject({ action: "drag", elementId: 1, toElementId: 2 });
+    expect(validateDecision(dec).ok).toBe(true);
+  });
+  it("aims at spoken coordinates", () => {
+    expect(decideMock(input("click at 300, 200"))).toMatchObject({ action: "click", x: 300, y: 200, elementId: null });
+    const drag = decideMock(input("drag from 100, 400 to 380, 400"));
+    expect(drag).toMatchObject({ action: "drag", x: 100, y: 400, toX: 380, toY: 400 });
+    expect(validateDecision(drag).ok).toBe(true);
+  });
+  it("presses a named key rather than hunting for a button called that", () => {
+    expect(decideMock(input("press escape"))).toMatchObject({ action: "press_key", text: "escape" });
+    const arrow = decideMock(input("hit the arrow down"));
+    expect(arrow).toMatchObject({ action: "press_key", text: "down" });
+    expect(validateDecision(arrow).ok).toBe(true);
+  });
+});
+
 describe("mock agent", () => {
   it("points at the element the student asks for", () => {
     const d = decideMock(input("Where is the sign in button?"));
@@ -178,5 +206,33 @@ describe("watching a video", () => {
   it("is honest when the video has no transcript, and stays out of the way of page requests", () => {
     expect(decideMock(input("can you explain that", { video: { ...video, heard: "", hasTranscript: false } })).say).toMatch(/can't hear/);
     expect(decideMock(input("where is the sign in button", { video })).action).not.toBe("speak");
+  });
+});
+
+describe("region reading (observe with a target)", () => {
+  it("observes with a quote first, then answers from the full readout", () => {
+    const first = decideMock(input("What does the description say?"));
+    expect(first).toMatchObject({ action: "observe", quote: "description", done: false });
+    expect(validateDecision(first).ok).toBe(true);
+
+    const readout = `region containing "description":\nThis assignment closes the unit. ${"More context. ".repeat(30)}Spotting it earns a golden ratio bonus.`;
+    const second = decideMock(input("What does the description say?", { step: 1, history: [{ step: 0, decision: first, result: { ok: true, message: "read" }, at: 0 }], readout }));
+    expect(second.action).toBe("explain");
+    expect(second.done).toBe(true);
+    expect(second.text).toMatch(/golden ratio bonus/);
+    expect(second.text).not.toMatch(/region containing/); // label line stripped
+  });
+
+  it("gives up honestly when the region was not found", () => {
+    const first = decideMock(input("read the fine print"));
+    expect(first).toMatchObject({ action: "observe", quote: "fine print" });
+    const second = decideMock(input("read the fine print", { step: 1, history: [{ step: 0, decision: first, result: { ok: false, message: "not found" }, at: 0 }] }));
+    expect(second.action).toBe("speak");
+    expect(second.done).toBe(true);
+  });
+
+  it("does not hijack page summaries or clicks", () => {
+    expect(decideMock(input("What's on this page?")).action).toBe("explain");
+    expect(decideMock(input("click the check answer button")).action).toBe("click");
   });
 });

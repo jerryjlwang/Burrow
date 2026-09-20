@@ -157,7 +157,8 @@ export function diagnose(graph: KnowledgeGraph, now: number): LearnerDiagnostics
       independence: rate(unaided, unaided + hinted, 3),
       selfCorrections: sum((s) => s.selfCorrections),
     },
-    plans: [...graph.profile.plans]
+    plans: graph.profile.plans
+      .filter((p) => p.kind === "topic")
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .map((p) => ({ goal: p.goal, done: p.steps.filter((s) => s.done).length, total: p.steps.length, next: p.steps.find((s) => !s.done)?.title ?? null })),
   };

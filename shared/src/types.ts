@@ -169,10 +169,14 @@ export interface AgentInput {
   planStep?: number | null;
   /** A plan the previous step's make_plan produced, pre-formatted for the prompt. */
   planResults?: string | null;
+  /** Full text of the region the previous step's observe targeted (label line + body). */
+  readout?: string | null;
   /** Longitudinal learner diagnostics, pre-formatted (see formatDiagnostics). */
   learner?: string | null;
-  /** The video the student is watching, as the rabbit has followed it so far. With it, `screenshot` is the exact video frame. */
+  /** The video the student is watching, as the rabbit has followed it so far. */
   video?: VideoContext | null;
+  /** `screenshot` is the frame read off the video element, not a viewport capture — its pixels are NOT click coordinates. */
+  screenshotIsVideoFrame?: boolean;
 }
 
 export interface AgentOutput {

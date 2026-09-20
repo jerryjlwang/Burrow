@@ -1,5 +1,5 @@
 import { applyExtraction, type ApplyContext, type ConceptExtraction } from "./concepts";
-import type { KnowledgeGraph, ResolutionMethod, ResourceKind } from "./graph";
+import type { KnowledgeGraph, LearningPlan, PlanProvenance, ResolutionMethod, ResourceKind, StepCompletion } from "./graph";
 
 /**
  * Everything the learner graph learns arrives as one of these. A tab applies the event to its RAM
@@ -18,7 +18,9 @@ export type LearnerEvent =
   | { kind: "ask"; concept: string; at: number }
   | { kind: "offer"; offer: string; outcome: "shown" | "accepted" | "declined" | "dismissed"; key?: string; at: number }
   | { kind: "resource"; concept: string; url: string; title: string; resourceKind: ResourceKind; reason: string; at: number }
-  | { kind: "plan"; plan: { key: string; goal: string; steps: Array<{ title: string; concept?: string; query?: string }> }; at: number };
+  | { kind: "plan"; plan: { key: string; kind?: LearningPlan["kind"]; goal: string; steps: Array<{ title: string; concept?: string; query?: string }>; provenance?: PlanProvenance }; at: number }
+  /** Progress on a stored problem plan: steps reached, a wrong line found, or solved — and what showed it. */
+  | { kind: "planProgress"; key: string; reached?: number; solved?: boolean; wrongStep?: number; by: StepCompletion["by"]; at: number };
 
 export function applyLearnerEvent(graph: KnowledgeGraph, e: LearnerEvent): void {
   switch (e.kind) {
@@ -48,6 +50,9 @@ export function applyLearnerEvent(graph: KnowledgeGraph, e: LearnerEvent): void 
       return;
     case "plan":
       graph.savePlan(e.plan, e.at);
+      return;
+    case "planProgress":
+      graph.recordPlanProgress(e.key, e.at, { reached: e.reached, solved: e.solved, wrongStep: e.wrongStep, by: e.by });
       return;
   }
 }

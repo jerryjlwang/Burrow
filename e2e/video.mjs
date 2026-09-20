@@ -31,6 +31,9 @@ const serverLog = [];
 const serverProc = spawn(process.execPath, [resolve(root, "node_modules/tsx/dist/cli.mjs"), resolve(root, "server/src/index.ts")], {
   env: { ...process.env, DEMO_MODE: "1", PORT: String(PORT), DEEPGRAM_API_KEY: "", SUPADATA_API_KEY: "" },
   stdio: ["ignore", "pipe", "pipe"],
+  // Own process group: tsx runs the server in a child, and killing only the wrapper leaves that
+  // child listening, so the next run would silently talk to a stale server.
+  detached: true,
 });
 for (const stream of [serverProc.stdout, serverProc.stderr]) stream.on("data", (d) => serverLog.push(String(d)));
 for (let i = 0; i < 60; i++) {
@@ -137,7 +140,11 @@ try {
   check("video e2e ran to completion", false, String(e).slice(0, 300));
 } finally {
   await context.close().catch(() => undefined);
-  serverProc.kill();
+  try {
+    process.kill(-serverProc.pid);
+  } catch {
+    serverProc.kill();
+  }
 }
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
