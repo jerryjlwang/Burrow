@@ -49,6 +49,29 @@
       ],
       "slice": 4
     },
+    "board": {
+      "file": "board.png",
+      "size": [
+        20,
+        23
+      ],
+      "slice": [
+        6,
+        6,
+        9,
+        6
+      ],
+      "note": "slice is top, right, bottom, left. The bottom slice holds the chalk tray."
+    },
+    "chalk": {
+      "file": "chalk.png",
+      "size": [
+        9,
+        4
+      ],
+      "slice": 0,
+      "note": "A stub of chalk for the board's tray."
+    },
     "ear": {
       "file": "ear.png",
       "size": [

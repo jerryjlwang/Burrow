@@ -304,3 +304,56 @@
 /* ---------- Chalkboard strokes ---------- */
 @keyframes pip-chalk { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
 @keyframes pip-chalk-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---------- Chalkboard: a worked example on a board beside the rabbit ---------- */
+/* The frame is ui/board.png: 6 source pixels on the top and sides, 9 on the bottom where the chalk
+   tray hangs, drawn at 3x. Board.tsx sets --ui-board and --ui-chalk and places the board by hand
+   (left, bottom, width, max-height) on the 3px grid beside the rabbit. The chalk is VT323. */
+.pip-board {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  pointer-events: auto;
+  border: 18px solid transparent;
+  border-bottom-width: 27px;
+  border-image: var(--ui-board) 6 6 9 6 fill / 18px 18px 27px 18px repeat;
+  image-rendering: pixelated;
+  background: none;
+  border-radius: 0;
+  color: var(--cream);
+  font-family: "Burrow Digits", "VT323", var(--pip-font);
+  font-size: 27px;
+  line-height: 30px;
+  box-shadow: var(--shadow);
+  animation: pip-board-rise 0.36s steps(6, end) both;
+}
+.pip-board.leaving { animation: pip-board-sink 0.3s steps(5, end) both; pointer-events: none; }
+.pip-board-slate { min-height: 0; overflow: auto; padding: 6px 30px 9px 12px; }
+.pip-board.writing .pip-board-slate { cursor: pointer; }
+.pip-board-line { margin: 0; white-space: pre-wrap; word-break: break-word; }
+.pip-board-line.done { opacity: 0.62; }
+.pip-board-line.todo { visibility: hidden; }
+/* The whole line is in the DOM from the start; the part he has not written yet is just not shown. */
+.pip-board-rest { visibility: hidden; }
+.pip-board-line.current.written .pip-board-head { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 3px; text-decoration-color: rgba(255, 248, 231, 0.85); }
+.pip-board-line.pip-board-title { color: var(--gold); font-size: 30px; line-height: 33px; margin-bottom: 6px; opacity: 1; }
+.pip-board-line.pip-board-title .pip-board-head { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 3px; text-decoration-color: rgba(242, 193, 78, 0.9); }
+.pip-board-caret { display: inline-block; width: 9px; height: 15px; margin-left: 3px; vertical-align: -1px; background: var(--cream); animation: pip-blink 0.5s steps(2) infinite; }
+.pip-board-canvas { display: block; width: 100%; aspect-ratio: 1 / 1; margin-top: 6px; overflow: visible; }
+.pip-board-canvas text { font-family: inherit; }
+.pip-board-chalk {
+  position: absolute; left: 6px; bottom: -15px; width: 27px; height: 12px; pointer-events: none;
+  background: var(--ui-chalk) no-repeat; background-size: 27px 12px; image-rendering: pixelated;
+}
+/* The dismiss control is a cream pixel button pinned in the slate's corner, so it never reads as a chalk x in the maths. */
+.pip-board-close {
+  position: absolute; top: 3px; right: 3px; width: 30px; height: 30px; padding: 0;
+  border: var(--btn-frame) solid transparent;
+  border-image: var(--ui-btn-quiet) 4 fill / var(--btn-frame) repeat;
+  image-rendering: pixelated; background: none; border-radius: 0;
+  color: var(--ink); cursor: pointer; font: 20px/6px var(--pip-font); text-align: center;
+}
+.pip-board-close:hover { border-image-source: var(--ui-btn); }
+/* Rises from the floor in whole 21px steps and sinks back the same way. Reduced motion (.pip-root.reduced) stops both. */
+@keyframes pip-board-rise { from { transform: translateY(126px); } to { transform: none; } }
+@keyframes pip-board-sink { from { transform: none; } to { transform: translateY(126px); opacity: 0; } }

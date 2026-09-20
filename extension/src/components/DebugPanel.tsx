@@ -80,6 +80,17 @@ function PetControls({ pet }: { pet?: RefObject<PetController | null> }) {
           show bubble
         </button>
         <button type="button" onClick={() => store.setState({ bubble: null })}>hide bubble</button>
+        <button
+          type="button"
+          onClick={() =>
+            store.setState({
+              board: { id: `debug-${Date.now()}`, title: "Solve 3x + 5 = 20", items: ["3x + 5 = 20", "3x = 15", "x = 5"].map((text) => ({ kind: "text" as const, text })) },
+              planView: null,
+            })
+          }
+        >
+          chalkboard
+        </button>
       </div>
       <div className="pip-debug-pet">
         <button type="button" onClick={() => void grant("use_voice")}>grant voice</button>
