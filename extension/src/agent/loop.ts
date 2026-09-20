@@ -22,6 +22,22 @@ import type { SignalTracker } from "../proactive/signals";
 
 const logger = log("agent");
 export const MAX_STEPS = 6;
+
+/**
+ * Spoken while a slow first decision is still in flight, so thinking never sounds like a hang.
+ * On a video the rabbit is already watching, so "looking" phrasing would be a lie there — those
+ * turns draw from the thinking pool only.
+ */
+const LOOK_FILLERS = ["Let me take a look.", "Let me see…", "One sec, looking now.", "Ooh, let me check.", "Okay, looking…"];
+const THINK_FILLERS = ["Hmm, good question.", "Hmm, let me think.", "Give me a second.", "Ooh, hang on."];
+let lastFiller = "";
+function pickFiller(pool: string[]): string {
+  const options = pool.filter((f) => f !== lastFiller);
+  lastFiller = options[Math.floor(Math.random() * options.length)];
+  return lastFiller;
+}
+/** The first decision must be slower than this before a filler speaks; fast answers stay clean. */
+const FILLER_DELAY_MS = 800;
 /** Hard ceiling across navigations and new tabs, so a resumed chain can't run away. */
 export const MAX_TOTAL_STEPS = 14;
 
@@ -166,12 +182,25 @@ export class AgentLoop {
 
         const requestId = head?.tag || this.newRequestId();
         this.listenFor(requestId);
+        // Latency mask: if nothing has been voiced by then — no streamed sentence, no speculation
+        // hit — a short filler line fills the silence. Latest-wins speech keeps the order sane.
+        let fillerTimer: number | null = null;
+        if (step === (opts.resume?.step ?? 0) && !opts.resume && (opts.source === "voice" || opts.source === "text") && store.getState().settings.ttsEnabled) {
+          fillerTimer = window.setTimeout(() => {
+            if (!signal.aborted && this.spokenEarly === null) void this.deps.speak(pickFiller(this.deps.getVideo?.() ? THINK_FILLERS : [...THINK_FILLERS, ...LOOK_FILLERS]));
+          }, FILLER_DELAY_MS);
+        }
         // A head start that failed isn't worth keeping; ask properly.
-        let output = head ? await head.promise.catch(() => null) : null;
-        if (output && !output.degraded) logger.info("speculation hit", { headStartMs: head!.headStartMs });
-        else {
-          if (head) this.listenFor(this.newRequestId());
-          output = await this.decide(input, signal, this.activeRequestId!);
+        let output: AgentOutput | null = null;
+        try {
+          output = head ? await head.promise.catch(() => null) : null;
+          if (output && !output.degraded) logger.info("speculation hit", { headStartMs: head!.headStartMs });
+          else {
+            if (head) this.listenFor(this.newRequestId());
+            output = await this.decide(input, signal, this.activeRequestId!);
+          }
+        } finally {
+          if (fillerTimer !== null) window.clearTimeout(fillerTimer);
         }
         this.activeRequestId = null;
         check();
