@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Video results · Riverside Learning</title>
+  <link rel="stylesheet" href="demo.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="top-inner">
+      <a class="logo" href="index.html"><span aria-hidden="true"></span>Riverside Learning</a>
+    </div>
+  </header>
+  <!-- Navigates the way YouTube does: the link swaps the view and pushes a URL, the document never reloads. -->
+  <main id="view">
+    <h1>Video results</h1>
+    <p class="sub">Search: volcanoes</p>
+    <ul class="list card">
+      <li><a id="result" href="spa.html?watch=volcanoes">How volcanoes erupt</a></li>
+    </ul>
+  </main>
+  <script>
+    document.getElementById("result").addEventListener("click", (e) => {
+      e.preventDefault();
+      history.pushState({}, "", e.currentTarget.href);
+      setTimeout(() => {
+        document.title = "How volcanoes erupt · Riverside Learning";
+        document.getElementById("view").innerHTML = '<h1>How volcanoes erupt</h1><p class="sub">Now playing</p><div class="card" id="player">Magma rises because it is lighter than the rock around it.</div>';
+      }, 300);
+    });
+  </script>
+</body>
+</html>

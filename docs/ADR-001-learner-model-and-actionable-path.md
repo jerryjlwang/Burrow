@@ -85,6 +85,6 @@ Showing step titles is safe because titles name moves, never results — the sam
 ## Consequences
 
 - Extra model calls: one planner call per problem page with quiz UI (prefetched, so hints don't wait on it), judge calls only while multi-line working is being written, one extractor call per learner utterance. All degrade to deterministic behaviour with no server.
-- `look_up` returns actual videos only with `YOUTUBE_API_KEY`; otherwise a search URL the agent clicks through after resuming on the new tab.
+- `look_up` never returns a video directly: for YouTube it returns a search URL, which the agent opens and clicks through after resuming on the new tab.
 - A results page re-extracted under a new title/heading signature would double-count its `missed` concepts. Accepted for now; the fix is keying attempts by page URL.
 - `KnowledgeGraph.merge` does not merge profiles. It has no production caller.

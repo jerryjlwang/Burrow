@@ -21,8 +21,6 @@ export interface LookupResult {
 export interface LookupOptions {
   /** Modality to list first (what has worked for this learner, or the suggestion's default). */
   prefer?: string;
-  /** With a key, YouTube results are actual videos; without one, a search link the agent clicks through. */
-  youtubeApiKey?: string;
 }
 
 /** Trusted learning destinations with predictable search URLs — always offered alongside articles. */
@@ -46,17 +44,6 @@ async function wikipediaSearch(query: string): Promise<LookupResult[]> {
   return titles.map((title, i) => ({ title: `${title} (Wikipedia)`, url: urls[i], snippet: descriptions[i] || undefined }));
 }
 
-/** Embeddable, strict-safe-search videos only — this is a child's browser. */
-async function youtubeSearch(query: string, apiKey: string): Promise<LookupResult[]> {
-  const params = new URLSearchParams({ part: "snippet", type: "video", maxResults: "3", safeSearch: "strict", videoEmbeddable: "true", relevanceLanguage: "en", q: query, key: apiKey });
-  const res = await fetch(`https://www.googleapis.com/youtube/v3/search?${params}`, { signal: AbortSignal.timeout(8000) });
-  if (!res.ok) throw new Error(`youtube ${res.status}`);
-  const body = (await res.json()) as { items?: Array<{ id?: { videoId?: string }; snippet?: { title?: string; channelTitle?: string } }> };
-  return (body.items ?? [])
-    .filter((it) => it.id?.videoId && it.snippet?.title)
-    .map((it) => ({ title: `${it.snippet!.title} (YouTube · ${it.snippet!.channelTitle ?? "video"})`, url: `https://www.youtube.com/watch?v=${it.id!.videoId}` }));
-}
-
 /** Stable sort: the preferred modality first, everything else in its original order. */
 export function rankResults(results: LookupResult[], prefer?: string): LookupResult[] {
   const tagged = results.map((r) => ({ ...r, kind: r.kind ?? resourceKindOf(r.url) }));
@@ -66,20 +53,12 @@ export function rankResults(results: LookupResult[], prefer?: string): LookupRes
 
 export async function lookUp(query: string, opts: LookupOptions = {}): Promise<string> {
   const q = query.trim().slice(0, 200);
-  const settle = async (name: string, run: Promise<LookupResult[]>): Promise<LookupResult[]> => {
-    try {
-      return await run;
-    } catch (e) {
-      logger.warn(`${name} lookup failed`, { error: e instanceof Error ? e.message : String(e) });
-      return [];
-    }
-  };
-  const [articles, videos] = await Promise.all([
-    settle("wikipedia", wikipediaSearch(q)),
-    opts.youtubeApiKey ? settle("youtube", youtubeSearch(q, opts.youtubeApiKey)) : Promise.resolve([]),
-  ]);
-  const searches = EDU_SEARCHES.filter((edu) => !(videos.length && edu.name.startsWith("YouTube"))).map((edu) => ({ title: `${edu.name} for "${q}"`, url: edu.build(q) }));
-  const results = rankResults([...videos, ...articles, ...searches], opts.prefer);
+  const articles = await wikipediaSearch(q).catch((e): LookupResult[] => {
+    logger.warn("wikipedia lookup failed", { error: e instanceof Error ? e.message : String(e) });
+    return [];
+  });
+  const searches = EDU_SEARCHES.map((edu) => ({ title: `${edu.name} for "${q}"`, url: edu.build(q) }));
+  const results = rankResults([...articles, ...searches], opts.prefer);
   logger.info("lookup", { query: q, prefer: opts.prefer, results: results.length });
   return formatResults(q, results);
 }
