@@ -114,7 +114,7 @@ const server = http.createServer(async (req, res) => {
         json(res, 400, { error: "invalid query" });
         return;
       }
-      json(res, 200, { ok: true, results: await lookUp(body.query, { prefer: typeof body.prefer === "string" ? body.prefer : undefined, youtubeApiKey: cfg.youtubeApiKey }) });
+      json(res, 200, { ok: true, results: await lookUp(body.query, { prefer: typeof body.prefer === "string" ? body.prefer : undefined }) });
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/steps/plan") {
