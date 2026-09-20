@@ -470,6 +470,8 @@ export class CompanionController {
   // ---------- Offers & confirmations ----------
 
   private showOffer(offer: PendingOffer): void {
+    // A replaced offer's bubble must not linger: its buttons would act on the new offer.
+    if (this.pendingOffer) this.clearOffer();
     this.pendingOffer = offer;
     this.session.addTurn({ role: "companion", text: offer.message, at: Date.now(), kind: "offer" });
     this.showBubble({
