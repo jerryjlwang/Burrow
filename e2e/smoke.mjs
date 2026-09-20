@@ -201,6 +201,38 @@ try {
     await page.screenshot({ path: resolve(shots, "05-hint.png") });
   }
 
+  // Misconception nudge: the seasons reading embeds "closer to the sun" in the class discussion.
+  // Fresh tab = fresh TabSession, so the algebra offer's cooldown doesn't suppress the nudge.
+  {
+    const sp = await context.newPage();
+    await sp.goto(`http://localhost:${PORT}/demo/seasons.html`, { waitUntil: "load" });
+    await sp.locator("#pip-companion-host").waitFor({ state: "attached", timeout: 10000 });
+    const nudge = sp.locator(".pip-bubble");
+    await nudge.waitFor({ timeout: 20000 }).catch(() => null);
+    const nudgeText = (await nudge.count()) ? await nudge.first().textContent() : "";
+    check("misconception nudge leads with the Socratic question", /australia/i.test(nudgeText ?? ""), nudgeText || "(no bubble)");
+    await sp.screenshot({ path: resolve(shots, "11-misconception-nudge.png") });
+    if ((await nudge.count()) > 0) {
+      await sp.locator(".pip-bubble .pip-btn.primary").click();
+      await sp.evaluate(() => document.getElementById("pip-companion-host").shadowRoot.querySelector(".pip-char-btn")?.click());
+      await sp.locator(".pip-panel").waitFor({ timeout: 5000 }).catch(() => null);
+      const replied = await sp
+        .locator(".pip-msg.companion")
+        .first()
+        .waitFor({ timeout: 15000 })
+        .then(() => true)
+        .catch(() => false);
+      check("engaging the nudge starts a conversation", replied);
+    }
+    // The learner lands the corrected idea → the page's answer key confirms → success signal.
+    await sp.fill("#notes", "I think it's the tilt of Earth's axis — that's why Australia has opposite seasons.");
+    await sp.click("#save-notes");
+    const noteOk = await sp.locator("#notes-feedback.success.show").waitFor({ timeout: 5000 }).then(() => true).catch(() => false);
+    check("correct note is confirmed by the answer key (success signal for resolution)", noteOk);
+    await sp.screenshot({ path: resolve(shots, "12-misconception-resolved.png") });
+    await sp.close();
+  }
+
   // Consequential action asks for confirmation.
   await page.goto(`http://localhost:${PORT}/demo/quiz.html`, { waitUntil: "load" });
   await page.locator("#pip-companion-host").waitFor({ state: "attached", timeout: 10000 });
@@ -228,11 +260,17 @@ try {
   // Voice plumbing: with a fake mic the offscreen document, worklet and STT socket are exercised.
   // Without a Deepgram key the server rejects the session, which must surface as a friendly error.
   await inShadow(".pip-mic").click();
-  await new Promise((r) => setTimeout(r, 4000));
-  const voice = await page.evaluate(() => {
-    const sr = document.getElementById("pip-companion-host")?.shadowRoot;
-    return { status: sr?.querySelector(".pip-status")?.textContent ?? "", offline: sr?.querySelector(".pip-offline")?.textContent ?? "", bubble: sr?.querySelector(".pip-bubble")?.textContent ?? "", micOn: !!sr?.querySelector(".pip-mic.on") };
-  });
+  // First-time audio init (offscreen doc + worklet + Deepgram handshake) can take >10s cold.
+  const readVoice = () =>
+    page.evaluate(() => {
+      const sr = document.getElementById("pip-companion-host")?.shadowRoot;
+      return { status: sr?.querySelector(".pip-status")?.textContent ?? "", offline: sr?.querySelector(".pip-offline")?.textContent ?? "", bubble: sr?.querySelector(".pip-bubble")?.textContent ?? "", micOn: !!sr?.querySelector(".pip-mic.on") };
+    });
+  let voice = await readVoice();
+  for (const t0 = Date.now(); !voice.micOn && Date.now() - t0 < 25000; voice = await readVoice()) {
+    if (!realDeepgramKey && /deepgram|trouble|voice/i.test(`${voice.status} ${voice.offline} ${voice.bubble}`)) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
   if (realDeepgramKey) {
     check("voice mode starts (Deepgram configured)", voice.micOn, JSON.stringify(voice));
   } else {
@@ -248,7 +286,7 @@ try {
     await ob.locator("text=Meet the White Rabbit").waitFor({ timeout: 8000 });
     await ob.locator("button:has-text('Next')").click();
     if ((await ob.locator("button:has-text('Enable microphone')").count()) > 0) await ob.locator("button:has-text('Enable microphone')").click();
-    const granted = await ob.locator("text=Microphone enabled").waitFor({ timeout: 8000 }).then(() => true).catch(() => false);
+    const granted = await ob.locator("text=Microphone enabled").waitFor({ timeout: 25000 }).then(() => true).catch(() => false);
     check("onboarding renders and can request the microphone", granted);
     await ob.screenshot({ path: resolve(shots, "09-onboarding.png") });
     await ob.close();
