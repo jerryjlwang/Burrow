@@ -65,8 +65,11 @@ export const VIDEO_THRESHOLDS = {
   thinkingPauseMs: 8_000,
   /** …and past this the student has simply left. */
   awayMs: 300_000,
-  watchSpanS: 60,
-  watchMinChars: 240,
+  /** Pausing the student's video is the loudest thing the rabbit can do: rationed per video and spaced out. */
+  interruptsPerVideo: 2,
+  interruptGapMs: 180_000,
+  /** Heuristic notes (no model available) cover spans of about this many seconds. */
+  heuristicSpanS: 75,
 };
 
 export interface VideoSignals {
@@ -171,7 +174,8 @@ export function fmtTime(s: number): string {
   return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
 }
 
-export const RAISE_KINDS = ["prerequisite-gap", "dense", "misconception-risk", "check-understanding"] as const;
+/** "crucial" = the idea the rest of the lesson hangs on; the only kind that may earn a pause on its own. */
+export const RAISE_KINDS = ["crucial", "prerequisite-gap", "dense", "misconception-risk", "check-understanding"] as const;
 export type RaiseKind = (typeof RAISE_KINDS)[number];
 
 /** What one silent watcher pass concluded about a span. Never shown or spoken as-is. */
@@ -189,9 +193,11 @@ export interface WatchNote {
 }
 
 /** Validate a watcher model reply. Anything malformed degrades to "nothing to raise", never to speech. */
-export function parseWatchNote(raw: unknown, span: { start: number; end: number }, at: number): WatchNote | null {
+export function parseWatchNote(raw: unknown, at: number): WatchNote | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
+  const span = { start: Number(r.start), end: Number(r.end) };
+  if (!Number.isFinite(span.start) || !Number.isFinite(span.end) || span.start < 0 || span.end <= span.start) return null;
   const gist = typeof r.gist === "string" ? clean(r.gist).slice(0, 240) : "";
   if (!gist) return null;
   const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string").map(clean).filter(Boolean).slice(0, 6) : []);
@@ -199,7 +205,7 @@ export function parseWatchNote(raw: unknown, span: { start: number; end: number 
   const rr = r.raise as Record<string, unknown> | null | undefined;
   if (rr && typeof rr === "object" && typeof rr.message === "string" && clean(rr.message) && RAISE_KINDS.includes(rr.kind as RaiseKind)) {
     const salience = typeof rr.salience === "number" && Number.isFinite(rr.salience) ? Math.min(1, Math.max(0, rr.salience)) : 0;
-    raise = { kind: rr.kind as RaiseKind, message: clean(rr.message).slice(0, 160), salience, why: typeof rr.why === "string" ? clean(rr.why).slice(0, 200) : "" };
+    raise = { kind: rr.kind as RaiseKind, message: clean(rr.message).slice(0, 260), salience, why: typeof rr.why === "string" ? clean(rr.why).slice(0, 200) : "" };
   }
   return { start: span.start, end: span.end, gist, concepts: list(r.concepts), assumes: list(r.assumes), raise, at };
 }
@@ -226,30 +232,21 @@ export class WatchLog {
     return this.notes.find((n) => t >= n.start && t <= n.end) ?? null;
   }
 
-  /** For the agent prompt: what the video has covered so far, so an answer never starts from a cold frame. */
-  format(maxChars = 900): string {
-    const lines = this.notes.map((n) => `[${fmtTime(n.start)}] ${n.gist}${n.assumes.length ? ` (assumes: ${n.assumes.join(", ")})` : ""}`);
+  /** Notes with something to raise whose span playback just finished: ended within (from, to]. */
+  due(from: number, to: number): WatchNote[] {
+    return this.notes.filter((n) => n.raise && n.end > from && n.end <= to);
+  }
+
+  /** For the agent prompt: what the video has covered up to `until`, so an answer never starts from a cold frame. */
+  format(until = Infinity, maxChars = 900): string {
+    const lines = this.notes.filter((n) => n.start <= until).map((n) => `[${fmtTime(n.start)}] ${n.gist}${n.assumes.length ? ` (assumes: ${n.assumes.join(", ")})` : ""}`);
     while (lines.length > 1 && lines.join("\n").length > maxChars) lines.shift();
     return lines.join("\n").slice(0, maxChars);
   }
 }
 
-/**
- * The next span worth a silent watcher pass, or null. Runs on newly WATCHED transcript only —
- * never ahead of the student — and straight away when they replay something not yet understood.
- */
-export function nextWatchSpan(buffer: TranscriptBuffer, log: WatchLog, signals: VideoSignals): { start: number; end: number } | null {
-  if (signals.replayed && signals.replayed.times >= 2 && !log.at((signals.replayed.start + signals.replayed.end) / 2)) {
-    const span = { start: Math.max(0, signals.replayed.start - 5), end: signals.replayed.end + 5 };
-    return buffer.text(span.start, span.end).length >= 40 ? span : null;
-  }
-  const start = log.coveredUntil;
-  if (signals.t - start < VIDEO_THRESHOLDS.watchSpanS) return null;
-  const span = { start, end: signals.t };
-  return buffer.text(span.start, span.end, 100_000).length >= VIDEO_THRESHOLDS.watchMinChars ? span : null;
-}
-
-export type Surface = "silent" | "cue" | "bubble" | "speak";
+/** "interrupt" = pause the video, then speak. */
+export type Surface = "silent" | "cue" | "bubble" | "speak" | "interrupt";
 
 export interface SurfaceInput {
   note: WatchNote | null;
@@ -259,13 +256,18 @@ export interface SurfaceInput {
   cooling: boolean;
   /** The note's concepts/assumptions hit something the learner graph marks shaky or unseen. */
   learnerGap: boolean;
+  /** The student agreed to the rabbit watching along, which includes pausing for what matters most. */
+  allowPause: boolean;
+  /** Pauses left in this video's budget (and none while the last one is recent). */
+  interruptsLeft: number;
 }
 
 /**
  * Whether a private note reaches the student, and how loudly. The model's opinion alone never
  * earns an interruption: it needs corroboration from what the student DID (replays) or what we
  * KNOW about them (a graph gap). Uncorroborated notes are held for the next pause, and nothing
- * is ever spoken over a playing video.
+ * is ever spoken over a playing video. The one exception is a crucial idea: with the student's
+ * standing permission and budget left, the rabbit pauses the video itself and says it.
  */
 export function decideSurface(x: SurfaceInput): { surface: Surface; hold: boolean; reason: string } {
   if (!x.proactiveEnabled) return { surface: "silent", hold: false, reason: "proactive off" };
@@ -274,6 +276,11 @@ export function decideSurface(x: SurfaceInput): { surface: Surface; hold: boolea
   const score = Math.min(1, salience * 0.5 + x.signals.strength * 0.6 + (x.learnerGap ? 0.15 : 0));
   if (score < 0.3) return { surface: "silent", hold: false, reason: "nothing worth raising" };
   if (x.cooling) return { surface: "cue", hold: false, reason: "cooling down: glance only" };
+  if (x.note?.raise?.kind === "crucial" && salience >= 0.85) {
+    if (x.signals.paused) return { surface: "speak", hold: false, reason: "crucial, and already paused" };
+    if (x.allowPause && x.interruptsLeft > 0) return { surface: "interrupt", hold: false, reason: "crucial: worth pausing for" };
+    return { surface: "bubble", hold: false, reason: "crucial, but no leave to pause" };
+  }
   if (!observed) {
     // The model's view, or a prior from the graph — not trouble anyone has seen. A graph gap lowers
     // the bar, but either way it waits for a natural break instead of cutting into the lesson.
@@ -285,4 +292,66 @@ export function decideSurface(x: SurfaceInput): { surface: Surface; hold: boolea
   if (score < 0.5) return { surface: "cue", hold: false, reason: "corroborated but mild" };
   if (x.signals.paused && score >= 0.7) return { surface: "speak", hold: false, reason: "corroborated, strong, and the video is paused" };
   return { surface: "bubble", hold: false, reason: "corroborated" };
+}
+
+const CRUCIAL_CUE_RE = /\b(remember (this|that)|the (key|main|big) (idea|thing|point)|most important|really important|very important|never forget|don'?t forget|make sure you|this is why)\b/i;
+
+/**
+ * Notes without a model: fixed spans, the opening sentence as the gist, and a "crucial" raise only
+ * where the speaker says so themselves. Keeps the companion useful (and testable) when the LLM is off.
+ */
+export function heuristicNotes(segments: TranscriptSegment[], at: number): WatchNote[] {
+  const notes: WatchNote[] = [];
+  let group: TranscriptSegment[] = [];
+  const flush = () => {
+    if (!group.length) return;
+    const text = group.map((g) => clean(g.text)).join(" ");
+    const sentences = text.split(/(?<=[.!?])\s+/);
+    const cue = sentences.find((sentence) => CRUCIAL_CUE_RE.test(sentence));
+    notes.push({
+      start: group[0].start,
+      end: group[group.length - 1].end,
+      gist: (sentences[0] ?? text).slice(0, 240),
+      concepts: [],
+      assumes: [],
+      raise: cue ? { kind: "crucial", message: `Worth catching: ${cue.slice(0, 200)}`, salience: 0.85, why: "the speaker flagged it as important" } : null,
+      at,
+    });
+    group = [];
+  };
+  for (const seg of segments) {
+    if (group.length && seg.end - group[0].start > VIDEO_THRESHOLDS.heuristicSpanS) flush();
+    group.push(seg);
+    // End the span on the flagged sentence, so a pause lands right after it rather than a minute later.
+    if (CRUCIAL_CUE_RE.test(seg.text)) flush();
+  }
+  flush();
+  return notes;
+}
+
+/** "[m:ss] text" lines, one per ~15s, for a model to read and cite times from. */
+export function stampedTranscript(segments: TranscriptSegment[]): string {
+  const lines: string[] = [];
+  let lineStart = -Infinity;
+  for (const seg of segments) {
+    if (seg.start - lineStart >= 15) {
+      lines.push(`[${fmtTime(seg.start)}] ${clean(seg.text)}`);
+      lineStart = seg.start;
+    } else lines[lines.length - 1] += ` ${clean(seg.text)}`;
+  }
+  return lines.join("\n");
+}
+
+/** What the agent is told about the video when the student speaks. */
+export interface VideoContext {
+  t: number;
+  duration: number;
+  paused: boolean;
+  /** Transcript around the current time — what was just said. */
+  heard: string;
+  /** The rabbit's running notes on what has been covered so far. */
+  understanding: string;
+  behaviour: string[];
+  /** Whether a transcript exists at all; false means only the frame is available. */
+  hasTranscript: boolean;
 }

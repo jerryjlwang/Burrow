@@ -2,6 +2,7 @@ import { validateDecision } from "@shared/validate";
 import type { AgentDecision } from "@shared/actions";
 import type { ActionRecord, ActionResult, AgentInput, AgentOutput, PageSummary, PathContext, PendingOffer } from "@shared/types";
 import type { StepPlan } from "@shared/plan";
+import type { VideoContext } from "@shared/video";
 import { diagnose, formatDiagnostics } from "@shared/diagnostics";
 import { resourceKindOf } from "@shared/events";
 import { pickLookupResult } from "@shared/mock-agent";
@@ -39,6 +40,8 @@ export interface LoopDeps {
   onError?: (message: string) => void;
   /** Step plan for the problem on screen (if one is ready) and how far the student's working has got. */
   getPlan?: () => { plan: StepPlan | null; planStep: number | null };
+  /** The video being watched, as the rabbit has followed it, and a way to grab the exact frame on screen. */
+  getVideo?: () => { context: VideoContext; frame: () => string | null } | null;
   /** A learning hint was just given on the problem on screen. */
   onHint?: () => void;
 }
@@ -119,6 +122,7 @@ export class AgentLoop {
     const learner = formatDiagnostics(diagnose(session.graph, Date.now()));
     if (opts.resume?.lastReferencedElementName) this.lastReferencedElementName = opts.resume.lastReferencedElementName;
     const taskType = classifyTask(utterance, store.getState().page);
+    let firstStep = true;
     session.updateStudent({ currentGoal: goal });
     store.setState({ busy: true, characterState: "thinking", status: "Thinking…", debug: { ...store.getState().debug, goal, loopStep: step, lastTranscript: utterance } });
     logger.info("run", { utterance, source: opts.source, resume: !!opts.resume, taskType });
@@ -138,6 +142,8 @@ export class AgentLoop {
           const byName = this.lastReferencedElementName ? page.elements.find((e) => e.name === this.lastReferencedElementName) : undefined;
           this.lastReferencedElementId = byName?.id ?? null;
         }
+        const video = this.deps.getVideo?.() ?? null;
+        const frame = video && firstStep && !this.pendingScreenshot && taskType !== "navigation" && taskType !== "administrative" ? video.frame() : null;
         const input: AgentInput = {
           utterance,
           goal,
@@ -148,7 +154,11 @@ export class AgentLoop {
           student: session.student,
           pendingOffer,
           lastReferencedElementId: this.lastReferencedElementId,
-          screenshot: this.pendingScreenshot,
+          // On a video the rabbit already has eyes: the frame rides along with the first step, so there is no "let me look" round trip.
+          // An explicit observe:screenshot stays a viewport capture — its pixels are click coordinates, a video frame's are not.
+          screenshot: this.pendingScreenshot ?? frame,
+          screenshotIsVideoFrame: !this.pendingScreenshot && !!frame,
+          video: video?.context ?? null,
           lookupResults: this.pendingLookup,
           planResults: this.pendingPlan,
           readout: this.pendingReadout,
@@ -159,6 +169,7 @@ export class AgentLoop {
           maxSteps: maxStep,
           resumedAfterNavigation: !!opts.resume && step === (opts.resume?.step ?? 0),
         };
+        firstStep = false;
         this.pendingScreenshot = null;
         this.pendingLookup = null;
         this.pendingPlan = null;
@@ -222,7 +233,7 @@ export class AgentLoop {
             this.say("Okay, I'll leave it. It's right here when you're ready.");
             break;
           }
-        } else if (decision.say) {
+        } else if (decision.say && decision.action !== "observe") {
           // Speak alongside the action (e.g. "Yep." while clicking, or the hint while pointing).
           this.say(decision.say);
         }

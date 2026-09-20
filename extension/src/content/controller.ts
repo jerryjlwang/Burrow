@@ -7,16 +7,19 @@ import { parseSketch } from "@shared/sketch";
 import { planStepSuggestion } from "@shared/path";
 import type { PlanRoute } from "./store";
 import { classifyTask } from "../actions/policy";
+import { quoteRegion } from "../actions/inspect";
 import { ElementRegistry } from "../page-understanding/registry";
-import { extractPage } from "../page-understanding/extract";
+import { extractPage, HOST_ID } from "../page-understanding/extract";
 import { PageWatcher, type ChangeReason } from "../page-understanding/watcher";
 import { OverlayController } from "../actions/overlay";
 import { AgentLoop } from "../agent/loop";
 import { Session } from "../agent/session";
 import { SignalTracker } from "../proactive/signals";
 import { ProactiveEngine } from "../proactive/engine";
+import { VideoCompanion } from "../proactive/video-companion";
 import { VoiceController } from "../voice/controller";
 import { store, type Bubble } from "./store";
+import { BubbleQueue } from "./bubbles";
 import { getSettings, onSettingsChange, setSettings, type Settings } from "../shared/settings";
 import { sendToBackground, isExtensionContextValid, type ContentBroadcast } from "../shared/messages";
 import { log, onLog, setDebugLogging } from "../shared/logger";
@@ -33,6 +36,8 @@ export class CompanionController {
   readonly loop: AgentLoop;
   readonly voice: VoiceController;
   readonly engine: ProactiveEngine;
+  readonly video: VideoCompanion;
+  private readonly bubbles = new BubbleQueue({ get: () => store.getState().bubble, set: (bubble) => store.setState({ bubble }) });
   private readonly extractor = new HeuristicConceptExtractor();
   /** Topic signature of the last page scheduled for extraction, to skip SPA mutations that change nothing. */
   private extractSig = "";
@@ -93,10 +98,17 @@ export class CompanionController {
             return { ok: false, error: String(e) };
           }
         },
-        sketch: (spec) => {
+        sketch: (spec, opts) => {
           const sk = parseSketch(spec);
           if (!sk.items.length) return;
-          store.setState({ board: { id: `${Date.now()}`, title: sk.title, items: sk.items }, planView: null });
+          const anchor = opts?.elementId != null ? this.registry.get(opts.elementId) : opts?.quote ? quoteRegion(document.body, opts.quote, HOST_ID, { grow: false }) : null;
+          const prev = store.getState().board;
+          if (opts?.add && prev) {
+            // Extend the drawing on screen: same board id so the reveal continues, not restarts.
+            store.setState({ board: { ...prev, title: sk.title ?? prev.title, items: [...prev.items, ...sk.items].slice(0, 48), anchor: anchor ?? prev.anchor }, planView: null });
+            return;
+          }
+          store.setState({ board: { id: `${Date.now()}`, title: sk.title, items: sk.items, anchor }, planView: null });
         },
         goBack: async () => {
           try {
@@ -117,6 +129,21 @@ export class CompanionController {
       onError: (message) => this.showAgentError(message),
       getPlan: () => this.engine.planContext,
       onHint: () => this.engine.notePlanEngaged(),
+      getVideo: () => {
+        const context = this.video.context();
+        return context ? { context, frame: () => this.video.watcher.frame() } : null;
+      },
+    });
+    this.video = new VideoCompanion({
+      session: this.session,
+      isBusy: () => this.loop.running || this.pendingConfirmation !== null || this.pendingOffer !== null || this.voice.speaking,
+      speak: (text) => this.voice.speak(text),
+      stopSpeaking: () => this.voice.stopSpeaking(),
+      showBubble: (bubble) => this.showBubble(bubble),
+      clearBubble: (id) => this.bubbles.clear((b) => b.id === id),
+      onOffer: (offer) => this.showOffer(offer),
+      explain: (goal) => void this.loop.run("Tell me more", { source: "proactive", goal }),
+      updateSetting: (patch) => this.updateSetting(patch),
     });
     this.engine = new ProactiveEngine({
       tracker: this.tracker,
@@ -126,7 +153,8 @@ export class CompanionController {
       watcher: this.watcher,
       getPage: () => this.page,
       refreshPage: () => this.observe(),
-      isBusy: () => this.loop.running || this.pendingConfirmation !== null || this.voice.speaking,
+      // A playing video has the student's attention: over it, only the video companion's own gate may surface anything.
+      isBusy: () => this.loop.running || this.pendingConfirmation !== null || this.voice.speaking || this.video.watcher.playing,
       speak: (text) => this.voice.speak(text),
       onOffer: (offer) => this.showOffer(offer),
       onPlanProgress: () => this.refreshPlanView(),
@@ -166,6 +194,7 @@ export class CompanionController {
     this.extractToGraph(this.observe());
     this.watcher.start();
     this.engine.start();
+    this.video.watcher.refresh();
     void this.voice.refreshStatus();
     void this.checkServer();
 
@@ -212,6 +241,8 @@ export class CompanionController {
     if (this.extractTimer) window.clearTimeout(this.extractTimer);
     this.watcher.stop();
     this.engine.stop();
+    this.video.stop();
+    this.bubbles.dispose();
     this.overlay.clear();
     this.loop.cancel();
   }
@@ -243,6 +274,7 @@ export class CompanionController {
     if (reason === "url") this.overlay.clear();
     this.extractToGraph(page);
     this.engine.onPageChange(page, reason);
+    this.video.watcher.refresh();
   }
 
   /**
@@ -251,7 +283,7 @@ export class CompanionController {
    * extraction per topic the learner settles on — the main cost lever for the LLM path.
    */
   private extractToGraph(page: PageSummary): void {
-    const sig = `${page.title} ${page.headings.join("|")}`;
+    const sig = `${page.title}\0${page.headings.join("|")}`;
     if (sig === this.extractSig) return;
     this.extractSig = sig;
     const input = pageToExtractionInput(page);
@@ -359,6 +391,14 @@ export class CompanionController {
       this.resolveConfirmation(false);
     }
 
+    // A spoken yes/no answers a bubble that carries its own buttons (watch-along consent, a video pause).
+    const asking = store.getState().bubble;
+    if (asking?.onAction && yesNo && !this.pendingConfirmation) {
+      this.session.addTurn({ role: "user", text, at: Date.now() });
+      this.bubbleAction(yesNo === "yes" ? "accept" : "decline");
+      return;
+    }
+
     if (isStopCommand(text)) {
       this.voice.stopSpeaking();
       this.loop.cancel();
@@ -453,7 +493,7 @@ export class CompanionController {
 
   private clearOffer(): void {
     this.pendingOffer = null;
-    store.setState((s) => (s.bubble?.kind === "offer" ? { bubble: null } : {}));
+    this.bubbles.clear((b) => b.kind === "offer" && !b.onAction);
   }
 
   confirm(message: string): Promise<boolean> {
@@ -479,13 +519,18 @@ export class CompanionController {
     if (!pc) return;
     this.pendingConfirmation = null;
     window.clearTimeout(pc.timer);
-    store.setState((s) => (s.bubble?.id === pc.id ? { bubble: null } : {}));
+    this.bubbles.clear((b) => b.id === pc.id);
     pc.resolve(yes);
   }
 
   bubbleAction(value: "accept" | "decline" | "dismiss" | "open"): void {
     const bubble = store.getState().bubble;
     if (!bubble) return;
+    if (bubble.onAction) {
+      bubble.onAction(value);
+      this.bubbles.clear((b) => b.id === bubble.id);
+      return;
+    }
     if (bubble.kind === "confirmation") {
       if (value === "accept") this.resolveConfirmation(true);
       else this.resolveConfirmation(false);
@@ -501,15 +546,11 @@ export class CompanionController {
       return;
     }
     if (value === "open") void sendToBackground({ type: "open.onboarding" }).catch(() => undefined);
-    store.setState({ bubble: null });
+    this.bubbles.clear((b) => b.id === bubble.id);
   }
 
   showBubble(bubble: Bubble): void {
-    store.setState({ bubble });
-    if (bubble.expiresAt) {
-      const ttl = bubble.expiresAt - Date.now();
-      window.setTimeout(() => store.setState((s) => (s.bubble?.id === bubble.id ? { bubble: null } : {})), Math.max(500, ttl));
-    }
+    this.bubbles.show(bubble);
   }
 
   private celebrate(say: string | null): void {

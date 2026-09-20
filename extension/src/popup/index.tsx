@@ -74,6 +74,9 @@ function Popup() {
         <input type="checkbox" checked={settings.proactiveEnabled} onChange={(e) => void update({ proactiveEnabled: e.target.checked })} /> Notice when I'm stuck and offer help
       </label>
       <label className="t">
+        <input type="checkbox" checked={settings.videoCompanion === "on"} onChange={(e) => void update({ videoCompanion: e.target.checked ? "on" : "off" })} /> Watch videos along with me (may pause for what really matters)
+      </label>
+      <label className="t">
         <input type="checkbox" checked={settings.ttsEnabled} onChange={(e) => void update({ ttsEnabled: e.target.checked })} /> Speak replies out loud
       </label>
       <label className="t">

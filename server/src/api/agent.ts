@@ -12,6 +12,9 @@ import { log } from "../util/logger";
 
 const logger = log("agent");
 
+/** Whether a decision was made with the video in view: position, transcript, and the frame. */
+const videoLog = (input: AgentInput) => (input.video ? { videoAt: Math.round(input.video.t), transcript: input.video.hasTranscript, frame: !!input.screenshot } : {});
+
 export class AgentService {
   readonly primary: AgentProvider;
   readonly fallback = new MockProvider();
@@ -42,7 +45,7 @@ export class AgentService {
         }
         if (v.ok) {
           const decision = await this.enforceNoLeak(v.decision, input);
-          logger.info("decide", { provider: this.primary.name, action: decision.action, elementId: decision.elementId, ms: Date.now() - started, utterance: input.utterance.slice(0, 80) });
+          logger.info("decide", { provider: this.primary.name, action: decision.action, elementId: decision.elementId, ms: Date.now() - started, utterance: input.utterance.slice(0, 80), ...videoLog(input) });
           return { decision, provider: this.primary.name, degraded: false, latencyMs: Date.now() - started, taskType: decision.taskType };
         }
         logger.warn("primary decision still invalid; answering honestly", { error: v.error });
@@ -70,7 +73,7 @@ export class AgentService {
     const decision = v.ok
       ? v.decision
       : { ...DECISION_DEFAULTS, action: "speak" as const, say: "I'm having trouble thinking right now. Try me again in a moment.", taskType: "chat" as const, reason: "fallback", done: true };
-    logger.info("decide", { provider: "mock", action: decision.action, elementId: decision.elementId, ms: Date.now() - started, utterance: input.utterance.slice(0, 80) });
+    logger.info("decide", { provider: "mock", action: decision.action, elementId: decision.elementId, ms: Date.now() - started, utterance: input.utterance.slice(0, 80), ...videoLog(input) });
     return { decision, provider: "mock", degraded: false, latencyMs: Date.now() - started, taskType: decision.taskType };
   }
 

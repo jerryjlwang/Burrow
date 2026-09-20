@@ -28,10 +28,12 @@ export function regionText(el: Element): string {
 }
 
 /**
- * The element whose text contains the quote, grown to a container with enough context to be worth
- * reading. Null when the quote is nowhere under `root` — the caller reports that honestly.
+ * The element whose text contains the quote. For reading (the default) it grows to a container
+ * with enough context to be worth reading; `grow: false` returns the tightest containing element,
+ * which is what wrapping a drawing onto the quote wants. Null when the quote is nowhere under
+ * `root` — the caller reports that honestly.
  */
-export function quoteRegion(root: Element, quote: string, skipId?: string): Element | null {
+export function quoteRegion(root: Element, quote: string, skipId?: string, opts: { grow?: boolean } = {}): Element | null {
   const nodes = textNodesUnder(root, skipId);
   let joined = "";
   const starts: number[] = [];
@@ -42,7 +44,7 @@ export function quoteRegion(root: Element, quote: string, skipId?: string): Elem
   const span = quoteSpan(joined, quote);
   if (span) {
     for (let i = nodes.length - 1; i >= 0; i--) {
-      if (span.start >= starts[i]) return growRegion(nodes[i].parentElement, root);
+      if (span.start >= starts[i]) return opts.grow === false ? nodes[i].parentElement : growRegion(nodes[i].parentElement, root);
     }
   }
   // The student's own working lives in field values, not text nodes.

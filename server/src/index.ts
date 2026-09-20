@@ -8,6 +8,7 @@ import { ExtractService } from "./api/extract";
 import { lookUp } from "./api/lookup";
 import { InkService } from "./api/ink";
 import { StepService, type JudgeRequest, type PlanRequest } from "./api/steps";
+import { VideoService, type VideoAnalyzeRequest } from "./api/video";
 import { OpenAIProvider } from "./agent/openai";
 import { attachSttSession } from "./voice/stt";
 import { attachTtsSession } from "./voice/tts";
@@ -20,7 +21,9 @@ import type { InkJudgeInput } from "@shared/ink";
 const logger = log("server");
 const here = dirname(fileURLToPath(import.meta.url));
 const cfg = loadConfig();
-const steps = new StepService(cfg.llmProvider === "openai" ? new OpenAIProvider({ apiKey: cfg.llmApiKey, model: cfg.llmModel, effort: cfg.llmEffort }) : null);
+const llm = cfg.llmProvider === "openai" ? new OpenAIProvider({ apiKey: cfg.llmApiKey, model: cfg.llmModel, effort: cfg.llmEffort }) : null;
+const steps = new StepService(llm);
+const video = new VideoService(llm, cfg.transcriptApiKey);
 const agent = new AgentService(cfg, steps);
 const extract = new ExtractService(cfg);
 const ink = new InkService(cfg);
@@ -67,7 +70,7 @@ const server = http.createServer(async (req, res) => {
   }
   try {
     if (req.method === "GET" && url.pathname === "/health") {
-      json(res, 200, { ok: true, version: VERSION, llm: agent.providerName, deepgram: !!cfg.deepgramApiKey, demoMode: cfg.demoMode, ink: ink.providerName, tts: { model: cfg.ttsModel, speed: cfg.ttsSpeed, expressivity: cfg.ttsExpressivity }, stt: cfg.sttModel });
+      json(res, 200, { ok: true, version: VERSION, llm: agent.providerName, deepgram: !!cfg.deepgramApiKey, demoMode: cfg.demoMode, ink: ink.providerName, transcripts: video.transcriptsEnabled, tts: { model: cfg.ttsModel, speed: cfg.ttsSpeed, expressivity: cfg.ttsExpressivity }, stt: cfg.sttModel });
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/agent/decide") {
@@ -122,6 +125,15 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       json(res, 200, await steps.judge(body));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/video/analyze") {
+      const body = (await readJson(req)) as VideoAnalyzeRequest;
+      if (!body || typeof body.url !== "string" || !/^https?:\/\//.test(body.url)) {
+        json(res, 400, { error: "invalid input" });
+        return;
+      }
+      json(res, 200, await video.analyze(body));
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/extract") {

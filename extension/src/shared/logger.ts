@@ -1,4 +1,4 @@
-export type LogNamespace = "page" | "agent" | "action" | "voice" | "proactive" | "character" | "bg" | "offscreen" | "ui" | "session" | "tablet";
+export type LogNamespace = "page" | "agent" | "action" | "voice" | "proactive" | "video" | "character" | "bg" | "offscreen" | "ui" | "session" | "tablet";
 
 const SENSITIVE_KEY = /pass(word)?|token|secret|api[-_]?key|card|cvv|cvc|ssn|otp|auth[-_]?code|pin/i;
 
@@ -39,6 +39,7 @@ const COLORS: Record<LogNamespace, string> = {
   action: "#f59e0b",
   voice: "#10b981",
   proactive: "#ec4899",
+  video: "#ef4444",
   character: "#8b5cf6",
   bg: "#64748b",
   offscreen: "#14b8a6",

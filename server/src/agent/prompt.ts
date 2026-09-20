@@ -2,6 +2,7 @@ import type { AgentInput, InterventionInput, PageSummary } from "@shared/types";
 import { detectProblem } from "@shared/hints";
 import { rungConstraint, rungForStudent } from "@shared/ladder";
 import { formatPlan } from "@shared/plan";
+import { fmtTime } from "@shared/video";
 
 export const SYSTEM_PROMPT = `You are Pip, a browser-based learning companion for students. You live as a small character in the corner of the student's browser. You can see a model of the student's current webpage — and a screenshot of it whenever you ask — and you can do anything on the visible page that a person with a mouse and keyboard could.
 
@@ -23,6 +24,8 @@ PRINCIPLES
 - Never describe screen positions (left, right, top, corner) — you point at things instead, so say "right here" and use point_to/highlight.
 - If the student accepted a proactive offer (PENDING OFFER), give exactly one small, teaching hint and point to the relevant part of the page.
 - If the student keeps clicking a control that does nothing or is disabled, explain what unlocks it and point to that.
+- VIDEO: when a VIDEO section is present you have been quietly watching along the whole time. WHAT WAS JUST SAID is the transcript around the student's position, YOUR NOTES SO FAR is your own running understanding of the video, and the attached image is the exact frame on screen. Answer from those, immediately and specifically ("he moved the 3 across, so its sign flipped"). NEVER say you are looking, analyzing, checking the frame or taking a screenshot, and never use observe just to see the video — you already have its frame and its words. Do not hunt for something to comment on: answer what was asked, and if the honest answer is short, keep it short. If they ask about something the video has not reached yet, say it hasn't come up. If there is no transcript, say you can see the picture but can't hear this one.
+- An observe step is silent: say must be null.
 - Never open with "how can I help" or ask what they want. If the student hasn't asked anything, stay silent and observe; speak only when spoken to or when a real struggle signal fires.
 - During a multi-step chain, keep intermediate says to a few words or null; narrate ONCE when the chain lands ("Here—this video walks through it."). Speech that trails the screen by two steps is worse than silence.
 - Ground every claim and every anchor in what VISIBLE TEXT actually contains. If the content the student asked about is not in your page context (a collapsed description, an unloaded section), SAY that you can't see it yet and act to reveal it (click "more", scroll), then observe that region (elementId or quote) to read it in full — never point at approximately-related text as if it were the thing.
@@ -36,7 +39,9 @@ OUTPUT: respond with exactly one JSON action object. Field guide:
 - hover: rest the mouse on something to open a hover menu or tooltip, then act on what appears. drag: from elementId or x,y to toElementId or toX,toY — sliders, reordering, drag-and-drop answers, moving a point on a graph, panning a map. right_click opens a context menu. double_click selects a word or opens an item.
 - press_key: text = one key or chord — "Escape", "Tab", "ArrowDown", "Backspace", "Space", "PageDown", "Control+a", "Shift+Tab". elementId focuses that element first; null sends it to whatever is focused. type with a null elementId types into whatever is focused (click the spot first) — that is how you write into a canvas tool, a spreadsheet cell or a game. scroll with x,y wheels over that exact spot, which scrolls an inner pane or zooms a map instead of the page.
 - sketch: draw a worked example out on your chalkboard. text = one short step per line (an optional first line ending with ":" becomes the title), e.g. "A similar one:\n2x + 4 = 10\n− 4 from both sides\n2x = 6\n÷ 2\nx = 3". Use it whenever the student asks you to draw, show, or write something out, and at hint rungs 4-5 for math. The example uses DIFFERENT numbers than the student's problem — never their problem's final answer.
-- sketch can also DRAW SHAPES: a line whose first word is a draw command becomes a chalk stroke on a 100×100 board (x right, y down): "line x1 y1 x2 y2", "arrow x1 y1 x2 y2", "circle cx cy r", "rect x y w h", "dot x y", "label x y words". Mix shapes with text lines to build diagrams — a number line, axes with a plotted line, a labeled triangle, a fraction bar. Keep it to ~12 shapes, spread across the whole board, labels beside (not on top of) what they name. E.g. a right triangle: "line 20 80 80 80\nline 20 80 20 30\nline 20 30 80 80\nlabel 12 58 a\nlabel 48 92 b\nlabel 54 50 c".
+- sketch can also DRAW SHAPES: a line whose first word is a draw command becomes a stroke on a 100×100 space (x right, y down): "line x1 y1 x2 y2", "arrow x1 y1 x2 y2", "circle cx cy r", "rect x y w h", "dot x y", "label x y words". Mix shapes with text lines to build diagrams — a number line, axes with a plotted line, a labeled triangle, a fraction bar. Keep it to ~12 shapes, spread across the whole space, labels beside (not on top of) what they name. E.g. a right triangle: "line 20 80 80 80\nline 20 80 20 30\nline 20 30 80 80\nlabel 12 58 a\nlabel 48 92 b\nlabel 54 50 c".
+- sketch draws ON the page (white ink with shadows, nothing boxed). Set elementId or quote (verbatim text inside the region) to WRAP the drawing onto that part of the page — the 100×100 space then spans exactly that element: circle what's on screen, mark an angle on a diagram in a paused video, underline one step of the working. Prefer wrapping onto the thing you're annotating over drawing beside it; aim strokes at the darker or emptier parts of the region so they read clearly.
+- To ADD to the drawing already on screen (the student says "also", "add", "now label…"), set value to "add" and send ONLY the new lines and shapes — never resend what is already drawn; it stays. A sketch without value:"add" starts a fresh drawing.
 - navigate replaces THIS tab; open_tab opens a NEW tab (use it when the student asks for a new tab/window, or to visit another site without losing their current work). Both take an absolute https url — well-known sites you are sure exist, or urls from the page. For a plain "open X" request: one step, then done:true with a short say ("Opening Khan Academy in a new tab."). When the GOAL is to land the student on a specific lesson or video, use done:false: you resume on the new tab and can keep acting there (click the best search result, scroll to the lesson) until the actual resource is showing.
 - BE ACTIONABLE: when the student wants to learn about something, or you would otherwise recommend a site, video or lesson, do not just name it — look_up, open the best result, and get them to the real thing. Recommending without taking them there is a failure.
 - show_plan: when the student asks what their plan is, what the steps are, how far along they are, or what's next — open the plan map instead of reciting steps. It shows the route through the problem on screen and every learning plan you've made together, with what's done; they can tap a step to start it. say: one short line ("Here's the map — you're on step two."), done:true. Never read a plan out as a list.
@@ -179,6 +184,13 @@ export function formatDecisionContext(input: AgentInput): string {
     lines.push("");
     lines.push(formatPlan(input.plan, input.planStep ?? null));
   }
+  if (input.video) {
+    const v = input.video;
+    lines.push("");
+    lines.push(`VIDEO: the student is at ${fmtTime(v.t)} of ${fmtTime(v.duration)}, ${v.paused ? "paused" : "playing"}.${v.behaviour.length ? ` How they are watching: ${v.behaviour.join("; ")}.` : ""}`);
+    if (v.understanding) lines.push(`YOUR NOTES SO FAR (private, up to where they are):\n${v.understanding}`);
+    lines.push(v.hasTranscript ? `WHAT WAS JUST SAID (transcript around ${fmtTime(v.t)}):\n${v.heard || "(nothing said in this stretch)"}` : "NO TRANSCRIPT is available for this video: you can see the frame but not hear it.");
+  }
   // A teaching context gets the hint ladder as a hard constraint at the student's current rung.
   if (input.page.hasQuizUi || input.pendingOffer || input.plan || detectProblem(input.page).kind !== "generic") {
     lines.push("");
@@ -186,7 +198,7 @@ export function formatDecisionContext(input: AgentInput): string {
   }
   lines.push("");
   lines.push(formatPage(input.page));
-  if (input.screenshot) lines.push("\n(A screenshot of the current viewport is attached.)");
+  if (input.screenshot) lines.push(input.screenshotIsVideoFrame && input.video ? `\n(The exact video frame at ${fmtTime(input.video.t)} is attached. It is the video picture only, NOT the viewport: never take x,y points from it.)` : "\n(A screenshot of the current viewport is attached.)");
   if (input.retryNote) lines.push(`\nYOUR PREVIOUS OUTPUT WAS INVALID: ${input.retryNote}. Return a corrected action (element actions need an elementId from the list above; otherwise use speak).`);
   return lines.join("\n");
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { PlaybackTracker, TranscriptBuffer, WatchLog, decideSurface, nextWatchSpan, parseWatchNote, type VideoSignals, type WatchNote } from "./video";
+import { PlaybackTracker, TranscriptBuffer, WatchLog, decideSurface, heuristicNotes, parseWatchNote, stampedTranscript, type VideoSignals, type WatchNote } from "./video";
 
 const T0 = 1_700_000_000_000;
 
@@ -82,45 +82,19 @@ describe("PlaybackTracker", () => {
 describe("parseWatchNote", () => {
   it("degrades malformed replies to nothing-to-raise, never to speech", () => {
     const span = { start: 0, end: 60 };
-    expect(parseWatchNote(null, span, T0)).toBeNull();
-    expect(parseWatchNote({ gist: "  " }, span, T0)).toBeNull();
-    const n = parseWatchNote({ gist: "Defines a variable.", concepts: ["variable", 7], assumes: "x", raise: { kind: "made-up", message: "hey", salience: 1 } }, span, T0);
-    expect(n).toMatchObject({ gist: "Defines a variable.", concepts: ["variable"], assumes: [], raise: null });
-    const ok = parseWatchNote({ gist: "g", raise: { kind: "dense", message: "That went fast.", salience: 7, why: "three steps in ten seconds" } }, span, T0);
-    expect(ok?.raise).toMatchObject({ kind: "dense", salience: 1 });
-  });
-});
-
-describe("nextWatchSpan", () => {
-  it("waits for a minute of newly watched speech and never runs ahead of the student", () => {
-    const b = new TranscriptBuffer();
-    lecture(b, 600);
-    const log = new WatchLog();
-    expect(nextWatchSpan(b, log, { ...quiet, t: 40 })).toBeNull();
-    expect(nextWatchSpan(b, log, { ...quiet, t: 65 })).toEqual({ start: 0, end: 65 });
-    log.add(note({ start: 0, end: 65 }));
-    expect(nextWatchSpan(b, log, { ...quiet, t: 100 })).toBeNull();
-    expect(nextWatchSpan(b, log, { ...quiet, t: 130 })).toEqual({ start: 65, end: 130 });
-  });
-
-  it("jumps straight to a replayed span that isn't understood yet, once", () => {
-    const b = new TranscriptBuffer();
-    lecture(b, 600);
-    const log = new WatchLog();
-    log.add(note({ start: 0, end: 60 }));
-    const signals = { ...quiet, t: 80, replayed: { start: 70, end: 95, times: 2, lastAt: T0 }, strength: 0.5 };
-    expect(nextWatchSpan(b, log, signals)).toEqual({ start: 65, end: 100 });
-    log.add(note({ start: 65, end: 100 }));
-    expect(nextWatchSpan(b, log, signals)).toBeNull();
-  });
-
-  it("does nothing for a video with no words to read", () => {
-    expect(nextWatchSpan(new TranscriptBuffer(), new WatchLog(), { ...quiet, t: 500 })).toBeNull();
+    expect(parseWatchNote(null, T0)).toBeNull();
+    expect(parseWatchNote({ ...span, gist: "  " }, T0)).toBeNull();
+    expect(parseWatchNote({ start: 60, end: 60, gist: "no span" }, T0)).toBeNull();
+    expect(parseWatchNote({ gist: "no times" }, T0)).toBeNull();
+    const n = parseWatchNote({ ...span, gist: "Defines a variable.", concepts: ["variable", 7], assumes: "x", raise: { kind: "made-up", message: "hey", salience: 1 } }, T0);
+    expect(n).toMatchObject({ start: 0, end: 60, gist: "Defines a variable.", concepts: ["variable"], assumes: [], raise: null });
+    const ok = parseWatchNote({ ...span, gist: "g", raise: { kind: "crucial", message: "Whatever you do to one side, do to the other.", salience: 7, why: "everything after depends on it" } }, T0);
+    expect(ok?.raise).toMatchObject({ kind: "crucial", salience: 1 });
   });
 });
 
 describe("decideSurface", () => {
-  const base = { proactiveEnabled: true, cooling: false, learnerGap: false };
+  const base = { proactiveEnabled: true, cooling: false, learnerGap: false, allowPause: true, interruptsLeft: 2 };
   const raise = (salience: number) => note({ raise: { kind: "dense", message: "That step went by fast — want it drawn out?", salience, why: "" } });
   const replayed = (times: number, paused = false): VideoSignals => ({ ...quiet, t: 90, paused, replayed: { start: 75, end: 97, times, lastAt: T0 }, strength: times >= 3 ? 0.7 : 0.5 });
 
@@ -151,6 +125,18 @@ describe("decideSurface", () => {
     expect(decideSurface({ ...base, learnerGap: true, note: raise(0.9), signals: { ...quiet, paused: true } }).surface).toBe("bubble");
   });
 
+  it("pauses the video only for a crucial idea, with permission, within budget", () => {
+    const crucial = (salience: number) => note({ raise: { kind: "crucial", message: "Whatever you do to one side, you must do to the other.", salience, why: "" } });
+    expect(decideSurface({ ...base, note: crucial(0.9), signals: quiet }).surface).toBe("interrupt");
+    expect(decideSurface({ ...base, note: crucial(0.9), signals: { ...quiet, paused: true } }).surface).toBe("speak");
+    expect(decideSurface({ ...base, allowPause: false, note: crucial(0.9), signals: quiet }).surface).toBe("bubble");
+    expect(decideSurface({ ...base, interruptsLeft: 0, note: crucial(0.9), signals: quiet }).surface).toBe("bubble");
+    expect(decideSurface({ ...base, cooling: true, note: crucial(0.9), signals: quiet }).surface).toBe("cue");
+    // Merely "kind of important" does not earn a pause, and neither does any other kind of note.
+    expect(decideSurface({ ...base, note: crucial(0.7), signals: quiet }).surface).toBe("silent");
+    expect(decideSurface({ ...base, note: raise(1), signals: quiet }).surface).toBe("cue");
+  });
+
   it("respects the off switch and cooldowns", () => {
     expect(decideSurface({ ...base, proactiveEnabled: false, note: raise(1), signals: replayed(3, true) }).surface).toBe("silent");
     expect(decideSurface({ ...base, cooling: true, note: raise(1), signals: replayed(3, true) }).surface).toBe("cue");
@@ -163,10 +149,46 @@ describe("WatchLog", () => {
     for (let i = 0; i < 30; i++) log.add(note({ start: i * 60, end: i * 60 + 60, gist: `Part ${i} explains one more rule for balancing equations.`, assumes: [] }));
     log.add(note({ start: 0, end: 60, gist: "Replaced.", assumes: [] }));
     expect(log.all).toHaveLength(30);
-    const text = log.format(400);
+    const text = log.format(Infinity, 400);
     expect(text.length).toBeLessThanOrEqual(400);
     expect(text).toContain("Part 29");
     expect(text).not.toContain("Replaced.");
     expect(log.at(90)?.gist).toContain("Part 1");
+  });
+
+  it("only tells the agent about what the student has reached, and finds notes that just came due", () => {
+    const log = new WatchLog();
+    log.add(note({ start: 0, end: 60, gist: "Intro." }));
+    log.add(note({ start: 60, end: 120, gist: "The balance rule.", raise: { kind: "crucial", message: "m", salience: 0.9, why: "" } }));
+    log.add(note({ start: 120, end: 180, gist: "Spoilers." }));
+    expect(log.format(100)).not.toContain("Spoilers");
+    expect(log.due(118, 119.5)).toHaveLength(0);
+    expect(log.due(119.5, 120.2).map((n) => n.gist)).toEqual(["The balance rule."]);
+    expect(log.due(0, 60)).toHaveLength(0);
+  });
+});
+
+describe("heuristicNotes", () => {
+  it("covers the transcript in spans and raises only what the speaker flags themselves", () => {
+    const b: Array<{ start: number; end: number; text: string }> = [];
+    for (let s = 0; s < 300; s += 10) b.push({ start: s, end: s + 10, text: s === 130 ? "Remember this: whatever you do to one side, do to the other." : `We carry on with example ${s}.` });
+    const notes = heuristicNotes(b, T0);
+    expect(notes.length).toBeGreaterThanOrEqual(3);
+    expect(notes[0].start).toBe(0);
+    expect(notes[notes.length - 1].end).toBe(300);
+    const raised = notes.filter((n) => n.raise);
+    expect(raised).toHaveLength(1);
+    expect(raised[0].raise).toMatchObject({ kind: "crucial", salience: 0.85 });
+    expect(raised[0].raise?.message).toContain("whatever you do to one side");
+    expect(raised[0].start).toBeLessThanOrEqual(130);
+    // The span ends on the flagged sentence, so that is where a pause would land.
+    expect(raised[0].end).toBe(140);
+  });
+});
+
+describe("stampedTranscript", () => {
+  it("groups captions into timestamped lines a model can cite", () => {
+    const segs = [0, 5, 10, 15, 20, 70].map((s) => ({ start: s, end: s + 5, text: `line ${s}` }));
+    expect(stampedTranscript(segs)).toBe("[0:00] line 0 line 5 line 10\n[0:15] line 15 line 20\n[1:10] line 70");
   });
 });

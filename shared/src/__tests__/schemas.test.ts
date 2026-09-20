@@ -94,3 +94,14 @@ describe("observe region targets", () => {
     expect(v.ok && v.decision.quote).toBe("the description");
   });
 });
+
+describe("sketch modes", () => {
+  it("keeps quote (anchor) and normalizes value to add-or-null on sketch", () => {
+    const add = validateDecision({ action: "sketch", text: "rect 20 72 8 8", value: "add", quote: "3x + 5 = 20", line: 2, reason: "r" });
+    expect(add.ok && add.decision.value).toBe("add");
+    expect(add.ok && add.decision.quote).toBe("3x + 5 = 20");
+    expect(add.ok && add.decision.line).toBeNull();
+    const fresh = validateDecision({ action: "sketch", text: "dot 5 5", value: "replace", reason: "r" });
+    expect(fresh.ok && fresh.decision.value).toBeNull();
+  });
+});

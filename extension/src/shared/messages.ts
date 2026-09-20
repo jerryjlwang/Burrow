@@ -4,6 +4,7 @@ import type { GraphSnapshot } from "@shared/graph";
 import type { LearnerEvent } from "@shared/events";
 import type { StepPlan } from "@shared/plan";
 import type { WorkingJudgement } from "@shared/steps";
+import type { TranscriptSegment, WatchNote } from "@shared/video";
 import type { KeyChord } from "@shared/keys";
 import type { InkJudgement } from "@shared/ink";
 import type { Settings } from "./settings";
@@ -106,6 +107,7 @@ export type BgRequest =
   | { type: "lookup"; query: string; prefer?: string }
   | { type: "steps.plan"; request: { key?: string; topic?: string; url?: string; title?: string; headings?: string[]; text?: string } }
   | { type: "steps.judge"; request: { plan: StepPlan; text?: string; working: string } }
+  | { type: "video.analyze"; request: { url: string; title?: string; segments?: TranscriptSegment[] } }
   /** `viewport` (CSS px) makes the image exactly viewport-sized, so its pixels are click coordinates. */
   | { type: "screenshot"; viewport?: { width: number; height: number } }
   | { type: "input"; ops: InputOp[] }
@@ -149,6 +151,7 @@ export type BgResponseMap = {
   lookup: { ok: boolean; results: string };
   "steps.plan": { plan: StepPlan | null };
   "steps.judge": WorkingJudgement;
+  "video.analyze": { segments: TranscriptSegment[]; notes: WatchNote[]; transcript: "page" | "service" | "none"; notesBy: "llm" | "heuristic" | "none" };
   screenshot: { ok: boolean; dataUrl?: string; error?: string };
   input: { ok: boolean; error?: string };
   "open.onboarding": { ok: boolean };

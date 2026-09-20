@@ -30,6 +30,8 @@ export interface Bubble {
   kind: "offer" | "confirmation" | "info" | "error" | "reply";
   actions?: BubbleAction[];
   expiresAt?: number;
+  /** Handles this bubble's buttons itself instead of the offer/confirmation flows. */
+  onAction?: (value: BubbleAction["value"]) => void;
 }
 
 /** One plan as the plan map draws it: the problem on screen, or a learning plan from long-term memory. */
@@ -44,11 +46,13 @@ export interface PlanView {
   routes: PlanRoute[];
 }
 
-/** A worked example the rabbit "draws out" on its chalkboard: text lines and freeform strokes. */
+/** A drawing the rabbit overlays on the screen: text lines and freeform strokes, optionally wrapped to a page region. */
 export interface SketchBoard {
   id: string;
   title?: string;
   items: SketchItem[];
+  /** Page element the 100×100 stroke space maps onto; null draws in the floating corner panel. */
+  anchor: Element | null;
 }
 
 export interface DebugInfo {

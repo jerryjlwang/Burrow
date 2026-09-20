@@ -11,6 +11,11 @@ export interface Settings {
   /** Start listening automatically when a page loads (only after the user enabled voice once). */
   voiceAutoResume: boolean;
   reducedMotion: "auto" | "on" | "off";
+  /**
+   * Watching videos along with the student. "ask" offers once; "on" is standing permission to
+   * follow silently, offer help, and pause the video for an idea that really matters; "off" never surfaces anything.
+   */
+  videoCompanion: "ask" | "on" | "off";
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -24,6 +29,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hiddenOnHosts: [],
   voiceAutoResume: true,
   reducedMotion: "auto",
+  videoCompanion: "ask",
 };
 
 const KEY = "pip.settings";

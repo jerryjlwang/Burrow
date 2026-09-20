@@ -429,19 +429,45 @@ try {
     await wp.locator(".pip-board button[aria-label='Close the board']").click({ timeout: 5000 }).catch(() => null);
     check("the chalkboard closes when its ✕ is clicked", (await wp.locator(".pip-board").count()) === 0);
 
-    // Freeform strokes: a diagram request draws actual chalk shapes (SVG), not just text lines.
+    // Freeform strokes: a diagram request draws actual shapes (SVG) with HTML labels, not just text.
+    const strokeState = async () => ({
+      shapes: await wp.locator(".pip-board-canvas path, .pip-board-canvas circle, .pip-board-canvas rect").count(),
+      labels: (await wp.locator(".pip-board-label").allTextContents()).join(" "),
+    });
     await wp.locator(".pip-input").fill("can you draw a right triangle?");
     await wp.locator(".pip-send").click();
-    let shapes = 0;
-    let labels = "";
+    let st = { shapes: 0, labels: "" };
     for (const t0 = Date.now(); Date.now() - t0 < 12000; ) {
-      shapes = await wp.locator(".pip-board-canvas path, .pip-board-canvas circle, .pip-board-canvas rect").count();
-      labels = (await wp.locator(".pip-board-canvas").count()) ? ((await wp.locator(".pip-board-canvas").first().textContent()) ?? "") : "";
-      if (shapes >= 3 && /a/.test(labels) && /c/.test(labels)) break;
+      st = await strokeState();
+      if (st.shapes >= 3 && /a/.test(st.labels) && /c/.test(st.labels)) break;
       await new Promise((r) => setTimeout(r, 400));
     }
-    check("'draw a right triangle' renders chalk strokes with labels on the board", shapes >= 3 && /a/.test(labels) && /b/.test(labels) && /c/.test(labels), `${shapes} shapes, labels: ${labels}`);
+    check("'draw a right triangle' renders strokes with labels on the drawing", st.shapes >= 3 && /a/.test(st.labels) && /b/.test(st.labels) && /c/.test(st.labels), `${st.shapes} shapes, labels: ${st.labels}`);
     await wp.screenshot({ path: resolve(shots, "18b-sketch-strokes.png") });
+
+    // "add" extends the drawing in place: the triangle stays, only the corner mark arrives.
+    await wp.locator(".pip-input").fill("can you also add a square corner mark?");
+    await wp.locator(".pip-send").click();
+    for (const t0 = Date.now(); Date.now() - t0 < 12000; ) {
+      st = await strokeState();
+      if (st.shapes >= 4 && /90/.test(st.labels)) break;
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    check("'add a corner mark' extends the drawing instead of regenerating it", st.shapes >= 4 && /a/.test(st.labels) && /c/.test(st.labels) && /90/.test(st.labels), `${st.shapes} shapes, labels: ${st.labels}`);
+
+    // Anchored sketch: "circle the equation" wraps the drawing onto the equation's own rect.
+    await wp.locator(".pip-input").fill("can you circle the equation?");
+    await wp.locator(".pip-send").click();
+    const eqBox = await wp.locator("#working-equation").boundingBox();
+    let boardBox = null;
+    let wrapped = false;
+    for (const t0 = Date.now(); Date.now() - t0 < 12000 && !wrapped; ) {
+      boardBox = await wp.locator(".pip-board").boundingBox().catch(() => null);
+      wrapped = !!(boardBox && eqBox && Math.abs(boardBox.x - eqBox.x) < 40 && Math.abs(boardBox.y - eqBox.y) < 40 && boardBox.width <= eqBox.width + 80);
+      if (!wrapped) await new Promise((r) => setTimeout(r, 400));
+    }
+    check("'circle the equation' wraps the drawing onto the equation on screen (anchored)", wrapped, JSON.stringify({ boardBox, eqBox }));
+    await wp.screenshot({ path: resolve(shots, "18c-sketch-anchored.png") });
 
     // The working page's graded feedback became attempt evidence on the page's concept.
     const nodes = sw ? await sw.evaluate(async () => (await chrome.storage.local.get("pip.graph"))["pip.graph"]?.nodes ?? []) : [];

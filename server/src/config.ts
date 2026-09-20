@@ -22,6 +22,8 @@ export interface Config {
   inkModel: string;
   /** Optional: lets look_up return actual videos instead of a YouTube search link. */
   youtubeApiKey: string;
+  /** Optional: Supadata key. Lets the rabbit read along with YouTube videos; without it only pages with their own captions work. */
+  transcriptApiKey: string;
 }
 
 function num(v: string | undefined, fallback: number): number {
@@ -55,5 +57,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     geminiApiKey: env.GEMINI_API_KEY || "",
     inkModel: env.INK_MODEL || "gemini-3.8-flash",
     youtubeApiKey: env.YOUTUBE_API_KEY || "",
+    transcriptApiKey: env.SUPADATA_API_KEY || "",
   };
 }

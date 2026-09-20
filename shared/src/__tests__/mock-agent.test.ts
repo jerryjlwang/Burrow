@@ -192,6 +192,23 @@ describe("asking about plans", () => {
   });
 });
 
+describe("watching a video", () => {
+  const video = { t: 22, duration: 48, paused: false, heard: "An equation is like a balance scale. Whatever you do to one side, you must do to the other side too.", understanding: "", behaviour: [], hasTranscript: true };
+
+  it("answers from what was just said instead of asking to look at the frame", () => {
+    const dec = decideMock(input("what did he just mean", { video }));
+    expect(validateDecision(dec).ok).toBe(true);
+    expect(dec.action).toBe("speak");
+    expect(dec.say).toContain("Whatever you do to one side");
+    expect(dec.say).not.toMatch(/analy|look|frame|screenshot/i);
+  });
+
+  it("is honest when the video has no transcript, and stays out of the way of page requests", () => {
+    expect(decideMock(input("can you explain that", { video: { ...video, heard: "", hasTranscript: false } })).say).toMatch(/can't hear/);
+    expect(decideMock(input("where is the sign in button", { video })).action).not.toBe("speak");
+  });
+});
+
 describe("region reading (observe with a target)", () => {
   it("observes with a quote first, then answers from the full readout", () => {
     const first = decideMock(input("What does the description say?"));
@@ -231,5 +248,24 @@ describe("sketch diagrams", () => {
     expect(eq.action).toBe("sketch");
     expect(eq.text).toMatch(/2x \+ 4 = 10/);
     expect(eq.text).not.toMatch(/\bline \d/);
+  });
+});
+
+describe("sketch extension and anchoring", () => {
+  it("sends only the new shapes with value 'add' when asked to extend", () => {
+    const d1 = decideMock(input("can you also add a square corner mark?"));
+    expect(d1.action).toBe("sketch");
+    expect(d1.value).toBe("add");
+    expect(d1.text).not.toMatch(/line 20 80/); // never resends the triangle
+    expect(validateDecision(d1).ok).toBe(true);
+  });
+
+  it("anchors 'circle the equation' onto the equation's own text", () => {
+    const d1 = decideMock(input("can you circle the equation?"));
+    expect(d1.action).toBe("sketch");
+    expect(d1.quote).toBe("3x + 5 = 20");
+    expect(d1.text).toMatch(/circle/);
+    const v = validateDecision(d1);
+    expect(v.ok && v.decision.quote).toBe("3x + 5 = 20");
   });
 });
