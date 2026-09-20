@@ -596,12 +596,6 @@ try {
   check("new tab draws the pixel clock at about half size", clock.w > 0 && clock.h >= 45 && clock.h <= 60 && clock.w === clock.cssW && clock.rendering === "pixelated" && /^Current time \d{1,2}:\d{2} [AP]M$/.test(clock.label ?? ""), JSON.stringify(clock));
   check("new tab shows the meadow HUD", (await nt.locator(".hud .hud-sign").count()) === 3, `${await nt.locator(".hud .hud-sign").count()} signs`);
   // The welcome hint waits in the sky after the boot; the first click anywhere fades it out.
-  // The sky sign pins the light: a click moves it off "Now" and the scene's time of day follows.
-  const signBefore = { label: (await nt.locator(".hud .sky").textContent())?.trim(), pinned: await nt.locator(".hud .sky").getAttribute("data-pinned") };
-  await nt.locator(".hud .sky").click();
-  await wait(2400);
-  const signAfter = { label: (await nt.locator(".hud .sky").textContent())?.trim(), pinned: await nt.locator(".hud .sky").getAttribute("data-pinned") };
-  check("the sky sign pins the meadow's light", signBefore.label === "Now" && signBefore.pinned === "0" && signAfter.label === "Dawn" && signAfter.pinned === "1", JSON.stringify({ signBefore, signAfter }));
   const hint0 = await nt.locator(".hint").evaluate((el) => ({ gone: el.classList.contains("gone"), opacity: getComputedStyle(el).opacity, text: (el.textContent ?? "").trim() }));
   check("the welcome hint shows after the boot", !hint0.gone && hint0.opacity === "1" && /is here\./.test(hint0.text), JSON.stringify(hint0));
   // The site signposts stay out of the meadow until the Sites sign is pressed, and leave on Escape.
@@ -618,6 +612,17 @@ try {
     }, null, { timeout: 2000 })
     .then(() => Date.now() - hintClickAt, () => -1);
   check("the first click fades the welcome hint out within about a second", hintFaded >= 0 && hintFaded <= 1200, hintFaded < 0 ? "hint still showing after 2 s" : `${hintFaded} ms after the click`);
+  // The sky sign pins the meadow's light. The profile persists between runs, so this asserts the
+  // step from wherever it is rather than a fixed starting point.
+  const SKY_CYCLE = ["Now", "Dawn", "Noon", "Sunset", "Night"];
+  const skyLabel = async () => (await nt.locator(".hud .sky").textContent())?.trim() ?? "";
+  const signBefore = await skyLabel();
+  await nt.locator(".hud .sky").click();
+  await wait(2400);
+  const signAfter = await skyLabel();
+  const signPinned = await nt.locator(".hud .sky").getAttribute("data-pinned");
+  const wanted = SKY_CYCLE[(SKY_CYCLE.indexOf(signBefore) + 1) % SKY_CYCLE.length];
+  check("the sky sign pins the meadow's light", SKY_CYCLE.includes(signBefore) && signAfter === wanted && signPinned === (signAfter === "Now" ? "0" : "1"), JSON.stringify({ signBefore, signAfter, signPinned }));
   await nt.keyboard.press("Escape");
   await wait(300);
   check("Escape puts the signposts away", (await nt.locator(".shortcuts").count()) === 0);
