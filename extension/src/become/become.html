@@ -25,13 +25,14 @@
       /* Tuning: the snapshot beside the sprite at 4x, then the sliders. */
       .pair { display: flex; gap: 12px; align-items: flex-start; }
       .pair canvas { image-rendering: pixelated; border: 3px solid var(--ink); background: var(--paper); }
-      .pair .photo { width: 246px; height: 246px; object-fit: cover; }
+      .pair .photo { width: 246px; height: 246px; object-fit: contain; background-image: linear-gradient(45deg, rgba(59, 42, 35, 0.06) 25%, transparent 25%, transparent 75%, rgba(59, 42, 35, 0.06) 75%), linear-gradient(45deg, rgba(59, 42, 35, 0.06) 25%, transparent 25%, transparent 75%, rgba(59, 42, 35, 0.06) 75%); background-size: 24px 24px; background-position: 0 0, 12px 12px; }
       .pair .sprite { width: 256px; height: 232px; background-image: linear-gradient(45deg, rgba(59, 42, 35, 0.06) 25%, transparent 25%, transparent 75%, rgba(59, 42, 35, 0.06) 75%), linear-gradient(45deg, rgba(59, 42, 35, 0.06) 25%, transparent 25%, transparent 75%, rgba(59, 42, 35, 0.06) 75%); background-size: 24px 24px; background-position: 0 0, 12px 12px; }
       .knobs { display: grid; grid-template-columns: 138px 1fr 48px; gap: 6px 12px; align-items: center; margin-top: 12px; }
       .knobs input[type="range"] { accent-color: var(--teal); width: 100%; }
       .knobs .val { text-align: right; font-family: var(--font-digits); font-size: 20px; }
       .paint { margin-top: 12px; padding: 9px 12px 12px; border: 3px solid var(--ink); background: var(--paper); }
       .paint .who .px-input { line-height: 24px; }
+      .paint .mode { margin-bottom: 9px; }
       .paint .row { margin-top: 9px; }
       .paint .note { flex: 1; min-width: 200px; color: var(--muted); }
       .paint .err.note { color: var(--red); margin: 0; }

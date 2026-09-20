@@ -478,7 +478,11 @@ export const DEFAULT_OPTIONS: MakeOptions = { tolerance: 60, height: 38, colors:
  */
 export function makeSprite(photo: Raster, opts: MakeOptions): Raster | null {
   const framed = opts.frame ? crop(photo, opts.frame) : photo;
-  const cut = cutBackground(framed, opts.tolerance);
+  return makeSpriteFromCut(cutBackground(framed, opts.tolerance), opts);
+}
+
+/** The pixel steps alone: shrink a cut-out to the wanted height, snap to a palette, outline and rim. */
+export function makeSpriteFromCut(cut: Raster, opts: MakeOptions): Raster | null {
   const box = opaqueBox(cut);
   if (!box) return null;
   const subject = crop(cut, box);

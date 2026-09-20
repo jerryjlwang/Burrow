@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { SpritePet, assembleCharacter, registerCharacter, CUSTOM_KEY, CUSTOM_PREFIX, DEFAULT_CHARACTER, type LoadedCharacter, type PetController, type StoredCharacter } from "../components/pet";
-import { DEFAULT_OPTIONS, cutBackground, makeCharacter, makeSprite, type MakeOptions, type Raster } from "../components/pet/pixelize";
+import { DEFAULT_OPTIONS, makeCharacter, makeSpriteFromCut, type MakeOptions, type Raster } from "../components/pet/pixelize";
 import { looksBlackAndWhite, paintRegions, splitRegions, type Region } from "../components/pet/regions";
+import { cutSubject } from "../components/pet/sketch";
 import styles from "../components/styles.css";
 import { getSettings, setSettings } from "../shared/settings";
 
 /** Photos are worked on at this size at most: the flood fill and sliders stay instant. */
-const WORK_SIZE = 360;
+const WORK_SIZE = 420;
 /** Part of the camera picture the guide frame covers (of the shorter side). */
 const GUIDE = 0.64;
 const STATES = ["idle", "listening", "thinking", "confused", "celebrate", "wave", "hop", "sleepy", "panic"] as const;
@@ -123,8 +124,10 @@ function Maker() {
   const [phase, setPhase] = useState<"camera" | "tune" | "done">("camera");
   const [camError, setCamError] = useState("");
   const [photo, setPhoto] = useState<Raster | null>(null);
-  /** The picture as taken, kept so a colouring can be undone or redone with other words. */
-  const [original, setOriginal] = useState<Raster | null>(null);
+  /** A pencil drawing is cut out by its ink; anything else by its background. Guessed from the picture, and a toggle. */
+  const [sketch, setSketch] = useState(false);
+  /** The cut-out with the model's colours filled in, until the picture or the cut changes. */
+  const [paintedCut, setPaintedCut] = useState<Raster | null>(null);
   const [hint, setHint] = useState("");
   const [painting, setPainting] = useState<"" | "busy" | "done" | "failed">("");
   const [paintNote, setPaintNote] = useState("");
@@ -180,13 +183,21 @@ function Maker() {
     };
   }, [phase]);
 
-  const sprite = useMemo(() => (photo ? makeSprite(photo, opts) : null), [photo, opts]);
+  const cut = useMemo(() => (photo ? cutSubject(photo, { sketch, tolerance: opts.tolerance }) : null), [photo, sketch, opts.tolerance]);
+  const sprite = useMemo(() => (cut ? makeSpriteFromCut(paintedCut ?? cut, opts) : null), [cut, paintedCut, opts]);
   const made = useMemo(() => (sprite ? makeCharacter(sprite, name.trim() || "friend") : null), [sprite, name]);
 
-  // Show the photo and the sprite.
+  // A new cut-out (new picture, other mode, other threshold) drops any colouring done on the old one.
   useEffect(() => {
-    if (original && photoCanvas.current) canvasFromRaster(original, photoCanvas.current);
-  }, [original]);
+    setPaintedCut(null);
+    setPainting("");
+  }, [cut]);
+
+  // Show the cut-out (coloured, once it is) and the sprite.
+  useEffect(() => {
+    const shown = paintedCut ?? cut;
+    if (shown && photoCanvas.current) canvasFromRaster(shown, photoCanvas.current);
+  }, [cut, paintedCut]);
   useEffect(() => {
     const c = spriteCanvas.current;
     if (!c || !made) return;
@@ -235,24 +246,25 @@ function Maker() {
   };
 
   const takePhoto = (r: Raster) => {
-    setOriginal(r);
+    const drawing = looksBlackAndWhite(r);
     setPhoto(r);
+    setSketch(drawing);
+    setPaintedCut(null);
     setPainting("");
-    setPaintNote(looksBlackAndWhite(cutBackground(r, opts.tolerance)) ? "Looks like a black and white drawing. Say who it is and colour it in." : "");
+    setPaintNote(drawing ? "Looks like a black and white drawing. Say who it is and colour it in." : "");
     setPhase("tune");
   };
 
   /** Colour by numbers: split the cut-out into regions, number them, ask the server's model, fill them in. */
   const colourIn = async () => {
-    if (!original || painting === "busy") return;
+    if (!photo || !cut || painting === "busy") return;
     setPainting("busy");
     setPaintNote("");
     try {
-      const cut = cutBackground(original, opts.tolerance);
       const { labels, regions } = splitRegions(cut);
       if (!regions.length) throw new Error("No regions to colour. The lines need to close around each part.");
       const numbered = numberedPicture(cut, labels, regions);
-      const photoUrl = canvasFromRaster(original).toDataURL("image/jpeg", 0.8);
+      const photoUrl = canvasFromRaster(photo).toDataURL("image/jpeg", 0.8);
       const res = await fetch(`${serverUrl}/api/character/paint`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -262,7 +274,7 @@ function Maker() {
       const out = (await res.json()) as PaintResult;
       // For the check scripts and for anyone curious in devtools.
       (window as unknown as { __lastPaint?: unknown }).__lastPaint = { regions, colors: out.colors, name: out.name, provider: out.provider };
-      setPhoto(paintRegions(original, labels, out.colors));
+      setPaintedCut(paintRegions(cut, labels, out.colors));
       if (!name.trim() && out.name) setName(out.name);
       setPainting("done");
       setPaintNote(out.provider === "mock" ? `Stand-in colours: ${out.reason ?? "no model on the server"}.` : `Coloured as ${out.name}.`);
@@ -272,8 +284,7 @@ function Maker() {
     }
   };
   const undoColour = () => {
-    if (!original) return;
-    setPhoto(original);
+    setPaintedCut(null);
     setPainting("");
     setPaintNote("");
   };
@@ -355,17 +366,21 @@ function Maker() {
           <h1>Tune the pixels</h1>
           <p>Cut the background until only the character is left, then pick a size and how many colours he gets.</p>
           <div className="pair">
-            <canvas ref={photoCanvas} className="photo" width={WORK_SIZE} height={WORK_SIZE} aria-label="Your photo" />
+            <canvas ref={photoCanvas} className="photo" width={WORK_SIZE} height={WORK_SIZE} aria-label="The cut-out" />
             <canvas ref={spriteCanvas} className="sprite" width={64} height={58} aria-label="The pixel sprite" />
           </div>
           {!sprite && <p className="err">Nothing is left after the cut. Lower the background cut, or take the picture on a plainer wall.</p>}
           <div className="paint">
+            <label className="px-toggle mode">
+              <input className="px-check" type="checkbox" checked={sketch} onChange={(e) => setSketch(e.target.checked)} />
+              <span>It's a pencil drawing (cut it out by its lines, not its colours)</span>
+            </label>
             <label className="who">
               <span className="px-muted">Who is this?</span>
               <input className="px-input" value={hint} placeholder="Pikachu, a green frog, my dog Max" onChange={(e) => setHint(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void colourIn()} />
             </label>
             <div className="row">
-              <button className="px-btn primary" onClick={() => void colourIn()} disabled={!original || painting === "busy"}>
+              <button className="px-btn primary" onClick={() => void colourIn()} disabled={!cut || painting === "busy"}>
                 {painting === "busy" ? "Colouring" : painting === "done" ? "Colour it again" : "Colour it in"}
               </button>
               {painting === "done" && (
@@ -377,7 +392,7 @@ function Maker() {
             </div>
           </div>
           <div className="knobs">
-            {knob("Background cut", "tolerance", 10, 160)}
+            {knob(sketch ? "Line darkness" : "Background cut", "tolerance", 10, 160)}
             {knob("Size", "height", 20, 40)}
             {knob("Colours", "colors", 3, 24)}
           </div>

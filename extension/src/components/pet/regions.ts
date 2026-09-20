@@ -141,5 +141,5 @@ export function looksBlackAndWhite(r: Raster): boolean {
     const mn = Math.min(r.data[i], r.data[i + 1], r.data[i + 2]);
     if (mx - mn < 28) grey++;
   }
-  return n > 0 && grey / n > 0.85;
+  return n > 0 && grey / n > 0.8;
 }
