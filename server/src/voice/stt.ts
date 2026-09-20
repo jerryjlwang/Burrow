@@ -4,6 +4,8 @@ import type { Config } from "../config";
 import { log } from "../util/logger";
 
 const logger = log("voice:stt");
+/** Per attempt. The first dial gets two, so the browser (which waits 10s for "ready") hears the outcome either way. */
+const FLUX_DIAL_MS = 4000;
 
 interface ClientMsg {
   type: "ready" | "transcript" | "error";
@@ -91,8 +93,10 @@ export async function attachSttSession(client: WebSocket, cfg: Config): Promise<
           }
         });
         conn.on("error", (e) => logger.warn("flux socket error", { error: e.message }));
+        let opened = false;
         conn.on("close", () => {
-          if (closed || redialing) return;
+          // A dial that never opened has nothing to re-dial for: whoever dialled it is already retrying.
+          if (!opened || closed || redialing) return;
           sendMedia = null; // buffer frames into `pending` while we re-dial
           redialing = true;
           void (async () => {
@@ -115,7 +119,13 @@ export async function attachSttSession(client: WebSocket, cfg: Config): Promise<
           })();
         });
         conn.connect();
-        await withTimeout(conn.waitForOpen(), 8000, "deepgram flux connect");
+        try {
+          await withTimeout(conn.waitForOpen(), FLUX_DIAL_MS, "deepgram flux connect");
+        } catch (e) {
+          conn.close();
+          throw e;
+        }
+        opened = true;
         if (closed) {
           conn.close();
           throw new Error("client session closed during dial");
@@ -137,7 +147,13 @@ export async function attachSttSession(client: WebSocket, cfg: Config): Promise<
           conn.close();
         };
       };
-      await dialFlux();
+      // On a poor link a handshake that has not finished in a few seconds is usually lost, not slow:
+      // a second short attempt connects where one long wait would just time out.
+      await dialFlux().catch((e) => {
+        if (closed) throw e;
+        logger.warn("flux dial failed; trying once more", { error: e instanceof Error ? e.message : String(e) });
+        return dialFlux();
+      });
       logger.info("flux session open", { model: cfg.sttModel });
     } else {
       const conn = await dg.listen.v1.connect({

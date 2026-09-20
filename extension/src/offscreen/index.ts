@@ -104,6 +104,7 @@ async function startMic(serverUrl: string): Promise<{ ok: boolean; error?: strin
 function connectStt(serverUrl: string): Promise<boolean> {
   return new Promise((resolve) => {
     let settled = false;
+    let ready = false;
     const finish = (ok: boolean) => {
       if (settled) return;
       settled = true;
@@ -113,12 +114,14 @@ function connectStt(serverUrl: string): Promise<boolean> {
       const ws = new WebSocket(wsUrl(serverUrl, "/ws/stt"));
       ws.binaryType = "arraybuffer";
       sttWs = ws;
+      // Longer than the server's whole dial budget (two 4s attempts), so its answer — ready or
+      // the reason it failed — arrives before this gives up.
       const timeout = setTimeout(() => {
         if (!settled) {
           ws.close();
           finish(false);
         }
-      }, 8000);
+      }, 10_000);
       ws.onmessage = (ev) => {
         if (typeof ev.data !== "string") return;
         let msg: { type: string; [k: string]: unknown };
@@ -128,6 +131,7 @@ function connectStt(serverUrl: string): Promise<boolean> {
           return;
         }
         if (msg.type === "ready") {
+          ready = true;
           clearTimeout(timeout);
           finish(true);
         } else if (msg.type === "transcript") {
@@ -152,9 +156,10 @@ function connectStt(serverUrl: string): Promise<boolean> {
         if (!settled) {
           clearTimeout(timeout);
           finish(false);
-          return;
         }
-        if (micActive) void reconnectStt();
+        // Only a session that was up is reconnected from here. An attempt that never got ready has
+        // already reported false to whoever made it, and retrying is theirs to decide.
+        if (ready && micActive) void reconnectStt();
       };
     } catch {
       finish(false);
@@ -176,7 +181,7 @@ async function reconnectStt(): Promise<void> {
   if (ok) {
     sttReconnects = 0;
     emit({ type: "mic.state", state: "listening" });
-  }
+  } else void reconnectStt();
 }
 
 function stopMic(announce = true): void {
