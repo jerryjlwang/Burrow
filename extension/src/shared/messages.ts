@@ -6,7 +6,7 @@ import type { StepPlan } from "@shared/plan";
 import type { WorkingJudgement } from "@shared/steps";
 import type { TranscriptSegment, WatchNote } from "@shared/video";
 import type { KeyChord } from "@shared/keys";
-import type { InkJudgement, InkReason } from "@shared/ink";
+import type { InkBox, InkJudgement, InkReason } from "@shared/ink";
 import type { Settings } from "./settings";
 
 /**
@@ -61,6 +61,9 @@ export interface TabletState {
   checks: number;
   lastCheckAt: number | null;
   lastVerdict: InkJudgement | null;
+  /** Why the last check was made and which rung its nudge was on. */
+  lastReason: InkReason | null;
+  lastRung: number;
   error?: string;
 }
 
@@ -122,6 +125,12 @@ export type BgRequest =
   | { type: "tablet.open" }
   | { type: "tablet.stop"; close?: boolean }
   | { type: "tablet.status" }
+  /**
+   * The board page's own UI (the rabbit, his bubble, his board, his rings), as fractions of its
+   * viewport, so the watcher does not read it as ink. `quietMs` asks it to ignore changes for a
+   * while too: the rabbit is about to hop, draw or write, and the mask cannot keep up frame by frame.
+   */
+  | { type: "tablet.mask"; rects: InkBox[]; quietMs?: number }
   | { type: "ping" };
 
 export interface ServerHealth {
@@ -165,6 +174,7 @@ export type BgResponseMap = {
   "tablet.open": TabletState;
   "tablet.stop": TabletState;
   "tablet.status": TabletState;
+  "tablet.mask": { ok: boolean };
   ping: { ok: boolean; at: number };
 };
 

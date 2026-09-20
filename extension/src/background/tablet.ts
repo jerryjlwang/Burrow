@@ -6,9 +6,9 @@
  * tab, where the rabbit reacts. Nothing here reads the drawing app itself, so any page in that
  * window works, and no screen-share picker is needed.
  */
-import { MAX_RUNG, type InkJudgeInput, type InkJudgeOutput, type InkJudgement } from "@shared/ink";
+import { MAX_RUNG, parseInkBox, type InkBox, type InkJudgeInput, type InkJudgeOutput, type InkJudgement } from "@shared/ink";
 import type { ContentBroadcast, TabletState } from "../shared/messages";
-import { changedPixels, DEFAULT_RULES, InkTrigger, toGray, type TriggerReason } from "./ink-trigger";
+import { DEFAULT_RULES, InkTrigger, maskedChangedPixels, toGray, type TriggerReason } from "./ink-trigger";
 import { log } from "../shared/logger";
 
 const logger = log("tablet");
@@ -50,6 +50,13 @@ interface Watch {
   /** Nudges given per wrong line (keyed by the line as read), so the next nudge on it climbs a rung. */
   nudged: Map<string, { count: number; at: number }>;
   lastWrongLine: string | null;
+  lastReason: TriggerReason | null;
+  lastRung: number;
+  /** The board page's own UI right now, and as it was when `prev` was sampled; both are left out of the diff. */
+  mask: InkBox[];
+  prevMask: InkBox[];
+  /** Until when frame changes are ignored (the rabbit is hopping, drawing or writing). */
+  quietUntil: number;
   error?: string;
   context: { dataUrl: string | null; title: string; url: string; at: number } | null;
   busy: boolean;
@@ -84,6 +91,8 @@ export function tabletStatus(): TabletState {
     checks: watch?.checks ?? 0,
     lastCheckAt: watch?.lastCheckAt ?? null,
     lastVerdict: watch?.lastVerdict ?? null,
+    lastReason: watch?.lastReason ?? null,
+    lastRung: watch?.lastRung ?? 1,
     error: watch?.error,
   };
 }
@@ -145,9 +154,30 @@ function freshWatch(windowId: number, boardTabId: number | null, contextTabId: n
     lastCheckAt: null,
     nudged: new Map(),
     lastWrongLine: null,
+    lastReason: null,
+    lastRung: 1,
+    mask: [],
+    prevMask: [],
+    quietUntil: 0,
     context: null,
     busy: false,
   };
+}
+
+const MAX_MASK_RECTS = 12;
+const MAX_QUIET_MS = 12_000;
+
+/**
+ * The board page reports where its own UI is, and may ask for a quiet spell while the rabbit
+ * hops, draws or writes (changes then go untracked, though the frame keeps being followed so the
+ * first diff afterwards is against the latest picture). Only the board tab may, and only while it is watched.
+ */
+export function setTabletMask(tabId: number | null, rects: unknown, quietMs?: number): boolean {
+  if (!watch || tabId == null || tabId !== watch.boardTabId) return false;
+  const list = Array.isArray(rects) ? rects.slice(0, MAX_MASK_RECTS).map(parseInkBox).filter((b): b is InkBox => !!b) : [];
+  watch.mask = list;
+  if (typeof quietMs === "number" && Number.isFinite(quietMs) && quietMs > 0) watch.quietUntil = Math.max(watch.quietUntil, Date.now() + Math.min(MAX_QUIET_MS, quietMs));
+  return true;
 }
 
 export async function openTablet(contextTab?: chrome.tabs.Tab | null, opts: { skipDisplay?: boolean } = {}): Promise<TabletState> {
@@ -300,9 +330,12 @@ async function tick(): Promise<void> {
       w.prev = gray.data;
       return;
     }
-    const changed = w.prev ? changedPixels(w.prev, gray.data) : 0;
+    // The rabbit, his bubble, his board and his rings are on this tab too; wherever they are now or were a frame ago is not the kid's ink.
+    const changed = w.prev ? maskedChangedPixels(w.prev, gray.data, gray.w, gray.h, w.prevMask.concat(w.mask)) : 0;
     w.prev = gray.data;
+    w.prevMask = w.mask;
     const now = Date.now();
+    if (now < w.quietUntil) return;
     const reason = w.trigger.push(changed, now);
     if (reason) void judge(w, dataUrl, reason, now);
   } finally {
@@ -411,6 +444,8 @@ async function judge(w: Watch, frame: string, reason: TriggerReason, now: number
     w.checks++;
     w.lastCheckAt = Date.now();
     w.lastVerdict = j;
+    w.lastReason = reason;
+    w.lastRung = rung;
     if (j.lines.length) w.previousLines = j.lines;
     noteVerdict(w, j);
     logger.info("verdict", { reason, rung, status: j.status, line: j.line, mark: !!j.mark, note: j.note.length, confidence: j.confidence, provider: out.provider, ms: out.latencyMs });

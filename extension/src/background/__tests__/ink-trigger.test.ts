@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changedPixels, InkTrigger, toGray, type TriggerRules } from "../ink-trigger";
+import { changedPixels, InkTrigger, maskedChangedPixels, toGray, type TriggerRules } from "../ink-trigger";
 
 const RULES: TriggerRules = { noise: 0.001, ink: 0.01, pauseInk: 0.003, pauseMs: 1000, minGapMs: 2000, stallMs: 10_000 };
 const PIXELS = 10_000; // so 1% ink = 100 changed pixels
@@ -13,6 +13,32 @@ describe("changedPixels / toGray", () => {
   it("turns RGBA into one luma byte per pixel", () => {
     const g = toGray(new Uint8ClampedArray([255, 255, 255, 255, 0, 0, 0, 255]));
     expect(Array.from(g)).toEqual([255, 0]);
+  });
+});
+
+describe("maskedChangedPixels", () => {
+  const W = 20;
+  const H = 10;
+  const frame = (paint: Array<[number, number]>) => {
+    const f = new Uint8Array(W * H);
+    for (const [x, y] of paint) f[y * W + x] = 255;
+    return f;
+  };
+  it("counts changes outside the masked regions only, with a little padding around each", () => {
+    const prev = new Uint8Array(W * H);
+    // A rabbit-sized blob in the lower right, a stroke of ink at the top left, and a pixel just outside the blob.
+    const next = frame([[15, 6], [16, 6], [15, 7], [16, 7], [1, 1], [2, 1], [3, 1], [11, 6]]);
+    const rabbit = { x: 0.7, y: 0.5, w: 0.2, h: 0.3 }; // x 14..18, y 5..8, padded by 2 → x 12..20, y 3..10
+    expect(changedPixels(prev, next)).toBe(8);
+    expect(maskedChangedPixels(prev, next, W, H, [rabbit])).toBe(4); // the stroke and the pixel at x 11
+    expect(maskedChangedPixels(prev, next, W, H, [rabbit], 24, 0)).toBe(4);
+    expect(maskedChangedPixels(prev, next, W, H, [rabbit, { x: 0, y: 0, w: 0.25, h: 0.2 }])).toBe(1);
+  });
+  it("is the plain count with no mask, and never counts a pixel twice under overlapping masks", () => {
+    const prev = new Uint8Array(W * H);
+    const next = frame([[5, 5], [6, 5]]);
+    expect(maskedChangedPixels(prev, next, W, H, [])).toBe(2);
+    expect(maskedChangedPixels(prev, next, W, H, [{ x: 0.2, y: 0.4, w: 0.2, h: 0.2 }, { x: 0.2, y: 0.4, w: 0.2, h: 0.2 }])).toBe(0);
   });
 });
 
