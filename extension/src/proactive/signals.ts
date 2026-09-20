@@ -170,8 +170,8 @@ export class SignalTracker {
 
     const strength = Math.min(
       1,
-      (incorrectAttempts >= THRESHOLDS.incorrectMin ? 0.75 : incorrectAttempts * 0.3) +
-        (failedUiAction ? 0.7 : repeatedClicks >= THRESHOLDS.repeatedClicksMin ? 0.55 : repeatedClicks * 0.15) +
+      (incorrectAttempts >= 3 ? 0.85 : incorrectAttempts >= THRESHOLDS.incorrectMin ? 0.75 : incorrectAttempts * 0.3) +
+        (failedUiAction ? (repeatedClicks >= 3 ? 0.85 : 0.7) : repeatedClicks >= THRESHOLDS.repeatedClicksMin ? 0.55 : repeatedClicks * 0.15) +
         (validationErrors >= THRESHOLDS.validationMin ? 0.5 : validationErrors * 0.2) +
         (rapidClicks >= THRESHOLDS.rapidClicksMin ? 0.35 : 0) +
         (navigationOscillation ? 0.6 : 0) +

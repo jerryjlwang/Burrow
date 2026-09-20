@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign in · Riverside Learning</title>
+  <link rel="stylesheet" href="demo.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="top-inner">
+      <a class="logo" href="index.html"><span aria-hidden="true"></span>Riverside Learning</a>
+      <nav class="main" aria-label="Main">
+        <a href="index.html">Dashboard</a>
+        <a href="modules.html">Modules</a>
+        <a href="assignment.html">Assignments</a>
+        <a href="grades.html">Grades</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <section class="card auth">
+      <h1>Sign in</h1>
+      <p class="sub">Use your school account.</p>
+      <form id="signin" onsubmit="return false">
+        <label for="email">School email</label>
+        <input type="email" id="email" autocomplete="username" placeholder="sam@riverside.edu" />
+        <label for="password" style="margin-top:12px">Password</label>
+        <input type="password" id="password" autocomplete="current-password" />
+        <div class="row">
+          <button class="btn primary" type="submit" id="signin-btn">Sign in</button>
+          <a href="#" class="btn ghost">Forgot password?</a>
+        </div>
+        <p class="status-line" id="signin-status" role="status"></p>
+      </form>
+    </section>
+  </main>
+  <footer>Riverside Learning · a demo site for the Pip learning companion</footer>
+  <script src="demo.js"></script>
+</body>
+</html>

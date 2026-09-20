@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Practice: Linear Equations · Riverside Learning</title>
+  <link rel="stylesheet" href="demo.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="top-inner">
+      <a class="logo" href="index.html"><span aria-hidden="true"></span>Riverside Learning</a>
+      <nav class="main" aria-label="Main">
+        <a href="index.html">Dashboard</a>
+        <a href="modules.html" aria-current="page">Modules</a>
+        <a href="assignment.html">Assignments</a>
+        <a href="grades.html">Grades</a>
+      </nav>
+      <a class="btn" href="signin.html">Sign in</a>
+    </div>
+  </header>
+  <main>
+    <span class="tag">Module 3 · Practice</span>
+    <h1>Practice: Linear Equations</h1>
+    <p class="sub">Solve for x. Type just the number.</p>
+
+    <section class="problem" aria-labelledby="q-title">
+      <h2 id="q-title" style="margin-top:0">Question <span id="q-num">1</span> of 2</h2>
+      <p>Solve for x:</p>
+      <p class="equation" id="equation">3x + 5 = 20</p>
+      <label for="answer">Your answer</label>
+      <input type="text" id="answer" inputmode="numeric" autocomplete="off" placeholder="x = ?" />
+      <div class="row">
+        <button class="btn primary" id="check" type="button">Check answer</button>
+        <button class="btn" id="next" type="button" hidden>Next problem</button>
+        <a class="btn" id="finish" href="assignment.html" hidden>Back to assignment</a>
+      </div>
+      <div class="feedback" id="feedback" role="alert"></div>
+      <p class="attempts" id="attempts"></p>
+    </section>
+
+    <section class="card" style="margin-top:20px;max-width:640px">
+      <h3>Reminder</h3>
+      <p>Whatever you do to one side of an equation, do to the other side too.</p>
+    </section>
+  </main>
+  <footer>Riverside Learning · a demo site for the Pip learning companion</footer>
+  <script src="demo.js"></script>
+</body>
+</html>

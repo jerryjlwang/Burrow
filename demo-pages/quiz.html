@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Module 3 Quiz · Riverside Learning</title>
+  <link rel="stylesheet" href="demo.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="top-inner">
+      <a class="logo" href="index.html"><span aria-hidden="true"></span>Riverside Learning</a>
+      <nav class="main" aria-label="Main">
+        <a href="index.html">Dashboard</a>
+        <a href="modules.html" aria-current="page">Modules</a>
+        <a href="assignment.html">Assignments</a>
+        <a href="grades.html">Grades</a>
+      </nav>
+      <a class="btn" href="signin.html">Sign in</a>
+    </div>
+  </header>
+  <main>
+    <span class="tag">Module 3 · Assessment</span>
+    <h1>Module 3 Quiz</h1>
+    <p class="sub">One attempt. Answer every question, then submit.</p>
+    <p class="note">You must choose an answer before you can continue to the next question.</p>
+
+    <form id="quiz" onsubmit="return false">
+      <fieldset id="q1">
+        <legend>Question 1. Which step isolates x in 4x − 3 = 13?</legend>
+        <label class="option"><input type="radio" name="q1" value="a" /> Add 3 to both sides, then divide by 4</label>
+        <label class="option"><input type="radio" name="q1" value="b" /> Divide by 4, then subtract 3</label>
+        <label class="option"><input type="radio" name="q1" value="c" /> Subtract 13 from both sides</label>
+      </fieldset>
+      <div class="row">
+        <button class="btn" type="button" id="save-quiz">Save draft</button>
+        <button class="btn primary" type="button" id="continue" aria-disabled="true">Continue</button>
+      </div>
+      <p class="status-line" id="quiz-status" role="status"></p>
+
+      <fieldset id="q2" hidden>
+        <legend>Question 2. What is x if 2x + 6 = 14?</legend>
+        <label class="option"><input type="radio" name="q2" value="3" /> 3</label>
+        <label class="option"><input type="radio" name="q2" value="4" /> 4</label>
+        <label class="option"><input type="radio" name="q2" value="10" /> 10</label>
+        <div class="row">
+          <button class="btn primary" type="button" id="submit-quiz">Submit quiz</button>
+        </div>
+      </fieldset>
+    </form>
+  </main>
+  <footer>Riverside Learning · a demo site for the Pip learning companion</footer>
+  <script src="demo.js"></script>
+</body>
+</html>

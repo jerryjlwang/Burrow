@@ -176,7 +176,9 @@ export class ProactiveEngine {
       }
       this.deps.session.setCooldown(Date.now() + THRESHOLDS.cooldownMs);
       this.deps.onOffer(offer);
-      if (level === 4 && store.getState().settings.ttsEnabled) await this.deps.speak(decision.message);
+      const st = store.getState();
+      // Level 4 speaks; level 3 also speaks when the student is already in a voice conversation.
+      if (st.settings.ttsEnabled && (level === 4 || st.voice.mode === "listening")) await this.deps.speak(decision.message);
     } finally {
       this.requesting = false;
     }
