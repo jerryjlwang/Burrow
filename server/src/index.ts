@@ -7,6 +7,7 @@ import { AgentService } from "./api/agent";
 import { ExtractService } from "./api/extract";
 import { lookUp } from "./api/lookup";
 import { InkService } from "./api/ink";
+import { NotebookService, type NotebookReadInput } from "./api/notebook";
 import { StepService, type JudgeRequest, type PlanRequest } from "./api/steps";
 import { VideoService, type VideoAnalyzeRequest } from "./api/video";
 import { OpenAIProvider } from "./agent/openai";
@@ -27,7 +28,9 @@ const video = new VideoService(llm, cfg.transcriptApiKey);
 const agent = new AgentService(cfg, steps);
 const extract = new ExtractService(cfg);
 const ink = new InkService(cfg);
+const notebook = new NotebookService(cfg);
 const demoRoot = resolve(here, "../../demo-pages");
+const notebookRoot = resolve(here, "../../notebook-page");
 const VERSION = "0.1.0";
 
 function readJson(req: http.IncomingMessage, limit = 3_000_000): Promise<unknown> {
@@ -108,6 +111,15 @@ const server = http.createServer(async (req, res) => {
       json(res, 200, await ink.judge({ ...input, previousLines: Array.isArray(input.previousLines) ? input.previousLines : [], seq: Number(input.seq) || 0 }));
       return;
     }
+    if (req.method === "POST" && url.pathname === "/api/notebook/read") {
+      const input = (await readJson(req, 6_000_000)) as NotebookReadInput;
+      if (!input || typeof input.frame !== "string" || !input.frame.startsWith("data:image/")) {
+        json(res, 400, { error: "invalid input" });
+        return;
+      }
+      json(res, 200, await notebook.read({ frame: input.frame, previousLines: Array.isArray(input.previousLines) ? input.previousLines.filter((l: unknown) => typeof l === "string") : [] }));
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/lookup") {
       const body = (await readJson(req)) as { query?: string; prefer?: string };
       if (!body || typeof body.query !== "string" || !body.query.trim()) {
@@ -158,6 +170,11 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === "GET" && serveStatic(req, res, "/demo/", demoRoot)) return;
+    if (req.method === "GET" && url.pathname === "/notebook") {
+      res.writeHead(302, { location: "/notebook/" }).end();
+      return;
+    }
+    if (req.method === "GET" && serveStatic(req, res, "/notebook/", notebookRoot)) return;
     json(res, 404, { error: "not found" });
   } catch (e) {
     logger.error("request failed", { path: url.pathname, error: e instanceof Error ? e.message : String(e) });

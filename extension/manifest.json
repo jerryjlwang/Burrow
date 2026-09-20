@@ -74,6 +74,12 @@
         "default": "Alt+Shift+D"
       },
       "description": "Open the drawing board on the tablet and watch it"
+    },
+    "open-notebook": {
+      "suggested_key": {
+        "default": "Alt+Shift+N"
+      },
+      "description": "Write in a paper notebook: the webcam mirrors it onto the board"
     }
   },
   "web_accessible_resources": [

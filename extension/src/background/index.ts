@@ -65,6 +65,9 @@ async function sendToOffscreen<T = unknown>(cmd: OffscreenCommand, retries = 2):
   }
 }
 
+/** The server's notebook page: the webcam on a paper notebook, mirrored onto a blank board. */
+const notebookUrl = (serverUrl: string): string => `${serverUrl.replace(/\/$/, "")}/notebook/`;
+
 // ---------------- Server client ----------------
 async function serverFetch(path: string, init: RequestInit = {}, timeoutMs = 30_000): Promise<Response> {
   const { serverUrl } = await getSettings();
@@ -366,7 +369,7 @@ async function handle(msg: BgRequest, sender: chrome.runtime.MessageSender): Pro
       }
     }
     case "tablet.open":
-      return openTablet(sender.tab ?? null);
+      return openTablet(sender.tab ?? null, msg.notebook ? { url: notebookUrl(settings.serverUrl) } : {});
     case "tablet.stop":
       return stopTablet(msg.close === true);
     case "tablet.status":
@@ -409,11 +412,11 @@ chrome.runtime.onMessage.addListener((msg: unknown, sender, sendResponse) => {
 
 // ---------------- Commands, context menu, install ----------------
 chrome.commands.onCommand.addListener(async (command, tab) => {
-  if (command === "open-tablet") {
+  if (command === "open-tablet" || command === "open-notebook") {
     try {
-      await openTablet(tab ?? null);
+      await openTablet(tab ?? null, command === "open-notebook" ? { url: notebookUrl((await getSettings()).serverUrl) } : {});
     } catch (e) {
-      logger.warn("open-tablet failed", { error: e instanceof Error ? e.message : String(e) });
+      logger.warn(`${command} failed`, { error: e instanceof Error ? e.message : String(e) });
     }
     return;
   }

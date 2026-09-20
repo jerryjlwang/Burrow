@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Notebook</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #1d2233;
+      --paper: #fdfdfb;
+      --rule: #dfe6f2;
+      --muted: #8a93a6;
+    }
+    html, body { margin: 0; height: 100%; background: var(--paper); color: var(--ink); overflow: hidden; }
+    body { font-family: "Caveat", "Segoe Print", "Bradley Hand", cursive; -webkit-font-smoothing: antialiased; }
+
+    /* The blank canvas the writing lands on. Faint ruled lines so it reads as paper, still enough for the watcher's diff. */
+    #paper {
+      position: fixed; inset: 0;
+      background-image: repeating-linear-gradient(to bottom, transparent 0 39px, var(--rule) 39px 40px);
+      background-position: 0 24px;
+    }
+    #shadow { position: fixed; inset: 0; opacity: 0; pointer-events: none; transition: opacity 300ms; }
+    #shadow.on { opacity: 0.16; }
+    #lines { position: fixed; inset: 0; pointer-events: none; }
+    .line {
+      position: absolute; white-space: pre; line-height: 1; font-weight: 500;
+      transform: rotate(var(--tilt, 0deg));
+      transition: left 400ms ease, top 400ms ease, font-size 400ms ease;
+    }
+    .line del { text-decoration: line-through; text-decoration-thickness: 2px; }
+
+    /* Camera: full size while the paper is being found, a thumbnail for a moment once it is, then hidden so the watcher sees only ink. */
+    #cam {
+      position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      width: min(72vw, 960px); aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden;
+      background: #111; box-shadow: 0 12px 40px rgba(20, 30, 60, 0.25); transition: all 500ms ease; z-index: 3;
+    }
+    #cam video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    #cam.thumb { left: auto; top: auto; right: 18px; bottom: 18px; transform: none; width: 240px; box-shadow: 0 6px 20px rgba(20, 30, 60, 0.25); }
+    #cam.hidden { opacity: 0; pointer-events: none; visibility: hidden; }
+    #cam .quad { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+    #cam .quad polygon { fill: rgba(80, 200, 120, 0.12); stroke: #52d27a; stroke-width: 3; stroke-linejoin: round; }
+    #cam .hint {
+      position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 14px; color: #fff; font: 500 15px/1.3 system-ui, sans-serif;
+      background: linear-gradient(to top, rgba(0, 0, 0, 0.65), transparent); pointer-events: none;
+    }
+    #cam.thumb .hint { display: none; }
+
+    /* The corner: one dot and one word, changed only when the state changes so the watcher's diff stays quiet. */
+    #corner {
+      position: fixed; right: 14px; bottom: 12px; z-index: 4; display: flex; gap: 8px; align-items: center;
+      font: 500 13px system-ui, sans-serif; color: var(--muted); user-select: none; cursor: pointer;
+    }
+    #corner .dot { width: 9px; height: 9px; border-radius: 50%; background: #c2c8d4; }
+    #corner.wait .dot { background: #e5b53f; }
+    #corner.live .dot { background: #52d27a; }
+    #corner.bad .dot { background: #e0565b; }
+    #tools { position: fixed; left: 14px; bottom: 10px; z-index: 4; display: flex; gap: 6px; }
+    #tools button {
+      font: 500 12px system-ui, sans-serif; color: var(--muted); background: transparent; border: 1px solid #e3e7ef; border-radius: 8px;
+      padding: 4px 9px; cursor: pointer;
+    }
+    #tools button.on { color: var(--ink); border-color: #b9c2d3; }
+    #welcome {
+      position: fixed; left: 50%; top: 12%; transform: translateX(-50%); z-index: 3; text-align: center;
+      font: 500 17px/1.4 system-ui, sans-serif; color: var(--muted); max-width: 640px; padding: 0 16px;
+    }
+    #welcome.hidden { display: none; }
+    @media (prefers-reduced-motion: reduce) { .line, #cam, #shadow { transition: none; } }
+  </style>
+</head>
+<body>
+  <div id="paper"></div>
+  <canvas id="shadow"></canvas>
+  <div id="lines" aria-live="off"></div>
+  <p id="welcome">Tilt the laptop lid down until the camera sees your notebook. Once the page is found, the camera hides and your writing shows up here as you go.</p>
+  <div id="cam">
+    <video id="video" autoplay playsinline muted></video>
+    <svg class="quad" viewBox="0 0 1000 1000" preserveAspectRatio="none"><polygon id="quad" points="" /></svg>
+    <div class="hint" id="hint">Starting the camera</div>
+  </div>
+  <div id="tools">
+    <button id="faint" title="Show a faint picture of the real page underneath (f)">faint page</button>
+    <button id="show" title="Show the camera (c)">camera</button>
+  </div>
+  <div id="corner" class="" title="Tap to see the camera"><span class="dot"></span><span id="word">camera</span></div>
+
+  <script>
+    (() => {
+      "use strict";
+      // ---- Timing. The watcher on the extension side samples the tab twice a second and the judge
+      // wants settled ink, so a read waits for the pen to rest, and the writing appears in one go.
+      const SAMPLE_MS = 250;
+      const MOTION_FRAC = 0.006;
+      const REST_MS = 800;
+      const MIN_GAP_MS = 1200;
+      const IDLE_RECHECK_MS = 15000;
+      const THUMB_MS = 4000;
+      const READ_W = 1024;
+      const SMALL_W = 160;
+      // The sheet maps onto this much of the viewport; margins keep the rabbit's corners clear.
+      const MARGIN = { left: 0.08, top: 0.07, right: 0.14, bottom: 0.1 };
+      const FONT_MIN = 22;
+      const FONT_MAX = 64;
+
+      const $ = (id) => document.getElementById(id);
+      const video = $("video");
+      const cam = $("cam");
+      const quad = $("quad");
+      const hint = $("hint");
+      const corner = $("corner");
+      const word = $("word");
+      const linesEl = $("lines");
+      const shadow = $("shadow");
+      const welcome = $("welcome");
+      const faintBtn = $("faint");
+      const showBtn = $("show");
+
+      const small = document.createElement("canvas");
+      const full = document.createElement("canvas");
+      const sctx = small.getContext("2d", { willReadFrequently: true });
+      const fctx = full.getContext("2d");
+      const shctx = shadow.getContext("2d");
+
+      let prevGray = null;
+      let dirty = false;
+      let lastMotionAt = 0;
+      let lastReadAt = 0;
+      let inflight = false;
+      let pageFound = false;
+      let hideTimer = 0;
+      let shown = [];
+      let lastPage = null;
+      let lastFrameForShadow = null;
+      let faint = false;
+      try { faint = localStorage.getItem("notebook.faint") === "1"; } catch { /* no storage */ }
+
+      const setCorner = (cls, text) => {
+        if (corner.className === cls && word.textContent === text) return;
+        corner.className = cls;
+        word.textContent = text;
+      };
+
+      // ---- Camera.
+      async function startCamera() {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+          video.srcObject = stream;
+          await video.play();
+          hint.textContent = "Looking for the page";
+          setCorner("wait", "looking for the page");
+          setInterval(sample, SAMPLE_MS);
+        } catch (e) {
+          hint.textContent = "The camera could not start. Allow it for this page and reload.";
+          setCorner("bad", "no camera");
+          corner.title = String(e && e.message ? e.message : e);
+        }
+      }
+
+      // ---- Motion. A hand moving, a pen writing, a page turning: any of it marks the frame dirty; a read
+      // goes out once the frame has been still for a moment, and again after a long quiet just in case.
+      function sample() {
+        if (!video.videoWidth) return;
+        const w = SMALL_W;
+        const h = Math.round((video.videoHeight / video.videoWidth) * w);
+        if (small.width !== w || small.height !== h) { small.width = w; small.height = h; }
+        sctx.drawImage(video, 0, 0, w, h);
+        const d = sctx.getImageData(0, 0, w, h).data;
+        const gray = new Uint8Array(w * h);
+        for (let i = 0, j = 0; i < d.length; i += 4, j++) gray[j] = (d[i] * 3 + d[i + 1] * 6 + d[i + 2]) / 10;
+        if (prevGray) {
+          let changed = 0;
+          for (let i = 0; i < gray.length; i++) if (Math.abs(gray[i] - prevGray[i]) > 28) changed++;
+          if (changed / gray.length > MOTION_FRAC) { dirty = true; lastMotionAt = Date.now(); }
+        } else { dirty = true; lastMotionAt = Date.now(); }
+        prevGray = gray;
+        const now = Date.now();
+        const rested = now - lastMotionAt >= REST_MS;
+        const due = (dirty && rested) || (pageFound && now - lastReadAt >= IDLE_RECHECK_MS);
+        if (due && !inflight && now - lastReadAt >= MIN_GAP_MS) void read();
+      }
+
+      function grabFrame() {
+        const w = READ_W;
+        const h = Math.round((video.videoHeight / video.videoWidth) * w);
+        if (full.width !== w || full.height !== h) { full.width = w; full.height = h; }
+        fctx.drawImage(video, 0, 0, w, h);
+        return full.toDataURL("image/jpeg", 0.8);
+      }
+
+      async function read() {
+        inflight = true;
+        dirty = false;
+        lastReadAt = Date.now();
+        const frame = grabFrame();
+        try {
+          const res = await fetch("/api/notebook/read", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ frame, previousLines: shown.map((l) => l.text) }),
+          });
+          if (!res.ok) throw new Error("server " + res.status);
+          const out = await res.json();
+          lastFrameForShadow = frame;
+          apply(out.reading);
+        } catch (e) {
+          setCorner("bad", "can't read");
+          corner.title = String(e && e.message ? e.message : e);
+        } finally {
+          inflight = false;
+        }
+      }
+
+      // ---- Layout. The sheet's corners come back with every read; their bounding box maps onto the
+      // viewport's writing area, so a line's box on the paper becomes a spot on the screen. A tilted
+      // sheet is squared up by that map well enough for text to sit where it was written.
+      function pageRect(page) {
+        const xs = page.map((p) => p.x);
+        const ys = page.map((p) => p.y);
+        const x = Math.min(...xs), y = Math.min(...ys);
+        return { x, y, w: Math.max(0.05, Math.max(...xs) - x), h: Math.max(0.05, Math.max(...ys) - y) };
+      }
+      function area() {
+        const vw = window.innerWidth, vh = window.innerHeight;
+        return { x: vw * MARGIN.left, y: vh * MARGIN.top, w: vw * (1 - MARGIN.left - MARGIN.right), h: vh * (1 - MARGIN.top - MARGIN.bottom) };
+      }
+      function place(box, pr) {
+        const a = area();
+        const fx = (box.x - pr.x) / pr.w, fy = (box.y - pr.y) / pr.h;
+        const fh = box.h / pr.h;
+        const left = a.x + fx * a.w;
+        const top = a.y + fy * a.h;
+        const size = Math.max(FONT_MIN, Math.min(FONT_MAX, fh * a.h * 0.95));
+        return { left, top, size };
+      }
+
+      function apply(reading) {
+        if (reading.page) {
+          lastPage = reading.page;
+          quad.setAttribute("points", reading.page.map((p) => (p.x * 1000).toFixed(0) + "," + (p.y * 1000).toFixed(0)).join(" "));
+          if (!pageFound) {
+            pageFound = true;
+            welcome.classList.add("hidden");
+            cam.classList.add("thumb");
+            clearTimeout(hideTimer);
+            hideTimer = setTimeout(() => cam.classList.add("hidden"), THUMB_MS);
+          }
+          setCorner("live", reading.covered ? "hand in the way" : "reading");
+        } else {
+          quad.setAttribute("points", "");
+          if (!pageFound) { hint.textContent = "No page in view yet. Tilt the lid a little more."; setCorner("wait", "looking for the page"); }
+          else setCorner("wait", "page out of view");
+          return;
+        }
+        const pr = pageRect(lastPage);
+        // A covered reading only adds or changes lines; what the hand hides stays as last read.
+        let next = reading.lines;
+        if (reading.covered && shown.length) {
+          const kept = shown.filter((s) => !next.some((n) => overlaps(n.box, s.box)));
+          next = kept.concat(next).sort((a, b) => a.box.y - b.box.y);
+        }
+        render(next, pr);
+        shown = next;
+        drawShadow(pr);
+      }
+      const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+      // ---- Writing. A line that already reads the same stays put (it may slide if the sheet moved);
+      // a new or changed line is written in, so the watcher sees ink land the way it does on a tablet.
+      function render(lines, pr) {
+        const old = Array.from(linesEl.children);
+        const used = new Set();
+        lines.forEach((l, i) => {
+          const p = place(l.box, pr);
+          let el = old.find((e) => !used.has(e) && e.dataset.text === l.text);
+          if (!el) {
+            el = document.createElement("div");
+            el.className = "line";
+            el.dataset.text = l.text;
+            el.style.setProperty("--tilt", ((hash(l.text) % 5) - 2) * 0.35 + "deg");
+            linesEl.appendChild(el);
+            writeIn(el, l.text);
+          }
+          used.add(el);
+          el.style.left = p.left + "px";
+          el.style.top = p.top + "px";
+          el.style.fontSize = p.size + "px";
+          el.style.order = i;
+        });
+        for (const e of old) if (!used.has(e)) e.remove();
+      }
+      function hash(s) { let h = 7; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; }
+      function writeIn(el, text) {
+        const parts = text.split(/(~~[^~]+~~)/).filter(Boolean);
+        el.replaceChildren();
+        for (const part of parts) {
+          const struck = /^~~.*~~$/.test(part);
+          const node = document.createElement(struck ? "del" : "span");
+          node.textContent = struck ? part.slice(2, -2) : part;
+          el.appendChild(node);
+        }
+      }
+
+      // ---- The faint page: the real sheet, cropped, behind the writing. Off unless asked; on, it is redrawn only on a read.
+      function drawShadow(pr) {
+        if (!faint || !lastFrameForShadow) return;
+        const img = new Image();
+        img.onload = () => {
+          const a = area();
+          shadow.width = window.innerWidth; shadow.height = window.innerHeight;
+          shctx.clearRect(0, 0, shadow.width, shadow.height);
+          shctx.drawImage(img, pr.x * img.width, pr.y * img.height, pr.w * img.width, pr.h * img.height, a.x, a.y, a.w, a.h);
+        };
+        img.src = lastFrameForShadow;
+      }
+      function setFaint(on) {
+        faint = on;
+        shadow.classList.toggle("on", on);
+        faintBtn.classList.toggle("on", on);
+        try { localStorage.setItem("notebook.faint", on ? "1" : "0"); } catch { /* no storage */ }
+        if (on && lastPage) drawShadow(pageRect(lastPage));
+      }
+      setFaint(faint);
+
+      function peekCamera() {
+        if (!pageFound) return;
+        cam.classList.remove("hidden");
+        cam.classList.add("thumb");
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(() => cam.classList.add("hidden"), 5000);
+      }
+      faintBtn.addEventListener("click", () => setFaint(!faint));
+      showBtn.addEventListener("click", peekCamera);
+      corner.addEventListener("click", peekCamera);
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "f") setFaint(!faint);
+        if (e.key === "c") peekCamera();
+      });
+      window.addEventListener("resize", () => { if (lastPage) render(shown, pageRect(lastPage)); });
+
+      void startCamera();
+    })();
+  </script>
+</body>
+</html>

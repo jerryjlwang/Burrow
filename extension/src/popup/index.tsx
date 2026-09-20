@@ -43,6 +43,9 @@ function Popup() {
     const msg = tablet?.watching ? { type: "tablet.stop", close: false } : { type: "tablet.open" };
     chrome.runtime.sendMessage(msg, (t: TabletState) => setTablet(t ?? null));
   };
+  const openNotebook = () => {
+    chrome.runtime.sendMessage({ type: "tablet.open", notebook: true }, (t: TabletState) => setTablet(t ?? null));
+  };
   const verdictText = (t: TabletState) => {
     const v = t.lastVerdict;
     if (t.error) return t.error;
@@ -115,6 +118,9 @@ function Popup() {
             </button>
             <button className="link" title="Alt+Shift+D" onClick={toggleTablet}>
               {tablet?.watching ? "Stop watching" : "Watch the tablet"}
+            </button>
+            <button className="link" title="Alt+Shift+N" onClick={openNotebook}>
+              Write in my notebook
             </button>
           </div>
         </div>

@@ -123,7 +123,8 @@ export type BgRequest =
   | { type: "graph.get" }
   | { type: "graph.event"; event: GraphEvent }
   | { type: "graph.clear" }
-  | { type: "tablet.open" }
+  /** notebook: open the server's notebook page (the webcam on a paper notebook) instead of the drawing app. */
+  | { type: "tablet.open"; notebook?: boolean }
   | { type: "tablet.stop"; close?: boolean }
   | { type: "tablet.status" }
   /**

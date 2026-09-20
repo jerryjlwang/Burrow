@@ -1,6 +1,7 @@
 /**
  * The tablet watcher. Alt+Shift+D (or the popup) opens Excalidraw in a Chrome window on the touch
- * display and starts watching it: the background captures that window's active tab about twice a
+ * display and starts watching it (Alt+Shift+N opens the server's notebook page there instead: the
+ * laptop webcam on a paper notebook, transcribed onto a blank board, watched the same way): the background captures that window's active tab about twice a
  * second, counts changed pixels, and when enough new ink lands (or the pen pauses) sends the frame
  * plus a picture of the kid's main screen to the server's judge. Verdicts go to the main screen's
  * tab, where the rabbit reacts. Nothing here reads the drawing app itself, so any page in that
@@ -134,6 +135,17 @@ async function pickDisplay(): Promise<chrome.system.display.DisplayUnitInfo | nu
 
 const JUMP_KEY = "burrow.jump";
 
+/** The same board: same origin and path, whatever excalidraw or the notebook page adds after. */
+function sameBoard(a: string, b: string): boolean {
+  try {
+    const x = new URL(a);
+    const y = new URL(b);
+    return x.origin === y.origin && x.pathname.replace(/\/$/, "") === y.pathname.replace(/\/$/, "");
+  } catch {
+    return false;
+  }
+}
+
 /** The rabbit's jump record (docs/frontend/HANDOFF.md): pages watch it and dive or pop out. */
 async function writeJump(to: "board" | "kid", from: "board" | "kid", stage: "requested" | "gone"): Promise<void> {
   try {
@@ -246,8 +258,19 @@ export function setTabletMask(tabId: number | null, rects: unknown, quietMs?: nu
   return true;
 }
 
-export async function openTablet(contextTab?: chrome.tabs.Tab | null, opts: { skipDisplay?: boolean } = {}): Promise<TabletState> {
+export async function openTablet(contextTab?: chrome.tabs.Tab | null, opts: { skipDisplay?: boolean; url?: string } = {}): Promise<TabletState> {
   if (!deps) throw new Error("tablet watcher not initialised");
+  const boardUrl = opts.url ?? BOARD_URL;
+  // A board of the other kind is open: close it and open the right one; the rabbit makes the round trip.
+  if (watch?.boardTabId != null) {
+    let current = "";
+    try {
+      current = (await chrome.tabs.get(watch.boardTabId)).url ?? "";
+    } catch {
+      current = "";
+    }
+    if (current && !sameBoard(current, boardUrl)) await stopTablet(true);
+  }
   // Context: the tab the shortcut was pressed in, else the active tab of the last focused window.
   let ctx = contextTab ?? null;
   // A popup opened as a tab, or any of our own pages, is never the task; fall back to the focused window.
@@ -278,7 +301,7 @@ export async function openTablet(contextTab?: chrome.tabs.Tab | null, opts: { sk
   const display = opts.skipDisplay ? null : await pickDisplay();
   const area = display?.workArea;
   const win = await chrome.windows.create({
-    url: BOARD_URL,
+    url: boardUrl,
     type: "normal",
     focused: true,
     ...(area ? { left: area.left, top: area.top, width: area.width, height: area.height } : {}),

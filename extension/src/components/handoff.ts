@@ -9,7 +9,7 @@ import type { PetController } from "./pet";
 import { dig, dropNotes, holeOf, journey, tunnelIn, unrollNotes, whoosh } from "./tunnel";
 import type { Journey } from "./journey";
 
-/** kid: any page the kid works on; parent: parent.html; board: the drawing board the tablet watcher opens. */
+/** kid: any page the kid works on; parent: parent.html; board: the drawing board the tablet watcher opens (excalidraw, or the server's notebook page that mirrors a paper notebook through the webcam). */
 export type Role = "kid" | "parent" | "board";
 export type JumpStage = "requested" | "gone" | "arrived";
 
@@ -103,6 +103,7 @@ const VIGNETTE_GAP_MS: [number, number] = [150_000, 300_000];
 export function pageRole(): Role {
   if (/\/parent\.html$/.test(location.pathname)) return "parent";
   if (/(^|\.)excalidraw\.com$/.test(location.hostname)) return "board";
+  if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && /^\/notebook\/?$/.test(location.pathname)) return "board";
   return "kid";
 }
 
