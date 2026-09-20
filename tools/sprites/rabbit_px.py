@@ -145,6 +145,7 @@ GLYPHS = {
     "?": [".yy.", "y..y", "...y", "..y.", "..y.", "....", "..y."],
     "z": ["yyyy", "..y.", ".y..", "yyyy"],
     "dot": ["yy", "yy"],
+    "!": ["yy", "yy", "yy", "yy", "..", "yy"],
     "spark": [".y.", "yyy", ".y."],
 }
 
@@ -499,6 +500,14 @@ def build():
                             moved(rabbit(ear_dy=-1, watch_dy=-1), 0, -1),
                             squash(rabbit(ear_dy=-1, watch_dy=1), 1)],
                     fps=12, loop=True, move=[0, 4, 6, 4, 0])
+    # "Oh dear, I'm late": he checks the watch, gasps, then holds the panic until the hole opens.
+    pn0 = rabbit(look=True, watch_dy=-3, mouth="flat")
+    pn1 = rabbit(look=True, watch_dy=-3, eyes="wide", mouth="open")
+    glyph(pn1, "!", 40 + OFF, 6)
+    pn2 = rabbit(ear_dy=-2, eyes="wide", mouth="wide", watch_dy=1)
+    glyph(pn2, "!", 38 + OFF, 4)
+    glyph(pn2, "!", 44 + OFF, 3)
+    S["panic"] = dict(frames=[pn0, pn1, pn2], fps=6, loop=False, hold=True)
     # Landing after a throw: impact squash with a startled face, recover, settle.
     S["land"] = dict(frames=[squash(rabbit(eyes="wide", mouth="open", ear_dy=-1, watch_dy=1), 2), bob(rabbit(watch_dx=2)), a],
                      fps=10, loop=False)
@@ -557,6 +566,7 @@ NOTES = {
     "wave": "He waves with his left ear, twice, then settles. Use for greetings.",
     "hop": "Travel hop. Loop while moving; move lists the sideways pixels per frame so he only travels in the air.",
     "land": "Landing after a throw: impact squash, recover, settle on idle frame 0.",
+    "panic": "Oh dear, I'm late. Watch check, gasp, then hold the panic. The player follows it with the hole.",
     "idle_tap": "Idle variant. The right foot taps twice.",
     "idle_watch": "Idle variant. He lifts the pocket watch, checks it, and lets it drop.",
     "idle_flick": "Idle variant. The left ear flicks twice.",

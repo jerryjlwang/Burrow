@@ -18,10 +18,10 @@ W, H, OFF, CX = rp.W, rp.H, rp.OFF, rp.CX
 EIGHT = [(dr, dc) for dr in (-1, 0, 1) for dc in (-1, 0, 1) if dr or dc]
 # States whose pose is asymmetric on purpose, checked only for the rim and outline rules.
 ASYMMETRIC = {"confused", "to_confused", "from_confused", "wave", "idle_flick", "idle_tap", "thinking", "to_thinking",
-              "aha", "dragged"}
+              "aha", "dragged", "panic"}
 GROUNDED = {"idle", "listening", "to_listening", "from_listening", "thinking", "to_thinking", "aha", "confused",
             "to_confused", "from_confused", "wave", "sleepy", "to_sleepy", "from_sleepy", "idle_tap", "idle_watch",
-            "idle_flick", "land"}
+            "idle_flick", "land", "panic"}
 
 
 def watch_mask(f):

@@ -221,6 +221,14 @@
         0
       ]
     },
+    "panic": {
+      "file": "rabbit_panic.png",
+      "frames": 3,
+      "fps": 6,
+      "loop": false,
+      "notes": "Oh dear, I'm late. Watch check, gasp, then hold the panic. The player follows it with the hole.",
+      "hold": true
+    },
     "land": {
       "file": "rabbit_land.png",
       "frames": 3,
