@@ -98,6 +98,24 @@ CHALK = [
     "oRRRRRsso",
     ".ooooooo.",
 ]
+# The notes he carries, unrolled: parchment between two rolled rods. Rows 0 to 4 and 9 to 13 are the
+# rods (their caps poke one pixel past the paper), so a 5 pixel slice keeps them on the edges.
+SCROLL = [
+    ".oooooooooooo.",
+    "oRRRRRRRRRRRRo",
+    "oRRRRRRRRRRRRo",
+    "osssssssssssso",
+    ".oooooooooooo.",
+    ".oRRRRRRRRRRo.",
+    ".oRRRRRRRRRRo.",
+    ".oRRRRRRRRRRo.",
+    ".oRRRRRRRRRRo.",
+    ".oooooooooooo.",
+    "oRRRRRRRRRRRRo",
+    "oRRRRRRRRRRRRo",
+    "osssssssssssso",
+    ".oooooooooooo.",
+]
 # Where a button's bottom edge shows its shadow line (one pixel darker), so it reads as raised.
 PIECES = {
     "bubble": (FRAME, {}, 5),
@@ -107,7 +125,57 @@ PIECES = {
     "button_quiet": (BUTTON, {"X": "R"}, 4),
     "button_alert": (BUTTON, {"X": "c"}, 4),
     "board": (BOARD, {}, (6, 6, 9, 6)),
+    "scroll": (SCROLL, {}, 5),
 }
+
+# Earth for the jump between laptops. Dark packed dirt with a few paler grains and two pebbles, on a
+# 12 x 12 tile that repeats without a seam. The page darkens to this from the edges when he dives.
+DIRT = [
+    "DDDDEDDDDDDD",
+    "DFDDDDDDPpDD",
+    "DDDDDDDDDDDD",
+    "DDDDDDEDDDFD",
+    "DDDEDDDDDDDD",
+    "DDDDFDDDDDDE",
+    "DDDDDDDDDDDD",
+    "DPpDDDDDDDDD",
+    "DDDDDDDDEDDD",
+    "DDDDDDDDDDDD",
+    "DDFDDDEDDDDD",
+    "DDDDDDDDDFDD",
+]
+DIRT_PAL = {
+    "D": (46, 32, 27, 255),      # packed earth
+    "E": (66, 47, 38, 255),      # paler grain
+    "F": (31, 22, 19, 255),      # dark pocket
+    "P": (104, 82, 64, 255),     # pebble, lit side
+    "p": (78, 60, 46, 255),      # pebble, shaded side
+}
+# Ordered dither, 4 x 4 Bayer. The tunnel closes in through tiles that keep only the cells under a
+# threshold, so its edge is a dither fringe instead of a soft gradient.
+BAYER = [
+    [0, 8, 2, 10],
+    [12, 4, 14, 6],
+    [3, 11, 1, 9],
+    [15, 7, 13, 5],
+]
+DIRT_LEVELS = {"dirt": 16, "dirt_75": 12, "dirt_50": 8, "dirt_25": 4}
+
+# The same notes rolled up, tied with a gold ribbon, as they drop into the hole after him. Two
+# frames side by side: lying flat, then on end, so it tumbles as it falls.
+SCROLL_ROLLED = [
+    "...........",
+    "...........",
+    ".ooooooooo.",
+    "oRRRRgRRRRo",
+    "oRRRRgRRRRo",
+    "ossssgsssso",
+    ".ooooooooo.",
+    "...........",
+    "...........",
+    "...........",
+    "...........",
+]
 
 
 # The rabbit's left ear on its own, for the hold to talk button. Rows and runs come from rabbit_px.
@@ -123,10 +191,10 @@ def ear_rows():
     return [".." * 4] + rows + [".." * 4]
 
 
-def image(rows, sub=None):
+def image(rows, sub=None, extra=None):
     w, h = len(rows[0]), len(rows)
     im = Image.new("RGBA", (w, h))
-    pal = {**PAL, **EXTRA}
+    pal = {**PAL, **EXTRA, **(extra or {})}
     px = []
     for row in rows:
         for ch in row:
@@ -134,6 +202,26 @@ def image(rows, sub=None):
             px.append(pal[ch])
     im.putdata(px)
     return im
+
+
+def dirt_tile(level):
+    """The dirt tile with only the Bayer cells under `level` (of 16) kept; the rest is clear."""
+    im = image(DIRT, extra=DIRT_PAL)
+    px = im.load()
+    for y in range(im.height):
+        for x in range(im.width):
+            if BAYER[y % 4][x % 4] >= level:
+                px[x, y] = (0, 0, 0, 0)
+    return im
+
+
+def scroll_rolled_strip():
+    """Two 11 x 11 frames: the rolled notes lying flat, then standing on end (the same picture turned)."""
+    flat = image(SCROLL_ROLLED)
+    strip = Image.new("RGBA", (22, 11))
+    strip.paste(flat, (0, 0))
+    strip.paste(flat.transpose(Image.Transpose.TRANSPOSE), (11, 0))
+    return strip
 
 
 def same_pixels(path, im):
@@ -160,6 +248,20 @@ def export(out=OUT):
     if not same_pixels(path, chalk):
         chalk.save(path)
     man["pieces"]["chalk"] = {"file": "chalk.png", "size": list(chalk.size), "slice": 0, "note": "A stub of chalk for the board's tray."}
+    man["pieces"]["scroll"]["note"] = "The notes he carries. Rods top and bottom; grow the height to unroll it."
+    for name, level in DIRT_LEVELS.items():
+        im = dirt_tile(level)
+        path = os.path.join(out, f"{name}.png")
+        if not same_pixels(path, im):
+            im.save(path)
+        man["pieces"][name] = {"file": f"{name}.png", "size": list(im.size), "slice": 0,
+                               "note": f"Repeating earth for the tunnel, {level * 100 // 16}% of the cells kept (4 x 4 Bayer)."}
+    rolled = scroll_rolled_strip()
+    path = os.path.join(out, "scroll_rolled.png")
+    if not same_pixels(path, rolled):
+        rolled.save(path)
+    man["pieces"]["scroll_rolled"] = {"file": "scroll_rolled.png", "size": list(rolled.size), "slice": 0,
+                                      "note": "Two 11 x 11 frames of the rolled notes: flat, then on end."}
     ear = image(ear_rows())
     path = os.path.join(out, "ear.png")
     if not same_pixels(path, ear):
@@ -225,6 +327,28 @@ def preview(path, scale=3):
     print(path, sheet.size)
 
 
+def preview_jump(path, scale=3):
+    """The tunnel dirt at its four densities over a page, the unrolled notes, and the rolled notes at 6x."""
+    page = (245, 247, 251, 255)
+    sheet = Image.new("RGBA", (4 * 36 * scale * 2 + 60, 2 * 36 * scale + 60 + 60 * scale), page)
+    draw = ImageDraw.Draw(sheet)
+    for i, name in enumerate(("dirt_25", "dirt_50", "dirt_75", "dirt")):
+        tile = dirt_tile(DIRT_LEVELS[name]).resize((12 * scale, 12 * scale), Image.NEAREST)
+        x0 = 12 + i * 36 * scale * 2
+        for ty in range(6):
+            for tx in range(6):
+                sheet.alpha_composite(tile, (x0 + tx * 12 * scale, 12 + ty * 12 * scale))
+    y = 12 + 6 * 12 * scale + 24
+    notes = nine_slice(image(SCROLL), 5, 110, 40, scale)
+    sheet.alpha_composite(notes, (12, y))
+    draw.text((12 + 7 * scale, y + 8 * scale), "Today I learned about", fill=(59, 42, 35, 255))
+    draw.text((12 + 7 * scale, y + 16 * scale), "moats and castle walls.", fill=(59, 42, 35, 255))
+    rolled = scroll_rolled_strip().resize((22 * 6, 11 * 6), Image.NEAREST)
+    sheet.alpha_composite(rolled, (12 + 120 * scale, y))
+    sheet.save(path)
+    print(path, sheet.size)
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--preview", default="")
@@ -233,3 +357,4 @@ if __name__ == "__main__":
     print("pieces:", ", ".join(m["pieces"]))
     if args.preview:
         preview(args.preview)
+        preview_jump(args.preview.replace(".png", "_jump.png"))

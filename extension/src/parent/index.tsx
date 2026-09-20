@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { KnowledgeGraph, type GraphSnapshot, type Misconception } from "@shared/graph";
 import { mountCompanion } from "../content/mount";
@@ -56,6 +56,15 @@ function Parent() {
   const [now, setNow] = useState(Date.now());
   /** The room card a click on the map just pointed at; it flashes gold for a moment. */
   const [flash, setFlash] = useState<{ id: string; at: number } | null>(null);
+  /** Counts the notesSeen he has brought; a new one remounts the scroll so it flashes gold. */
+  const [notesSeen, setNotesSeen] = useState(0);
+  const lastSummary = useRef<string | null>(null);
+  useEffect(() => {
+    if (summary && summary !== lastSummary.current) {
+      lastSummary.current = summary;
+      setNotesSeen((n) => n + 1);
+    }
+  }, [summary]);
 
   useEffect(() => {
     if (!flash) return;
@@ -140,6 +149,8 @@ function Parent() {
   const plans = KnowledgeGraph.fromJSON(graph).profile.plans.sort((a, b) => b.updatedAt - a.updatedAt);
   const topicPlans = plans.filter((p) => p.kind !== "problem");
   const problemPlans = plans.filter((p) => p.kind === "problem");
+  const travelling = !!jump && jump.stage !== "arrived";
+  const where = whereIs(jump, kid);
 
   return (
     <main>
@@ -319,7 +330,16 @@ function Parent() {
 
       <section aria-labelledby="rabbit-h">
         <h2 id="rabbit-h">The rabbit</h2>
-        <p className="lede plain">{whereIs(jump, kid)}</p>
+        <p className="lede plain">
+          {travelling ? where.replace(/\.$/, "") : where}
+          {travelling && (
+            <span className="dots" aria-hidden="true">
+              <i>.</i>
+              <i>.</i>
+              <i>.</i>
+            </span>
+          )}
+        </p>
         <div className="row">
           <button className="px-btn primary" disabled={here} onClick={() => void requestJump("parent")}>
             Call the rabbit here
@@ -328,7 +348,7 @@ function Parent() {
             Send him back
           </button>
         </div>
-        <div className="summary px-frame plain">
+        <div key={notesSeen} className={`summary notes px-frame plain${notesSeen > 0 ? " flash" : ""}`}>
           <span className="k">What he brought back</span>
           {summary ?? `Nothing yet. Call him over and he will tell you what ${kid} taught him today.`}
         </div>
