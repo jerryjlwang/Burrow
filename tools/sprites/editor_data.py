@@ -45,6 +45,8 @@ MAPS = {
     "confused": [N] * 4,
     "celebrate": [B, mv(0, -2), mv(0, -3), mv(0, -3), mv(0, -1), B, B, N],
     "wave": [N] * 8,
+    "hop": [B, mv(0, -2), mv(0, -3), mv(0, -1), B],
+    "land": [B, B, N],
     "idle_tap": [N] * 8,
     "idle_watch": [N] * 7,
     "idle_flick": [N] * 4,

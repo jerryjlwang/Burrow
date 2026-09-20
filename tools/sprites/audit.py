@@ -21,7 +21,7 @@ ASYMMETRIC = {"confused", "to_confused", "from_confused", "wave", "idle_flick", 
               "aha", "dragged"}
 GROUNDED = {"idle", "listening", "to_listening", "from_listening", "thinking", "to_thinking", "aha", "confused",
             "to_confused", "from_confused", "wave", "sleepy", "to_sleepy", "from_sleepy", "idle_tap", "idle_watch",
-            "idle_flick"}
+            "idle_flick", "land"}
 
 
 def watch_mask(f):

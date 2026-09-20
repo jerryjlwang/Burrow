@@ -44,6 +44,6 @@ Open `tools/sprite-editor.html`, or any strip in Aseprite or Piskel with a 64 x 
 ## Renderer rules
 - Whole-number scale only (3x in the page overlay, 6x and up for hero moments), `image-rendering: pixelated`.
 - Anchor bottom center. Feet end at row 53. The hole lives in rows 50 to 55.
-- He never walks. Move him with the hole.
+- Short trips are hops (`hop` with its `move` list); long trips go through the hole. Wandering is rare, see `wander_gap`.
 - Jump, sending: `hole_open`, `dive`, `hole_only` reversed.
 - Jump, receiving: `hole_only`, loop `hole_wait`, `dive` reversed, `hole_open` reversed, `idle`.

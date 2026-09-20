@@ -491,6 +491,17 @@ def build():
                 if (i + k) % 3 == 0:
                     glyph(g, "spark", sx + OFF, sy)
     S["celebrate"] = dict(frames=ce, fps=10, loop=False)
+    # Travel hop: a neutral face, one cycle per hop. `move` is how many source pixels the player
+    # slides him sideways on each frame, so he only travels while airborne.
+    S["hop"] = dict(frames=[squash(rabbit(ear_dy=-1), 1),
+                            moved(rabbit(ear_dy=1, watch_dy=1), 0, -2),
+                            moved(rabbit(ear_dy=1), 0, -3),
+                            moved(rabbit(ear_dy=-1, watch_dy=-1), 0, -1),
+                            squash(rabbit(ear_dy=-1, watch_dy=1), 1)],
+                    fps=12, loop=True, move=[0, 4, 6, 4, 0])
+    # Landing after a throw: impact squash with a startled face, recover, settle.
+    S["land"] = dict(frames=[squash(rabbit(eyes="wide", mouth="open", ear_dy=-1, watch_dy=1), 2), bob(rabbit(watch_dx=2)), a],
+                     fps=10, loop=False)
     # Wave with the left ear: half, flop, half, up, twice, then settle.
     S["wave"] = dict(frames=[happy(ear_l=e) for e in ("half", "flop", "half", "up", "half", "flop", "half")] + [a],
                      fps=10, loop=False)
@@ -544,6 +555,8 @@ NOTES = {
     "confused": "One ear flops over and a question mark bobs.",
     "celebrate": "Crouch, hop with sparkles, land with a squash, settle. Ears and watch lag the body. Play once.",
     "wave": "He waves with his left ear, twice, then settles. Use for greetings.",
+    "hop": "Travel hop. Loop while moving; move lists the sideways pixels per frame so he only travels in the air.",
+    "land": "Landing after a throw: impact squash, recover, settle on idle frame 0.",
     "idle_tap": "Idle variant. The right foot taps twice.",
     "idle_watch": "Idle variant. He lifts the pocket watch, checks it, and lets it drop.",
     "idle_flick": "Idle variant. The left ear flicks twice.",
@@ -570,6 +583,8 @@ def export(S, out=OUT):
                "receiving": [{"state": "hole_only"}, {"state": "hole_wait", "loop": True}, {"state": "dive", "reverse": True},
                              {"state": "hole_open", "reverse": True}, {"state": "idle"}]},
            "idle_variant_gap": [4, 9],
+           "wander_gap": [75, 150],
+           "wander_hops": [2, 3],
            "body": list(image(S["idle"]["frames"][0]).getbbox()),
            "body_note": "left, top, right, bottom of the rabbit in idle frame 0, rim included, right and bottom exclusive",
            "states": {}}
@@ -582,7 +597,7 @@ def export(S, out=OUT):
             strip.save(path)
         entry = {"file": f"rabbit_{name}.png", "frames": len(st["frames"]), "fps": st["fps"], "loop": st["loop"],
                  "notes": NOTES[name]}
-        for key in ("head_dy", "enter", "exit", "hold", "overlays", "variants"):
+        for key in ("head_dy", "enter", "exit", "hold", "overlays", "variants", "move"):
             if key in st:
                 entry[key] = st[key]
         man["states"][name] = entry

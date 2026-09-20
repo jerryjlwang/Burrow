@@ -44,6 +44,14 @@
     4,
     9
   ],
+  "wander_gap": [
+    75,
+    150
+  ],
+  "wander_hops": [
+    2,
+    3
+  ],
   "body": [
     19,
     2,
@@ -198,6 +206,27 @@
       "fps": 10,
       "loop": false,
       "notes": "Crouch, hop with sparkles, land with a squash, settle. Ears and watch lag the body. Play once."
+    },
+    "hop": {
+      "file": "rabbit_hop.png",
+      "frames": 5,
+      "fps": 12,
+      "loop": true,
+      "notes": "Travel hop. Loop while moving; move lists the sideways pixels per frame so he only travels in the air.",
+      "move": [
+        0,
+        4,
+        6,
+        4,
+        0
+      ]
+    },
+    "land": {
+      "file": "rabbit_land.png",
+      "frames": 3,
+      "fps": 10,
+      "loop": false,
+      "notes": "Landing after a throw: impact squash, recover, settle on idle frame 0."
     },
     "wave": {
       "file": "rabbit_wave.png",
