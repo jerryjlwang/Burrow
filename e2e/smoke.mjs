@@ -714,6 +714,19 @@ try {
   }
   await page.screenshot({ path: resolve(shots, "07-voice.png") });
 
+  // The mic is the student's switch: once they turn it off, his speaking must not turn it back on.
+  if (realDeepgramKey && voice.micOn) {
+    await inShadow(".pip-mic").click();
+    let off = await readVoice();
+    for (const t0 = Date.now(); off.micOn && Date.now() - t0 < 5000; off = await readVoice()) await new Promise((r) => setTimeout(r, 250));
+    const msgsBefore = (await companionMsgs()).length;
+    await ask("hello");
+    const spoke = (await waitForNewCompanionMsg(msgsBefore, 15000)).length > msgsBefore;
+    // Long enough for a short line to finish playing, which is when the mic used to reopen.
+    await new Promise((r) => setTimeout(r, 7000));
+    check("turning the mic off sticks: he speaks and it stays off", !off.micOn && spoke && !(await readVoice()).micOn, JSON.stringify({ off: off.micOn, spoke, after: (await readVoice()).micOn }));
+  }
+
   // Extension pages: onboarding and popup render and the mic permission flow works (fake UI auto-grants).
   const extId = sw ? new URL(sw.url()).host : null;
   if (extId) {

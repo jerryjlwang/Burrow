@@ -71,7 +71,6 @@ export class CompanionController {
         return v && !v.paused && v.hasTranscript ? v.heard : null;
       },
       onSpeechStart: () => this.handleSpeechStart(),
-      onSpoken: () => this.listenAfterSpeaking(),
     });
     this.loop = new AgentLoop({
       executor: {
@@ -571,17 +570,6 @@ export class CompanionController {
     } catch {
       /* quiet */
     }
-  }
-
-  /** When the mic was granted before, it stays off and the page is showing: he said something, so he opens the mic for the reply. */
-  private autoListenFailedAt = 0;
-  private listenAfterSpeaking(): void {
-    const s = store.getState();
-    if (!s.settings.micGranted || s.voice.mode !== "off" || document.hidden) return;
-    if (Date.now() - this.autoListenFailedAt < 60_000) return;
-    void this.voice.start().then((ok) => {
-      if (!ok) this.autoListenFailedAt = Date.now();
-    });
   }
 
   private handleSpeechStart(): void {

@@ -11,7 +11,6 @@ export interface Settings {
   /** Hostnames where the companion stays hidden. */
   hiddenOnHosts: string[];
   /** Start listening automatically when a page loads (only after the user enabled voice once). */
-  voiceAutoResume: boolean;
   reducedMotion: "auto" | "on" | "off";
   /**
    * Watching videos along with the student. "ask" offers once; "on" is standing permission to
@@ -32,7 +31,6 @@ export const DEFAULT_SETTINGS: Settings = {
   characterName: "White Rabbit",
   character: "rabbit",
   hiddenOnHosts: [],
-  voiceAutoResume: true,
   reducedMotion: "auto",
   videoCompanion: "ask",
   trustedInput: false,
