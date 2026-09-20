@@ -86,6 +86,25 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
   const quiet = !panelOpen && !bubble && characterState === "idle" && voice.mode === "off";
 
   useEffect(() => loadKidFont(), []);
+
+  // Pages can ask the rabbit for things: "burrow:goto" {x, y} hops or hole-travels him so his body
+  // center lands there, "burrow:play" {state} plays a manifest state. Used by the new tab scene.
+  useEffect(() => {
+    const onGoto = (e: Event) => {
+      const d = (e as CustomEvent<{ x: number; y: number }>).detail;
+      if (d && Number.isFinite(d.x) && Number.isFinite(d.y)) void petRef.current?.goTo(d.x, d.y);
+    };
+    const onPlay = (e: Event) => {
+      const d = (e as CustomEvent<{ state: string }>).detail;
+      if (d?.state) petRef.current?.play(d.state);
+    };
+    window.addEventListener("burrow:goto", onGoto);
+    window.addEventListener("burrow:play", onPlay);
+    return () => {
+      window.removeEventListener("burrow:goto", onGoto);
+      window.removeEventListener("burrow:play", onPlay);
+    };
+  }, []);
   useEffect(() => armSounds(), []);
   useEffect(() => setSoundsEnabled(settings.ttsEnabled), [settings.ttsEnabled]);
   const onShown = useCallback((s: string) => playCue(s), []);
