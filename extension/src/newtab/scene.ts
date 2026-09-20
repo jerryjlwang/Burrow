@@ -900,8 +900,9 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
       draw("oak", ox, oy);
       hit("oak", 0, ox, oy, 47, 40);
       const swingFast = pressed?.hit?.kind === "swing";
-      draw("swing", ox + 6, oy + 36, live ? Math.floor(t / (swingFast ? 250 : 900)) % 2 : 0);
-      hit("swing", 0, ox + 6, oy + 36, 11, 17);
+      // The swing hangs from the branch on the left; its cell is 13 wide so the swung frame keeps both ropes.
+      draw("swing", ox + 3, oy + 36, live ? Math.floor(t / (swingFast ? 250 : 900)) % 2 : 0);
+      hit("swing", 0, ox + 3, oy + 36, 13, 17);
       const cf = cheshireFrame(now);
       if (cf >= 0) draw("cheshire", ox + 22, oy + 4, cf);
     }
