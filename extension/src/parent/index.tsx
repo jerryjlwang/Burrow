@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { GraphSnapshot, Misconception } from "@shared/graph";
 import { mountCompanion } from "../content/mount";
@@ -56,6 +56,15 @@ function Parent() {
   const [now, setNow] = useState(Date.now());
   /** The room card a click on the map just pointed at; it flashes gold for a moment. */
   const [flash, setFlash] = useState<{ id: string; at: number } | null>(null);
+  /** Counts the notes he has brought; a new one remounts the scroll so it flashes gold. */
+  const [notes, setNotes] = useState(0);
+  const lastSummary = useRef<string | null>(null);
+  useEffect(() => {
+    if (summary && summary !== lastSummary.current) {
+      lastSummary.current = summary;
+      setNotes((n) => n + 1);
+    }
+  }, [summary]);
 
   useEffect(() => {
     if (!flash) return;
@@ -135,6 +144,8 @@ function Parent() {
   const open = spots.filter((m) => m.status !== "resolved");
   const fixed = spots.filter((m) => m.status === "resolved" && m.resolution);
   const here = jump?.to === "parent" && jump.stage === "arrived";
+  const travelling = !!jump && jump.stage !== "arrived";
+  const where = whereIs(jump, kid);
 
   return (
     <main>
@@ -247,7 +258,16 @@ function Parent() {
 
       <section aria-labelledby="rabbit-h">
         <h2 id="rabbit-h">The rabbit</h2>
-        <p className="lede plain">{whereIs(jump, kid)}</p>
+        <p className="lede plain">
+          {travelling ? where.replace(/\.$/, "") : where}
+          {travelling && (
+            <span className="dots" aria-hidden="true">
+              <i>.</i>
+              <i>.</i>
+              <i>.</i>
+            </span>
+          )}
+        </p>
         <div className="row">
           <button className="px-btn primary" disabled={here} onClick={() => void requestJump("parent")}>
             Call the rabbit here
@@ -256,7 +276,7 @@ function Parent() {
             Send him back
           </button>
         </div>
-        <div className="summary px-frame plain">
+        <div key={notes} className={`summary notes px-frame plain${notes > 0 ? " flash" : ""}`}>
           <span className="k">What he brought back</span>
           {summary ?? `Nothing yet. Call him over and he will tell you what ${kid} taught him today.`}
         </div>

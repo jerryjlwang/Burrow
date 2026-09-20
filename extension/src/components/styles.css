@@ -302,3 +302,71 @@
   .pip-panel { width: calc(100vw - 24px); }
   .pip-dock { right: 12px; bottom: 12px; }
 }
+
+/* ---------- The jump between laptops: tunnel, notes and digging (tunnel.ts) ---------- */
+/* Drawn beside the React root inside the shadow root, one z step under the rabbit, so the dirt closes
+   in around him and the notes sit beside him without the page seeing any of it. */
+.pip-tunnel-root { position: fixed; left: 0; top: 0; width: 0; height: 0; overflow: visible; pointer-events: none; z-index: 2147483645; font-family: var(--pip-font); color: var(--ink); }
+.pip-tunnel-root *, .pip-tunnel-root *::before, .pip-tunnel-root *::after { box-sizing: border-box; }
+/* The page darkens to dirt from the edges in. Four layers of the same earth at 25, 50, 75 and 100
+   percent Bayer density, each masked to everything outside a circle centred on the hole. The circles
+   shrink together in eight steps (tunnel.ts sets --hx, --hy, --d0 and --d1), so the edge of the dark
+   is a dither fringe that closes in like an iris. */
+.pip-tunnel {
+  position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; pointer-events: none;
+  background: var(--ui-dirt) 0 0 / 36px 36px repeat; image-rendering: pixelated;
+  mask-image: radial-gradient(circle closest-side, #000 calc(100% - 2px), transparent 100%), linear-gradient(#000, #000);
+  mask-composite: exclude, add;
+  mask-repeat: no-repeat;
+  mask-position: calc(var(--hx) - 50vw + 50%) calc(var(--hy) - 50vh + 50%), 0 0;
+  mask-size: var(--d0) var(--d0), 100% 100%;
+  animation: pip-tunnel-in 0.56s steps(8, end) forwards;
+}
+.pip-tunnel.d75 { background-image: var(--ui-dirt-75); }
+.pip-tunnel.d50 { background-image: var(--ui-dirt-50); }
+.pip-tunnel.d25 { background-image: var(--ui-dirt-25); }
+.pip-tunnel.out { animation-name: pip-tunnel-out; }
+@keyframes pip-tunnel-in { from { mask-size: var(--d0) var(--d0), 100% 100%; } to { mask-size: var(--d1) var(--d1), 100% 100%; } }
+@keyframes pip-tunnel-out { from { mask-size: var(--d1) var(--d1), 100% 100%; } to { mask-size: var(--d0) var(--d0), 100% 100%; } }
+/* The rolled notes drop into the hole after him: seven 18px steps, tumbling between two frames. The
+   box's bottom edge is the hole's surface, so they are gone once they pass it. */
+.pip-drop { position: fixed; width: 120px; height: 120px; overflow: hidden; pointer-events: none; }
+.pip-drop-notes {
+  position: absolute; left: 42px; top: 0; width: 33px; height: 33px;
+  background: var(--ui-scroll-rolled) 0 0 / 66px 33px no-repeat; image-rendering: pixelated;
+  animation: pip-drop 0.42s steps(7, end) forwards, pip-tumble 0.14s steps(2, end) infinite;
+}
+@keyframes pip-drop { from { transform: translateY(-6px); } to { transform: translateY(120px); } }
+@keyframes pip-tumble { from { background-position: 0 0; } to { background-position: -66px 0; } }
+/* Dirt flying out of the hole while he is on his way: clods start under the hole's own pixels and arc
+   out in steps of whole pixels, so they seem to come up out of the ground. Sizes and arcs are in --u,
+   one of the rabbit's pixels (tunnel.ts sets it), so a 4x rabbit throws 4x dirt. */
+.pip-dig { position: fixed; width: 0; height: 0; pointer-events: none; --u: 3px; }
+.pip-clod { position: absolute; left: calc(-1 * var(--u)); top: calc(-1 * var(--u)); width: calc(2 * var(--u)); height: calc(2 * var(--u)); background: #2e201b; animation: pip-clod-r 0.72s steps(4, end) infinite; }
+.pip-clod.big { width: calc(3 * var(--u)); height: calc(3 * var(--u)); }
+.pip-clod.light { background: #685240; }
+.pip-clod.l { animation-name: pip-clod-l; }
+.pip-clod.far { animation-name: pip-clod-r-far; }
+.pip-clod.l.far { animation-name: pip-clod-l-far; }
+.pip-clod.high { animation-name: pip-clod-r-high; }
+.pip-clod.l.high { animation-name: pip-clod-l-high; }
+@keyframes pip-clod-r { 0% { transform: translate(0, 0); } 50% { transform: translate(calc(4 * var(--u)), calc(-12 * var(--u))); } 100% { transform: translate(calc(8 * var(--u)), 0); } }
+@keyframes pip-clod-l { 0% { transform: translate(0, 0); } 50% { transform: translate(calc(-4 * var(--u)), calc(-12 * var(--u))); } 100% { transform: translate(calc(-8 * var(--u)), 0); } }
+@keyframes pip-clod-r-far { 0% { transform: translate(0, 0); } 50% { transform: translate(calc(8 * var(--u)), calc(-16 * var(--u))); } 100% { transform: translate(calc(16 * var(--u)), 0); } }
+@keyframes pip-clod-l-far { 0% { transform: translate(0, 0); } 50% { transform: translate(calc(-8 * var(--u)), calc(-16 * var(--u))); } 100% { transform: translate(calc(-16 * var(--u)), 0); } }
+@keyframes pip-clod-r-high { 0% { transform: translate(0, 0); } 50% { transform: translate(calc(4 * var(--u)), calc(-16 * var(--u))); } 100% { transform: translate(calc(8 * var(--u)), 0); } }
+@keyframes pip-clod-l-high { 0% { transform: translate(0, 0); } 50% { transform: translate(calc(-4 * var(--u)), calc(-16 * var(--u))); } 100% { transform: translate(calc(-8 * var(--u)), 0); } }
+/* The notes unrolled beside him: the scroll frame's rods are its top and bottom edges, so growing the
+   height (tunnel.ts, in whole steps) unrolls it from the top rod down. The whole text is laid out from
+   the start, invisible until typed, so the paper is the right size before a letter shows. */
+.pip-notes {
+  position: fixed; pointer-events: auto; cursor: pointer; overflow: hidden;
+  border: 15px solid transparent; border-image: var(--ui-scroll) 5 fill / 15px repeat; image-rendering: pixelated;
+  padding: 0; color: var(--ink); font: 18px/24px var(--pip-font); box-shadow: var(--shadow);
+}
+.pip-notes.pop { animation: pip-notes-pop 0.24s steps(2, end); }
+/* The paper's margins live on the text, so rolled up (30px) the notes are exactly the two rods. */
+.pip-notes-text { margin: 3px 9px 6px; }
+.pip-notes-rest { visibility: hidden; }
+.pip-notes-caret { display: inline-block; width: 9px; height: 15px; margin-left: 3px; vertical-align: -3px; background: var(--ink); animation: pip-blink 0.6s steps(2) infinite; }
+@keyframes pip-notes-pop { 0% { transform: translateY(18px); } 50% { transform: translateY(-6px); } 100% { transform: none; } }

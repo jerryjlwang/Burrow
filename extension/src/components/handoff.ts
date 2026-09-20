@@ -6,6 +6,7 @@
 import type { GraphSnapshot } from "@shared/graph";
 import type { CompanionController } from "../content/controller";
 import type { PetController } from "./pet";
+import { dig, dropNotes, holeOf, tunnelIn, unrollNotes, whoosh } from "./tunnel";
 
 export type Role = "kid" | "parent";
 export type JumpStage = "requested" | "gone" | "arrived";
@@ -84,11 +85,21 @@ export const SKILLS: Record<string, string> = {
 
 /** If the other side never answers, the receiving hole closes on its own after this long. */
 const HANDOFF_TIMEOUT_MS = 12_000;
+/** The notes he brought stay open beside him this long once typed. */
+const NOTES_MS = 9_000;
+/** The dirt holds a beat after the hole has closed before it lets go of the page. */
+const TUNNEL_HOLD_MS = 200;
 /** Quiet minutes before he checks his watch, panics and dives to a new spot. */
 const VIGNETTE_GAP_MS: [number, number] = [150_000, 300_000];
 
 export function pageRole(): Role {
   return /\/parent\.html$/.test(location.pathname) ? "parent" : "kid";
+}
+
+/** How long a manifest state plays once, so the set piece keeps time with the art. */
+function stateMs(pet: PetController, name: string): number {
+  const s = pet.manifest.states[name];
+  return s ? Math.round((s.frames / Math.max(1, s.fps)) * 1000) : 0;
 }
 
 /** Skills that flipped to granted between two maps. */
@@ -145,10 +156,24 @@ export function startHandoff(deps: Deps): () => void {
     if (!pet) return;
     say(`jump-${jump.id}`, role === "kid" ? "Off to see your parent. Back soon!" : "Off I go, back to my kid!", 2500);
     await new Promise((r) => setTimeout(r, 900));
+    // The set piece: the page darkens to dirt around the hole as it opens, the whoosh falls with him
+    // once the dive starts, and the notes he carries drop in after him while the hole is still open.
+    const reduced = deps.reducedMotion();
+    const hole = holeOf(pet);
+    const tunnel = hole ? tunnelIn(hole, reduced) : null;
+    const diveAt = stateMs(pet, "hole_open");
+    const timers = [
+      window.setTimeout(() => whoosh("down"), diveAt),
+      window.setTimeout(() => {
+        if (hole) void dropNotes(hole, reduced);
+      }, diveAt + Math.round(stateMs(pet, "dive") * 0.6)),
+    ];
     await pet.jumpOut();
+    for (const t of timers) window.clearTimeout(t);
     const graph = role === "kid" ? controller.session.graph.toJSON() : await storageGet<GraphSnapshot>(GRAPH_KEY);
     const gone: Jump = { ...jump, stage: "gone", at: Date.now(), summary: summarize(graph, Date.now()), graph: graph ?? undefined };
     await storageSet(JUMP_KEY, gone);
+    if (tunnel) window.setTimeout(() => void tunnel.out(), TUNNEL_HOLD_MS);
   };
 
   const arrive = async (jump: Jump, alreadyGone: boolean) => {
@@ -163,13 +188,30 @@ export function startHandoff(deps: Deps): () => void {
             resolve();
           });
         });
+    // While the other side digs, dirt flies out of the hole here; it stops the moment he is on his way up.
+    const reduced = deps.reducedMotion();
+    const hole = holeOf(pet);
+    const holeOpenMs = stateMs(pet, "hole_only");
+    let stopDig: (() => void) | null = null;
+    let popping = false;
+    const digTimer = window.setTimeout(() => {
+      if (!popping && hole) stopDig = dig(hole, reduced);
+    }, holeOpenMs);
+    void ready.then(() => {
+      popping = true;
+      window.clearTimeout(digTimer);
+      stopDig?.();
+      window.setTimeout(() => whoosh("up"), alreadyGone ? holeOpenMs : 0);
+    });
     await pet.jumpIn(ready);
     waiting.delete(jump.id);
     const latest = (await storageGet<Jump>(JUMP_KEY)) ?? jump;
     if (latest.id === jump.id && latest.graph && role === "parent") await storageSet(GRAPH_KEY, latest.graph);
     if (latest.id === jump.id && latest.stage !== "arrived") await storageSet(JUMP_KEY, { ...latest, stage: "arrived", at: Date.now(), graph: undefined });
     const text = role === "parent" ? latest.summary ?? summarize(latest.graph, Date.now()) : "I am back! Your parent says hi.";
-    say(`arrive-${jump.id}`, text, 9000);
+    // He is out: a bounce, then the notes unroll beside him and what he learned types out inside.
+    pet.play("celebrate");
+    unrollNotes(pet, text, { ms: NOTES_MS, reduced });
   };
 
   const onJump = (jump: Jump | undefined) => {
