@@ -96,7 +96,7 @@ export class InkService {
     } else {
       parts.push({ text: `The kid's main screen could not be captured. Its title is: ${input.contextTitle || "unknown"}.` });
     }
-    const memory = input.previousLines.length ? ` Last time you read these lines: ${JSON.stringify(input.previousLines.slice(-12))}.` : "";
+    const memory = input.previousLines.length ? ` Last time you read these lines, possibly mid-stroke, so re-read every line from the image and trust the image over this list: ${JSON.stringify(input.previousLines.slice(-12))}.` : "";
     parts.push({ text: `The tablet now.${memory}` }, frame);
     const body = {
       systemInstruction: { parts: [{ text: SYSTEM }] },
