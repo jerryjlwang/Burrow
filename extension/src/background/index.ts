@@ -3,6 +3,8 @@ import { getSettings, setSettings, DEFAULT_SETTINGS } from "../shared/settings";
 import { emptyStudentState } from "@shared/types";
 import type { GraphSnapshot } from "@shared/graph";
 import { GraphHost } from "./graph-host";
+import { initTablet, openTablet, stopTablet, tabletStatus } from "./tablet";
+import type { InkJudgeInput, InkJudgeOutput } from "@shared/ink";
 import { log } from "../shared/logger";
 
 const logger = log("bg");
@@ -301,6 +303,12 @@ async function handle(msg: BgRequest, sender: chrome.runtime.MessageSender): Pro
         return { ok: false, error: String(e) };
       }
     }
+    case "tablet.open":
+      return openTablet(sender.tab ?? null);
+    case "tablet.stop":
+      return stopTablet(msg.close === true);
+    case "tablet.status":
+      return tabletStatus();
     case "open.onboarding":
       await chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html") });
       return { ok: true };
@@ -328,10 +336,20 @@ chrome.runtime.onMessage.addListener((msg: unknown, sender, sendResponse) => {
 });
 
 // ---------------- Commands, context menu, install ----------------
-chrome.commands.onCommand.addListener(async (command) => {
+chrome.commands.onCommand.addListener(async (command, tab) => {
+  if (command === "open-tablet") {
+    try {
+      await openTablet(tab ?? null);
+    } catch (e) {
+      logger.warn("open-tablet failed", { error: e instanceof Error ? e.message : String(e) });
+    }
+    return;
+  }
   if (command !== "toggle-companion" && command !== "toggle-voice") return;
   await sendToTab(await activeTabId(), { type: "command", name: command });
 });
+
+initTablet({ postJudge: (input: InkJudgeInput) => postJson<InkJudgeOutput>("/api/ink/judge", input, 20_000), sendToTab });
 
 const MENU: Array<{ id: string; title: string; prompt: string }> = [
   { id: "pip-explain", title: "Explain this with Pip", prompt: "Explain this to me simply" },

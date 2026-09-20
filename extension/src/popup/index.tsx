@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { getSettings, setSettings, type Settings } from "../shared/settings";
-import type { ServerHealth, VoiceState } from "../shared/messages";
+import type { ServerHealth, TabletState, VoiceState } from "../shared/messages";
 
 function Popup() {
   const [settings, setLocal] = useState<Settings | null>(null);
@@ -9,6 +9,7 @@ function Popup() {
   const [voice, setVoice] = useState<VoiceState | null>(null);
   const [tabOk, setTabOk] = useState(true);
   const [url, setUrl] = useState("");
+  const [tablet, setTablet] = useState<TabletState | null>(null);
 
   useEffect(() => {
     void getSettings().then((s) => {
@@ -18,6 +19,10 @@ function Popup() {
     chrome.runtime.sendMessage({ type: "server.health" }, (h: ServerHealth) => setHealth(h ?? { ok: false }));
     chrome.runtime.sendMessage({ type: "voice.status" }, (v: VoiceState) => setVoice(v ?? null));
     void chrome.tabs.query({ active: true, currentWindow: true }).then(([t]) => setTabOk(!!t?.url && /^https?:|^file:/.test(t.url)));
+    const pollTablet = () => chrome.runtime.sendMessage({ type: "tablet.status" }, (t: TabletState) => setTablet(t ?? null));
+    pollTablet();
+    const timer = window.setInterval(pollTablet, 2000);
+    return () => window.clearInterval(timer);
   }, []);
 
   const update = async (patch: Partial<Settings>) => {
@@ -28,6 +33,19 @@ function Popup() {
     const [t] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (t?.id) chrome.tabs.sendMessage(t.id, { type: "command", name }, () => void chrome.runtime.lastError);
     window.close();
+  };
+
+  const toggleTablet = () => {
+    const msg = tablet?.watching ? { type: "tablet.stop", close: false } : { type: "tablet.open" };
+    chrome.runtime.sendMessage(msg, (t: TabletState) => setTablet(t ?? null));
+  };
+  const verdictText = (t: TabletState) => {
+    const v = t.lastVerdict;
+    if (t.error) return t.error;
+    if (!v) return t.frames ? "waiting for ink" : "starting";
+    if (v.status === "off") return `line ${v.line ?? "?"}: ${v.nudge}`;
+    if (v.status === "ok") return v.solved ? "solved" : "on track";
+    return "can't read that yet";
   };
 
   if (!settings) return null;
@@ -43,6 +61,12 @@ function Popup() {
         <div className="status">
           <span className={`dot ${voice.mode === "listening" ? "ok" : voice.mode === "error" ? "bad" : ""}`} />
           <span>{voice.mode === "listening" ? "Microphone is live" : voice.mode === "error" ? voice.error ?? "Voice error" : "Voice mode off"}</span>
+        </div>
+      )}
+      {tablet?.watching && (
+        <div className="status">
+          <span className="dot ok" />
+          <span>Watching the tablet · {tablet.checks} checks · {verdictText(tablet)}</span>
         </div>
       )}
       {!tabOk && <p className="muted">{settings.characterName} can't run on this page (Chrome pages and the Web Store are protected).</p>}
@@ -74,6 +98,9 @@ function Popup() {
         </button>
         <button className="btn" onClick={() => void chrome.tabs.create({ url: chrome.runtime.getURL("parent.html") })}>
           Parent view
+        </button>
+        <button className="btn" title="Alt+Shift+D" onClick={toggleTablet}>
+          {tablet?.watching ? "Stop watching" : "Watch the tablet"}
         </button>
       </div>
     </>
