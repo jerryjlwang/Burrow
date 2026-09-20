@@ -234,6 +234,11 @@ async function handle(msg: BgRequest, sender: chrome.runtime.MessageSender): Pro
   switch (msg.type) {
     case "ping":
       return { ok: true, at: Date.now() };
+    case "zoom.get": {
+      // Chrome keeps a zoom per site, and the rabbit is not page content: he should be the same size
+      // whatever the page is zoomed to, so the content script asks for the factor and scales for it.
+      return { zoom: tabId === null ? 1 : await chrome.tabs.getZoom(tabId).catch(() => 1) };
+    }
     case "server.health":
       return (await health(true));
     case "agent.decide": {

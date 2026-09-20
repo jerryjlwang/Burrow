@@ -290,34 +290,57 @@
 @keyframes pip-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 @keyframes pip-dot { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
 
-/* ---------- Overlay: highlights & beam ---------- */
+/* ---------- The guide: pawprints, the lock-on brackets, the dither spotlight, the plank ---------- */
+/* Overlay.tsx sets --paw and --dim (ui/guide/*.png) on the layer. Everything is on the 3px grid and
+   moves in steps. The names .pip-hl, .pip-hl-label and .pip-beam are what the checks look for. */
 .pip-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
-.pip-hl {
-  position: fixed; border-radius: 0; border: 3px solid var(--teal); pointer-events: none;
-  box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.25), 0 0 0 3px var(--cream);
-  animation: pip-hl-in 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2), pip-hl-pulse 1.7s ease-in-out 0.3s infinite;
-  transition: left 0.08s linear, top 0.08s linear, width 0.08s linear, height 0.08s linear;
+/* The spotlight: a Bayer dither of ink over the page, a window cut out around the target (Overlay.tsx
+   sets the mask position and size as the iris closes in six steps). */
+.pip-hl-dim {
+  position: fixed; inset: 0; pointer-events: none;
+  background: var(--dim) 0 0 / 12px 12px repeat, rgba(59, 42, 35, 0.2); image-rendering: pixelated;
+  -webkit-mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0); mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-composite: xor; mask-composite: exclude;
 }
-.pip-hl.kind-acting { border-color: var(--gold); animation: pip-hl-in 0.2s ease-out, pip-hl-pulse 0.8s steps(2) 0.2s infinite; }
-.pip-hl.spotlight { box-shadow: 0 0 0 9999px rgba(59, 42, 35, 0.38), 0 0 0 3px var(--cream); }
-.pip-hl.reduced { animation: none; }
+.pip-hl { position: fixed; pointer-events: none; transition: left 0.08s linear, top 0.08s linear, width 0.08s linear, height 0.08s linear; }
+/* Four corners snap in from two grid steps out over three steps, then breathe one step out and back. */
+.pip-hl-c { position: absolute; width: 21px; height: 21px; background: var(--c) no-repeat 0 0 / 21px 21px; image-rendering: pixelated; }
+.pip-hl-c.tl { left: -3px; top: -3px; --c: var(--corner-tl); --dx: -6px; --dy: -6px; }
+.pip-hl-c.tr { right: -3px; top: -3px; --c: var(--corner-tr); --dx: 6px; --dy: -6px; }
+.pip-hl-c.bl { left: -3px; bottom: -3px; --c: var(--corner-bl); --dx: -6px; --dy: 6px; }
+.pip-hl-c.br { right: -3px; bottom: -3px; --c: var(--corner-br); --dx: 6px; --dy: 6px; }
+.pip-hl-c { animation: pip-lock 0.24s steps(3, end) both, pip-breathe 1.2s steps(2, end) 0.24s infinite; }
+@keyframes pip-lock { from { transform: translate(var(--dx), var(--dy)); } to { transform: translate(0, 0); } }
+@keyframes pip-breathe { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(calc(var(--dx) / 2), calc(var(--dy) / 2)); } }
+.pip-hl.kind-acting .pip-hl-c { animation-duration: 0.16s, 0.6s; }
+.pip-hl.kind-acting .pip-hl-c.tl { --c: var(--corner-tl-gold); }
+.pip-hl.kind-acting .pip-hl-c.tr { --c: var(--corner-tr-gold); }
+.pip-hl.kind-acting .pip-hl-c.bl { --c: var(--corner-bl-gold); }
+.pip-hl.kind-acting .pip-hl-c.br { --c: var(--corner-br-gold); }
+.pip-hl.reduced .pip-hl-c { animation: none; }
+/* The label hangs from the top left bracket on a plank, or stands on the bottom one when there is no room above. */
 .pip-hl-label {
-  position: absolute; left: -3px; top: -33px; background: var(--ink); color: var(--cream); font-size: 17px; line-height: 21px;
-  padding: 3px 6px; border-radius: 0; white-space: nowrap; font-family: var(--pip-font);
+  position: absolute; left: -3px; bottom: 100%; margin-bottom: 15px; padding: 0 3px; white-space: nowrap;
+  color: var(--ink); font-family: var(--pip-font); font-size: 17px; line-height: 21px;
+  border: 15px solid transparent; border-image: var(--ui-bubble) 5 fill / var(--frame) repeat; image-rendering: pixelated;
+  animation: pip-plank 0.18s steps(3, end) 0.24s both;
 }
-@keyframes pip-hl-in { from { opacity: 0; transform: scale(1.08); } to { opacity: 1; transform: scale(1); } }
-@keyframes pip-hl-pulse { 0%, 100% { box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.25), 0 0 0 3px var(--cream); } 50% { box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.25), 0 0 0 3px var(--gold); } }
+.pip-hl-label::after { content: ""; position: absolute; left: 6px; top: 100%; margin-top: 15px; width: 3px; height: 15px; background: var(--ink); }
+.pip-hl-label.below { bottom: auto; top: 100%; margin-bottom: 0; margin-top: 15px; }
+.pip-hl-label.right { left: auto; right: -3px; }
+.pip-hl-label.right::after { left: auto; right: 6px; }
+.pip-hl-label.below::after { top: auto; bottom: 100%; margin-top: 0; margin-bottom: 15px; }
+@keyframes pip-plank { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+/* The trail: a hop of pawprints along the arc, the newest crisp, the older ones fading in two steps. */
 .pip-beam { position: fixed; inset: 0; pointer-events: none; overflow: visible; }
-.pip-beam-path {
-  fill: none; stroke: var(--pip-accent); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 10 8;
-  animation: pip-beam-dash 0.9s linear infinite, pip-beam-in 0.35s ease-out;
-  filter: drop-shadow(0 2px 6px rgba(124, 92, 255, 0.5));
-}
-.pip-beam-path.reduced { animation: none; }
-.pip-beam-dot { fill: var(--pip-accent); animation: pip-beam-dot 1.2s ease-in-out infinite; }
-@keyframes pip-beam-dash { to { stroke-dashoffset: -36; } }
-@keyframes pip-beam-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes pip-beam-dot { 0%, 100% { r: 5; opacity: 0.9; } 50% { r: 8; opacity: 0.5; } }
+.pip-paw { position: fixed; width: 27px; height: 24px; margin: -12px 0 0 -13px; background: var(--paw) no-repeat 0 0 / 27px 24px; image-rendering: pixelated; animation: pip-paw-in 0.14s steps(2, end) both; }
+.pip-paw.a1 { opacity: 0.62; }
+.pip-paw.a2 { opacity: 0.3; }
+@keyframes pip-paw-in { from { opacity: 0; } to { opacity: 1; } }
+/* Off screen: a print at the nearest edge, nudging the way, twice a second. */
+.pip-hl-edge { position: fixed; width: 27px; height: 24px; margin: -12px 0 0 -13px; background: var(--paw) no-repeat 0 0 / 27px 24px; image-rendering: pixelated; animation: pip-edge 0.6s steps(2, end) infinite; }
+@keyframes pip-edge { 0%, 100% { margin-top: -12px; } 50% { margin-top: -18px; } }
 
 /* ---------- Debug panel ---------- */
 .pip-debug {
@@ -560,6 +583,220 @@
 .pip-actfx { position: fixed; inset: 0; pointer-events: none; overflow: visible; }
 .pip-actfx > * { position: fixed; pointer-events: none; image-rendering: pixelated; }
 
+/* ---------- Action set pieces: tabs and pages (actfx/tabs.ts) ---------- */
+/* The tab card hangs from the top edge like a tab in the strip: cream, an ink outline on three sides,
+   a teal favicon block and the hostname. It pops down in three steps, then flies up in seven. */
+.pip-tabcard {
+  top: 0; width: 189px; height: 36px; box-sizing: border-box; display: flex; align-items: center; gap: 9px; padding: 0 9px;
+  background: var(--cream); border: 3px solid var(--ink); border-top: 0; border-radius: 0 0 9px 9px; color: var(--ink);
+  font: 17px/21px var(--pip-font); white-space: nowrap; overflow: hidden; box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.25);
+  animation: pip-tabcard-pop 0.24s steps(3, end) both;
+}
+.pip-tabcard-ico { width: 15px; height: 15px; box-sizing: border-box; flex: none; background: var(--teal); border: 3px solid var(--ink); }
+@keyframes pip-tabcard-pop { from { transform: translateY(-36px); } to { transform: translateY(0); } }
+.pip-tabcard.away { animation: pip-tabcard-away 0.42s steps(7, end) both; }
+@keyframes pip-tabcard-away { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-48px); opacity: 0; } }
+.pip-tabcard.across { animation: pip-tabcard-across 0.48s steps(8, end) both; }
+@keyframes pip-tabcard-across { from { transform: translateX(0); } to { transform: translateX(var(--run)); } }
+.pip-dust { width: 3px; height: 3px; box-sizing: content-box; background: var(--cream); border: 3px solid var(--ink); animation: pip-dust 0.42s steps(6, end) both; }
+@keyframes pip-dust { from { transform: translate(0, 0); opacity: 1; } to { transform: translate(var(--dx), var(--dy)); opacity: 0; } }
+.pip-wipe { left: 0; top: 0; width: 100%; height: 3px; background: var(--teal); transform-origin: 0 0; animation: pip-wipe 0.48s steps(8, end) both; }
+@keyframes pip-wipe { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.pip-navcard {
+  top: 6px; left: 6px; height: 36px; padding: 0 9px; display: flex; align-items: center; box-sizing: border-box;
+  background: var(--cream); border: 3px solid var(--ink); color: var(--ink); font: 17px/21px var(--pip-font); white-space: nowrap;
+  box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.25); animation: pip-tabcard-pop 0.18s steps(3, end) both;
+}
+.pip-navcard.press { transform: translate(3px, 3px); box-shadow: none; }
+
+/* ---------- Action set pieces: the punch (particles, shock rings, the flash) ---------- */
+/* The particle canvas covers the window under everything else the layer draws. */
+.pip-actfx-canvas { position: fixed; left: 0; top: 0; pointer-events: none; image-rendering: pixelated; }
+/* A jolt of the whole layer on an impact: one grid step, two steps back, done. */
+.pip-actfx.shook { animation: pip-shook 0.18s steps(3, end) 1; }
+@keyframes pip-shook { 0% { transform: translate(0, 0); } 33% { transform: translate(-3px, 3px); } 66% { transform: translate(3px, -3px); } 100% { transform: translate(0, 0); } }
+/* One frame of white over the page, gone in three steps. */
+.pip-flash { left: 0; top: 0; width: 100%; height: 100%; background: #fff; animation: pip-flash 0.18s steps(3, end) both; }
+@keyframes pip-flash { from { opacity: inherit; } to { opacity: 0; } }
+/* A square ring that expands from its center in steps: the shock of a landing or a hit. */
+.pip-shock { width: 0; height: 0; margin: 0; border: 3px solid var(--cream); box-sizing: border-box; animation: pip-shock var(--ms, 300ms) steps(6, end) both; }
+@keyframes pip-shock {
+  from { width: 9px; height: 9px; margin-left: -4.5px; margin-top: -4.5px; opacity: 1; }
+  to { width: var(--to, 120px); height: var(--to, 120px); margin-left: calc(var(--to, 120px) / -2); margin-top: calc(var(--to, 120px) / -2); opacity: 0; }
+}
+/* Lines racing up the column he flies through. */
+.pip-speedline { top: 0; width: 3px; height: 81px; background: linear-gradient(var(--cream), transparent); opacity: 0.85; animation: pip-speedline var(--ms, 500ms) steps(8, end) both; }
+@keyframes pip-speedline { from { transform: translateY(100vh); opacity: 0.9; } to { transform: translateY(-90px); opacity: 0; } }
+/* The glow under his feet while he gathers himself, and while he waits up at the strip. */
+.pip-charge { width: 45px; height: 12px; margin: -6px 0 0 -22px; background: radial-gradient(closest-side, var(--gold), transparent); animation: pip-charge 0.38s steps(4, end) both; }
+.pip-charge.waiting { animation: pip-charge-wait 0.6s steps(2, end) infinite; }
+@keyframes pip-charge { from { opacity: 0; transform: scale(0.4); } to { opacity: 0.9; transform: scale(1.2); } }
+@keyframes pip-charge-wait { 0%, 100% { opacity: 0.35; transform: scale(0.9); } 50% { opacity: 0.9; transform: scale(1.2); } }
+/* The beam the tab card leaves on. */
+.pip-beamup { top: 0; width: 45px; height: 108px; margin-left: -22px; background: linear-gradient(transparent, rgba(242, 193, 78, 0.55)); animation: pip-beamup 0.52s steps(6, end) both; }
+@keyframes pip-beamup { from { opacity: 0; transform: scaleY(0.2); transform-origin: 50% 0; } 40% { opacity: 1; transform: scaleY(1); } to { opacity: 0; transform: scaleY(1); } }
+/* ---------- Action set pieces: hands on the page (actfx/hands.ts) ---------- */
+/* His paws on the page: the tap ring, sparks and the menu card at a click, letter tiles and the pencil
+   at a type, the key cap at a press, speed lines at a scroll, the dotted trail and the towed ghost at a
+   drag, the gold glint at a select. Glyphs are 3px cells painted as box-shadow on a 3px element
+   (hands-glyphs.ts); the rings step in JS. Every keyframe here is a whole-pixel pose held with
+   steps(1, end), so nothing slides between pixels. Reduced motion (.pip-root.reduced) stops them all. */
+.pip-hand-ring { width: 3px; height: 3px; background: transparent; }
+.pip-hand-ring.dim { opacity: 0.5; }
+.pip-hand-spark { width: 12px; height: 12px; background: var(--cream); border: 3px solid var(--ink); --sx: 1; animation: pip-hand-spark-low 0.3s steps(1, end) forwards; }
+.pip-hand-spark.high { animation-name: pip-hand-spark-high; }
+@keyframes pip-hand-spark-high {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(calc(var(--sx) * 9px), -12px); }
+  50% { transform: translate(calc(var(--sx) * 18px), -21px); }
+  75% { transform: translate(calc(var(--sx) * 27px), -21px); opacity: 0.5; }
+  100% { transform: translate(calc(var(--sx) * 33px), -12px); opacity: 0; }
+}
+@keyframes pip-hand-spark-low {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(calc(var(--sx) * 12px), -3px); }
+  50% { transform: translate(calc(var(--sx) * 24px), -3px); }
+  75% { transform: translate(calc(var(--sx) * 33px), 3px); opacity: 0.5; }
+  100% { transform: translate(calc(var(--sx) * 39px), 12px); opacity: 0; }
+}
+/* The menu card and the glint's sparkles are painted glyphs; the card pops up two steps, the sparkles blink. */
+.pip-hand-menu { animation: pip-hand-pop 0.12s steps(1, end); }
+.pip-hand-sparkle { animation: pip-hand-blink 0.18s steps(2, end) infinite; }
+@keyframes pip-hand-pop { 0% { transform: translateY(6px); opacity: 0; } 50% { transform: translateY(3px); } 100% { transform: none; } }
+@keyframes pip-hand-blink { 0% { opacity: 1; } 100% { opacity: 0; } }
+/* Letter tiles: cream, a 3px ink border, the letter at 18px. Each pops in from two steps up (or down,
+   --dir -1, when the field sits at the top) and rests above the field; "in" drops it into the field and away. */
+.pip-hand-letter {
+  width: 21px; height: 27px; background: var(--cream); border: 3px solid var(--ink); color: var(--ink);
+  font: 18px/21px var(--pip-font); text-align: center; --dir: 1;
+  animation: pip-hand-letter-pop 0.18s steps(1, end);
+}
+.pip-hand-letter.in { animation: pip-hand-letter-in 0.24s steps(1, end) forwards; }
+.pip-hand-letter.still { animation: none; }
+@keyframes pip-hand-letter-pop { 0% { transform: translateY(calc(var(--dir) * -24px)); } 34% { transform: translateY(calc(var(--dir) * -12px)); } 67%, 100% { transform: none; } }
+@keyframes pip-hand-letter-in {
+  0% { transform: none; }
+  25% { transform: translateY(calc(var(--dir) * 12px)); }
+  50% { transform: translateY(calc(var(--dir) * 24px)); }
+  75% { transform: translateY(calc(var(--dir) * 33px)); opacity: 0.5; }
+  100% { transform: translateY(calc(var(--dir) * 33px)); opacity: 0; }
+}
+.pip-hand-pencil.away { animation: pip-hand-away 0.16s steps(1, end) forwards; }
+@keyframes pip-hand-away { 0% { transform: none; } 50% { transform: translateY(-12px); } 100% { transform: translateY(-24px); opacity: 0; } }
+/* Clear: blank tiles fly out backwards in four steps, and three sweep lines cross the field after them. */
+.pip-hand-blank { width: 18px; height: 24px; background: var(--cream); border: 3px solid var(--ink); animation: pip-hand-blank-out 0.24s steps(1, end) both; }
+.pip-hand-blank.still { animation: none; }
+@keyframes pip-hand-blank-out {
+  0% { transform: none; }
+  25% { transform: translate(-15px, -6px); }
+  50% { transform: translate(-30px, -9px); }
+  75% { transform: translate(-45px, -6px); opacity: 0.5; }
+  100% { transform: translate(-60px, 0); opacity: 0; }
+}
+.pip-hand-sweep { height: 3px; background: var(--teal); box-shadow: 0 3px 0 var(--cream); --dx: -120px; animation: pip-hand-sweep 0.32s steps(8, end) both; }
+@keyframes pip-hand-sweep { from { transform: none; } to { transform: translateX(var(--dx)); opacity: 0.2; } }
+/* The key cap: cream with a 3px ink border and a 3px ink depth under it. It drops in over three steps
+   and "down" presses it into its depth while he stamps. */
+.pip-hand-key {
+  display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 9px;
+  background: var(--cream); border: 3px solid var(--ink); box-shadow: 0 3px 0 var(--ink);
+  color: var(--ink); font: 18px/24px var(--pip-font); white-space: nowrap;
+}
+.pip-hand-key.drop { animation: pip-hand-key-drop 0.18s steps(1, end); }
+.pip-hand-key.down { transform: translateY(3px); box-shadow: none; }
+.pip-hand-key-arrow { position: relative; display: block; width: 21px; height: 24px; }
+.pip-hand-key-arrow > i { position: absolute; left: 0; top: 0; display: block; }
+@keyframes pip-hand-key-drop { 0% { transform: translateY(-24px); } 34% { transform: translateY(-12px); } 67%, 100% { transform: none; } }
+/* Scroll: three teal speed lines with a cream edge run 240px along the right edge in eight 30px steps. */
+.pip-hand-streak { width: 6px; background: var(--teal); box-shadow: -3px 0 0 var(--cream); animation: pip-hand-streak-down 0.48s steps(8, end) both; }
+.pip-hand-streak.up { animation-name: pip-hand-streak-up; }
+.pip-hand-streak.still { animation: none; }
+@keyframes pip-hand-streak-down { from { transform: none; } to { transform: translateY(240px); opacity: 0.25; } }
+@keyframes pip-hand-streak-up { from { transform: none; } to { transform: translateY(-240px); opacity: 0.25; } }
+/* Drag: the dotted trail and the dashed ghost of the element he tows along it (hands.ts moves it in whole steps). */
+.pip-hand-dot { width: 6px; height: 6px; background: var(--teal); }
+.pip-hand-ghost { border: 3px dashed var(--teal); background: rgba(47, 143, 131, 0.12); }
+/* ---------- Action set pieces: watching along (actfx/video.ts) ---------- */
+/* The pieces are hand-placed pixels from extension/public/ui/actfx drawn at whole-number scales;
+   video.ts sets the url() variables on the layer and sizes everything in whole steps. */
+/* The frame dims through four Bayer tiles (4 x 4 source cells drawn at 3px), sparse to dense, never solid. */
+.pip-vfx-dim { background: none 0 0 / 12px 12px repeat; }
+.pip-vfx-dim.d1 { background-image: var(--vfx-dim-1); }
+.pip-vfx-dim.d2 { background-image: var(--vfx-dim-2); }
+.pip-vfx-dim.d3 { background-image: var(--vfx-dim-3); }
+.pip-vfx-dim.d4 { background-image: var(--vfx-dim-4); }
+/* The big pause glyph: two cream bars with 3px outlines and a bevel, lit from the top left like the frames. */
+.pip-vfx-pause { display: flex; gap: var(--gap, 12px); }
+.pip-vfx-pause > i { display: block; width: var(--bar, 18px); height: 100%; background: var(--cream); border: 3px solid var(--ink); box-shadow: inset -3px -3px 0 #e6d8c5, var(--shadow); }
+/* The corner badge, the play glyph and the "!" are single pictures stretched to their whole-number size. */
+.pip-vfx-badge, .pip-vfx-play, .pip-vfx-bang { background-repeat: no-repeat; background-size: 100% 100%; filter: drop-shadow(3px 3px 0 rgba(59, 42, 35, 0.25)); }
+.pip-vfx-badge { background-image: var(--vfx-badge); }
+.pip-vfx-play { background-image: var(--vfx-play); }
+.pip-vfx-bang { background-image: var(--vfx-bang); }
+/* His pocket watch: eight frames of 13 x 14 side by side, the hand a turn further each; one turn a
+   spin, three spins a seek (video.ts matches 0.36 s a turn). */
+.pip-vfx-watch { background: var(--vfx-watch) 0 0 / 312px 42px no-repeat; filter: drop-shadow(3px 3px 0 rgba(59, 42, 35, 0.25)); }
+.pip-vfx-watch.spin { animation: pip-vfx-spin 0.36s steps(8, end) 3; }
+@keyframes pip-vfx-spin { from { background-position: 0 0; } to { background-position: -312px 0; } }
+/* A three-frame drop into place for the badge and the watch: above, a touch below, home. */
+.drop.pip-vfx-badge, .drop.pip-vfx-watch { animation: pip-vfx-drop 0.18s steps(1, end); }
+@keyframes pip-vfx-drop { 0% { transform: translateY(-9px); } 50% { transform: translateY(3px); } 100% { transform: none; } }
+/* Six cream motes drift up the frame in twelve whole steps (video.ts sets --rise to twelve 9px or 12px
+   steps) and fade out in three steps over the last half. */
+.pip-vfx-mote { width: 9px; height: 9px; animation: pip-vfx-rise 0.96s steps(12, end) both; }
+.pip-vfx-mote.big { width: 12px; height: 12px; }
+.pip-vfx-mote > i { display: block; width: 100%; height: 100%; background: var(--cream); border: 3px solid var(--ink); animation: pip-vfx-fade 0.96s steps(3, end) both; }
+@keyframes pip-vfx-rise { from { transform: none; } to { transform: translateY(var(--rise, -108px)); } }
+@keyframes pip-vfx-fade { 0%, 50% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ---------- Action set pieces: the tab jump, centre stage ---------- */
+/* The page falls away behind the piece: a dither of ink, heavier at the edges. */
+.pip-actfx-dim {
+  left: 0; top: 0; width: 100%; height: 100%; background-repeat: repeat; background-size: 12px 12px;
+  opacity: 0; animation: pip-actfx-dim 0.3s steps(5, end) forwards;
+}
+.pip-actfx-dim::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 30%, rgba(59, 42, 35, 0.5) 100%); }
+.pip-actfx-dim.out { animation: pip-actfx-dim-out 0.3s steps(5, end) forwards; }
+@keyframes pip-actfx-dim { to { opacity: 0.92; } }
+@keyframes pip-actfx-dim-out { from { opacity: 0.92; } to { opacity: 0; } }
+/* Cracks running out from the hit, each one drawn out in four steps then gone. */
+.pip-crack {
+  width: var(--len, 120px); height: 3px; background: var(--cream); transform-origin: 0 50%;
+  transform: rotate(var(--a, 0deg)) scaleX(0); animation: pip-crack 0.5s steps(4, end) both;
+}
+@keyframes pip-crack { 0% { transform: rotate(var(--a, 0deg)) scaleX(0); opacity: 1; } 55% { transform: rotate(var(--a, 0deg)) scaleX(1); opacity: 1; } 100% { transform: rotate(var(--a, 0deg)) scaleX(1); opacity: 0; } }
+/* The card the new tab arrives as: big enough to read from the back of the room. */
+.pip-bigcard {
+  box-sizing: border-box; display: grid; grid-template-columns: 36px 1fr; grid-template-rows: auto auto;
+  gap: 3px 12px; align-items: center; padding: 18px;
+  background: var(--cream); border: 6px solid var(--ink); border-radius: 0; color: var(--ink);
+  box-shadow: 9px 9px 0 rgba(59, 42, 35, 0.35); image-rendering: pixelated;
+  animation: pip-bigcard-in 0.24s steps(4, end) both;
+}
+.pip-bigcard-ico { grid-row: 1 / span 2; width: 36px; height: 36px; box-sizing: border-box; background: var(--teal); border: 3px solid var(--ink); }
+.pip-bigcard span { font: 27px/30px var(--pip-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pip-bigcard b { font: 17px/21px var(--pip-font); font-weight: 400; color: var(--ink); opacity: 0.7; }
+@keyframes pip-bigcard-in { 0% { transform: translateY(36px) scale(0.55); opacity: 0; } 60% { transform: translateY(0) scale(1.08); opacity: 1; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+.pip-bigcard.away { animation: pip-bigcard-away 0.52s steps(8, end) both; }
+@keyframes pip-bigcard-away { 0% { transform: translateY(0) scale(1); opacity: 1; } 100% { transform: translateY(-60vh) scale(0.35); opacity: 0; } }
+
+/* ---------- Action set pieces: the signpost that rises out of the burrow ---------- */
+/* It grows up out of the hole on its leg, stands while the name is read, then drops back in ahead
+   of him. Everything is inside the page: a content script cannot draw in the browser's own chrome. */
+.pip-post { display: flex; flex-direction: column; align-items: center; transform-origin: 50% 100%; animation: pip-post-up 0.42s steps(7, end) both; }
+.pip-post-board {
+  box-sizing: border-box; width: 100%; display: grid; grid-template-columns: 36px 1fr; grid-template-rows: auto auto;
+  gap: 3px 12px; align-items: center; padding: 18px;
+  background: var(--cream); border: 6px solid var(--ink); color: var(--ink);
+  box-shadow: 9px 9px 0 rgba(59, 42, 35, 0.35); image-rendering: pixelated;
+}
+.pip-post-board .pip-bigcard-ico { grid-row: 1 / span 2; }
+.pip-post-board span { font: 27px/30px var(--pip-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pip-post-board b { font: 17px/21px var(--pip-font); font-weight: 400; opacity: 0.7; }
+.pip-post-leg { width: 18px; height: 96px; background: var(--ink); box-shadow: inset 3px 0 0 rgba(255, 248, 231, 0.2), inset -3px 0 0 rgba(0, 0, 0, 0.25); }
+@keyframes pip-post-up { from { transform: translateY(100%) scaleY(0.2); opacity: 0; } to { transform: translateY(0) scaleY(1); opacity: 1; } }
+.pip-post.down { animation: pip-post-down 0.36s steps(6, end) both; }
+@keyframes pip-post-down { from { transform: translateY(0) scaleY(1); opacity: 1; } to { transform: translateY(100%) scaleY(0.15); opacity: 0; } }
 /* The tablet coach's ring: a hand-drawn loop around the part of the ink the judge marked, cream rim under teal chalk, drawn in like a stroke. */
 .pip-inkcoach { position: fixed; inset: 0; pointer-events: none; z-index: 2147483000; }
 .pip-inkmark { position: fixed; overflow: visible; pointer-events: none; }

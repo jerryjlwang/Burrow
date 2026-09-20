@@ -90,4 +90,17 @@ One line changed in `e2e/smoke.mjs` (2026-09-20): the chalkboard close check now
 Status: heads-up, 2026-09-20. Two backend-lane files gained one announcement each, documented in `docs/frontend/ACTION_FX.md`; please keep them when you refactor.
 
 - `extension/src/actions/executor.ts`: `announceAction` dispatches `burrow:act` at the top of `executeAction` and waits for an optional `detail.hold` at most 900 ms. Nothing else about an action changed.
+- `extension/src/agent/loop.ts`: the loop runs `open_tab` itself (it needs the session's resume flag), so it calls the same `announceAction` before `openTab`. Please keep that call if the branch moves.
 - `extension/src/page-understanding/video.ts`: `announceVideo` dispatches `burrow:video` from `pause()` and `play()` (by us) and from the seeked, pause and play handlers (by them).
+
+## 10. Cross-tab handoff regressed in the smoke test
+
+Status: open, found 2026-09-20 by the front end.
+
+`e2e/smoke.mjs`'s check "the loop resumes on the tab it opened, with the conversation carried over (cross-tab handoff)" is intermittent: it failed on two runs in a row and passed on the next, with no change to that code in between. It waits up to 25 s for a session in `chrome.storage.session` to carry the resumed turn, so it looks like a race rather than a break. The front end has not touched `agent/loop.ts` session handling or `content/session.ts`. Worth a look since it is a demo beat.
+
+## 11. `zoom.get` in the background
+
+Status: heads-up, 2026-09-20. One more small handler in a backend-lane file, for the same reason as item 9.
+
+- `extension/src/background/index.ts`: a `zoom.get` case returning `chrome.tabs.getZoom(sender.tab.id)`, and `zoom.get` in `extension/src/shared/messages.ts`. The content script divides the rabbit's draw scale by it so a site the student has zoomed out does not shrink him. No permission was added; `tabs` was already there.

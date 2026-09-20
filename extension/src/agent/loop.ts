@@ -8,7 +8,7 @@ import { resourceKindOf } from "@shared/events";
 import { pickLookupResult } from "@shared/mock-agent";
 import { detectProblem, problemKey } from "@shared/hints";
 import { isAffirmative, isNegative, truncate } from "@shared/text";
-import { executeAction, type ExecutorDeps } from "../actions/executor";
+import { announceAction, executeAction, type ExecutorDeps } from "../actions/executor";
 import { MAX_REGION_CHARS, quoteRegion, regionText } from "../actions/inspect";
 import { classifyTask, isForbidden, requiresConfirmation } from "../actions/policy";
 import { HOST_ID } from "../page-understanding/extract";
@@ -318,6 +318,8 @@ export class AgentLoop {
         if (decision.action === "open_tab") {
           const record: ActionRecord = { step, decision, result: { ok: true, message: "opened in a new tab; you are now on that tab" }, at: Date.now() };
           const resume = decision.done || step + 1 >= maxStep ? undefined : { utterance, goal, history: [...history.slice(-5), record], step: step + 1, at: Date.now(), pendingOffer: null, lastReferencedElementName: null, path };
+          // The page's set pieces hear about this one too; it never goes through executeAction.
+          await announceAction(decision, this.deps.executor.registry);
           await this.deps.executor.openTab(decision.url!, resume);
           history.push(record);
           this.creditResource(path, decision.url!);

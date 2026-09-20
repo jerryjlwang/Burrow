@@ -37,6 +37,14 @@ function assetUrl(path: string): string {
 const UI_VARS = {
   "--ui-bubble": `url("${assetUrl("ui/bubble.png")}")`,
   "--ui-bubble-teal": `url("${assetUrl("ui/bubble_teal.png")}")`,
+  "--corner-tl": `url("${assetUrl("ui/guide/corner_tl.png")}")`,
+  "--corner-tl-gold": `url("${assetUrl("ui/guide/corner_tl_gold.png")}")`,
+  "--corner-tr": `url("${assetUrl("ui/guide/corner_tr.png")}")`,
+  "--corner-tr-gold": `url("${assetUrl("ui/guide/corner_tr_gold.png")}")`,
+  "--corner-bl": `url("${assetUrl("ui/guide/corner_bl.png")}")`,
+  "--corner-bl-gold": `url("${assetUrl("ui/guide/corner_bl_gold.png")}")`,
+  "--corner-br": `url("${assetUrl("ui/guide/corner_br.png")}")`,
+  "--corner-br-gold": `url("${assetUrl("ui/guide/corner_br_gold.png")}")`,
   "--ui-tail": `url("${assetUrl("ui/bubble_tail.png")}")`,
   "--ui-btn": `url("${assetUrl("ui/button.png")}")`,
   "--ui-btn-primary": `url("${assetUrl("ui/button_primary.png")}")`,
@@ -96,16 +104,25 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
   // Arriving from a page he escorted? Then he starts in the hole and pops out with a line.
   const [arrival, setArrival] = useState<Arrival | null>(null);
   const arrivalRef = useRef<Arrival | null>(null);
-  useEffect(() => {
-    void readArrival().then((a) => {
-      if (!a) return;
+  // Read once, and keep the promise: the sprite art may finish loading before storage answers, and
+  // the pet controller must not decide how he appears until this is settled, or he simply stands
+  // there on a page he was supposed to climb out onto.
+  const arrivalRead = useRef<Promise<Arrival | null> | null>(null);
+  if (!arrivalRead.current) {
+    arrivalRead.current = readArrival().then((a) => {
+      if (!a) return null;
       arrivalRef.current = a;
-      setArrival(a);
       try {
         chrome.storage.local.remove("burrow.arrive");
       } catch {
         /* ignore */
       }
+      return a;
+    });
+  }
+  useEffect(() => {
+    void arrivalRead.current?.then((a) => {
+      if (a) setArrival(a);
     });
   }, []);
   // The new tab page draws its world first and then says "burrow:enter"; he stays in the hole until then
@@ -135,14 +152,15 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
     (c: PetController | null) => {
       onController(c);
       if (!c) return;
-      const a = arrivalRef.current;
-      if (a) {
+      // Wait for the arrival read before choosing: he came through the ground, so he comes up out of it.
+      void arrivalRead.current?.then((a) => {
+        if (!a || arrivalRef.current === null) return;
         arrivalRef.current = null;
         void c.jumpIn(new Promise((r) => setTimeout(r, 500))).then(() => {
           controller.showBubble({ id: `arrive-${a.at}`, text: a.line ?? "Here we are!", kind: "info", expiresAt: Date.now() + 6000 });
         });
-        return;
-      }
+      });
+      if (arrivalRef.current) return;
       if (bootPage.current) {
         const ready = entered.current ? Promise.resolve() : new Promise<void>((r) => enterWaiters.current.push(r));
         void c.jumpIn(ready);
@@ -171,6 +189,17 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
       const d = (e as CustomEvent<{ state: string }>).detail;
       if (d?.state) petRef.current?.play(d.state);
     };
+    // "burrow:point" {selector, label} points him at a page element the way the agent does (the Developer panel uses it).
+    const onPoint = (e: Event) => {
+      const d = (e as CustomEvent<{ selector: string; label?: string }>).detail;
+      const el = d?.selector ? document.querySelector(d.selector) : null;
+      if (!el) return;
+      void controller.overlay.pointAt(controller.registry.idFor(el), { spotlight: true, label: d.label, durationMs: 12000 });
+      store.setState({ characterState: "pointing" });
+      window.setTimeout(() => {
+        if (store.getState().characterState === "pointing") store.setState({ characterState: "idle" });
+      }, 1600);
+    };
     const onLeave = (e: Event) => {
       const d = (e as CustomEvent<{ url: string; line?: string; arriveLine?: string }>).detail;
       if (d?.url) void escort(controller, petRef.current, d.url, d.line ?? "Let's go find out!", d.arriveLine ?? "Here's what I found. Want me to read it?");
@@ -178,17 +207,51 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
     window.addEventListener("burrow:goto", onGoto);
     window.addEventListener("burrow:play", onPlay);
     window.addEventListener("burrow:leave", onLeave);
+    window.addEventListener("burrow:point", onPoint);
     return () => {
       window.removeEventListener("burrow:goto", onGoto);
       window.removeEventListener("burrow:play", onPlay);
       window.removeEventListener("burrow:leave", onLeave);
+      window.removeEventListener("burrow:point", onPoint);
     };
   }, [controller]);
   useEffect(() => armSounds(), []);
   useEffect(() => setSoundsEnabled(settings.ttsEnabled), [settings.ttsEnabled]);
   const onShown = useCallback((s: string) => playCue(s), []);
   // On the parent's laptop he arrives one size bigger: the hero moment.
-  const petScale = pageRole() === "parent" ? 4 : 3;
+  // Chrome keeps a zoom per site. He is not page content, so a zoomed out site should not shrink him:
+  // the draw scale is divided by the zoom and rounded to a whole number, which is what pixel art needs.
+  const base = pageRole() === "parent" ? 4 : 3;
+  const [zoom, setZoom] = useState(1);
+  useEffect(() => {
+    let live = true;
+    const ask = () => {
+      try {
+        chrome.runtime.sendMessage({ type: "zoom.get" }, (r?: { zoom?: number }) => {
+          void chrome.runtime.lastError;
+          const z = Number(r?.zoom);
+          if (live && Number.isFinite(z) && z > 0) setZoom(z);
+        });
+      } catch {
+        // The page keeps whatever scale it has.
+      }
+    };
+    ask();
+    // Chrome does not tell a content script its tab was zoomed, but zooming changes the layout
+    // viewport, so a resize is the signal. Debounced, because a window drag fires many of them.
+    let timer = 0;
+    const onResize = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(ask, 180);
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
+  const petScale = Math.max(2, Math.min(6, Math.round(base / zoom)));
 
   // Grants, the jump between laptops, and the "I'm late" vignette. See docs/frontend/HANDOFF.md.
   const quietRef = useRef(quiet);

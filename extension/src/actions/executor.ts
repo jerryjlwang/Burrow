@@ -217,7 +217,8 @@ function findScrollableRoot(): Element | null {
  * "burrow:act" tells the page what is about to happen: the action, its target's rect or point, its url
  * and text. The rabbit's set pieces listen (extension/src/components/actfx). A listener may set
  * detail.hold to a promise and the action waits for it, at most ACT_HOLD_MS, so his tap and the click
- * land together. Nothing listening, nothing waits; nothing here changes what an action does.
+ * land together. The cap is generous because a piece may want the beat it is on to be seen before the
+ * action lands (a new tab takes the window, so the tab opens as the card flies up to the strip). Nothing listening, nothing waits; nothing here changes what an action does.
  */
 export interface ActDetail {
   action: AgentDecision["action"];
@@ -229,8 +230,8 @@ export interface ActDetail {
   direction: AgentDecision["direction"];
   hold?: Promise<unknown>;
 }
-const ACT_HOLD_MS = 900;
-async function announceAction(decision: AgentDecision, registry: ElementRegistry): Promise<void> {
+const ACT_HOLD_MS = 3200;
+export async function announceAction(decision: AgentDecision, registry: ElementRegistry): Promise<void> {
   const el = decision.elementId != null ? registry.get(decision.elementId) : null;
   const r = el?.getBoundingClientRect();
   const detail: ActDetail = {

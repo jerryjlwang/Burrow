@@ -45,7 +45,7 @@ export interface PieceContext {
 export type Piece<D> = (detail: D, ctx: PieceContext) => Promise<void> | void;
 
 /** The executor waits for a piece's hold at most this long (mirror of ACT_HOLD_MS in actions/executor.ts). */
-export const HOLD_MS = 900;
+export const HOLD_MS = 3200;
 
 export const wait = (ms: number): Promise<void> => new Promise((r) => window.setTimeout(r, ms));
 

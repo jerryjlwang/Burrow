@@ -95,6 +95,7 @@ export type BgRequest =
   | { type: "agent.decide"; input: AgentInput; requestId?: string }
   | { type: "agent.intervene"; input: InterventionInput }
   | { type: "server.health" }
+  | { type: "zoom.get" }
   | { type: "tts.speak"; id: string; text: string }
   | { type: "tts.stop" }
   | { type: "voice.start" }
@@ -148,6 +149,7 @@ export type BgResponseMap = {
   "agent.decide": AgentOutput;
   "agent.intervene": InterventionOutput;
   "server.health": ServerHealth;
+  "zoom.get": { zoom: number };
   "tts.speak": { ok: boolean; error?: string };
   "tts.stop": { ok: boolean };
   "voice.start": { ok: boolean; state: VoiceState };

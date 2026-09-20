@@ -86,6 +86,8 @@ export interface MeadowApi {
   moonRect(): Rect | null;
   oakRect(): Rect | null;
   shownHour(): number;
+  /** Drop a dragged sun's hold on the light, so the sky sign takes over again. */
+  releaseScrub(): void;
   bootElapsed(): number;
   weather(): "clear" | "rain";
   /** Force a happening now: cards, cheshire, fish, gust, balloon, rainbow, shadow. */
@@ -125,6 +127,10 @@ const BAYER = [
   [15, 7, 13, 5],
 ];
 const BAYER_STEPS = [0, 3, 6, 9, 12, 14, 16];
+/** Where each sky band's color is pure, as a fraction of the horizon: the middle of each band, the glow just above the hills. */
+const SKY_STOPS = [0.15, 0.4, 0.575, 0.715, 0.84, 0.92];
+/** The sky is repainted when the shown hour moves by a twelfth, five minutes of the clock. */
+const SKY_BUCKETS = 12;
 
 /** Which palette an hour gets (also used for the greeting). */
 export function todFor(hour: number): Tod {
@@ -217,7 +223,7 @@ interface Particle {
   k: number;
 }
 
-type HitKind = "cloud" | "birds" | "sun" | "moon" | "chimney" | "door" | "item" | "carrot" | "concept" | "pond" | "flamingo" | "oak" | "swing" | "tea" | "roses" | "giant" | "card" | "sheep" | "windmill" | "arrow";
+type HitKind = "cloud" | "birds" | "sun" | "moon" | "chimney" | "door" | "item" | "carrot" | "concept" | "pond" | "flamingo" | "oak" | "swing" | "cat" | "tea" | "roses" | "giant" | "card" | "sheep" | "windmill" | "arrow";
 
 interface Hit {
   kind: HitKind;
@@ -461,7 +467,7 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
   const piece = (name: string): Piece => man!.pieces[name];
 
   /** Sky colors blend between the neighbouring palettes by the shown hour, whole numbers only. */
-  const skyColor = (key: string, hour: number): string => {
+  const skyRGB = (key: string, hour: number): [number, number, number] => {
     const ph = man!.palette_hours;
     const anchors: [number, Tod][] = [[ph.night - 24, "night"], [ph.morning, "morning"], [ph.day, "day"], [ph.evening, "evening"], [ph.night, "night"]];
     const h = hour >= ph.night ? hour - 24 : hour;
@@ -472,7 +478,55 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
     const f = Math.max(0, Math.min(1, (h - ha) / (hb - ha)));
     const a = man!.palettes[ta][key];
     const b = man!.palettes[tb][key];
-    return `rgb(${Math.round(a[0] + (b[0] - a[0]) * f)},${Math.round(a[1] + (b[1] - a[1]) * f)},${Math.round(a[2] + (b[2] - a[2]) * f)})`;
+    return [Math.round(a[0] + (b[0] - a[0]) * f), Math.round(a[1] + (b[1] - a[1]) * f), Math.round(a[2] + (b[2] - a[2]) * f)];
+  };
+
+  /* ---------- the sky: a dithered gradient, painted once per hour bucket and size ---------- */
+
+  // The six band colors are pure at SKY_STOPS and every row between two stops is the exact blend of those two
+  // colors laid through the 4 x 4 Bayer matrix at the row's fraction: 17 levels from one band to the
+  // next instead of one edge, still only band colors on the pixels. The lowest color runs on down
+  // behind the hills as the glow. The picture is kept in an offscreen canvas and blitted each frame.
+  const sky = document.createElement("canvas");
+  const skyCtx = sky.getContext("2d")!;
+  let skyKey = "";
+  const paintSky = (hour: number): void => {
+    const L = lay!;
+    const bottom = L.groundTop + 2;
+    const bucket = Math.round(hour * SKY_BUCKETS) / SKY_BUCKETS;
+    const key = `${bucket}:${L.sw}:${bottom}`;
+    if (key === skyKey) return;
+    skyKey = key;
+    if (sky.width !== L.sw || sky.height !== bottom) {
+      sky.width = L.sw;
+      sky.height = bottom;
+    }
+    const stops = SKY_STOPS.map((f) => Math.round(L.horizon * f));
+    const cols = SKY_STOPS.map((_, i) => skyRGB(`K${i + 1}`, bucket));
+    const im = skyCtx.createImageData(L.sw, bottom);
+    const px = new Uint32Array(im.data.buffer);
+    let seg = 0;
+    for (let y = 0; y < bottom; y++) {
+      while (seg < stops.length - 2 && y >= stops[seg + 1]) seg++;
+      const f = y <= stops[seg] ? 0 : y >= stops[seg + 1] ? 1 : (y - stops[seg]) / (stops[seg + 1] - stops[seg]);
+      const a = cols[seg];
+      const b = cols[seg + 1];
+      // The row's exact color between the two band colors, then ordered dithering of the rounding
+      // error alone: one value either side, never a mix of two band colors, so there is no grain.
+      const r = a[0] + (b[0] - a[0]) * f;
+      const g = a[1] + (b[1] - a[1]) * f;
+      const bl = a[2] + (b[2] - a[2]) * f;
+      const row = BAYER[y & 3];
+      const o = y * L.sw;
+      for (let x = 0; x < L.sw; x++) {
+        const d = row[x & 3] / 16 - 0.46875;
+        const rr = r + d < 0 ? 0 : r + d > 255 ? 255 : Math.round(r + d);
+        const gg = g + d < 0 ? 0 : g + d > 255 ? 255 : Math.round(g + d);
+        const bb = bl + d < 0 ? 0 : bl + d > 255 ? 255 : Math.round(bl + d);
+        px[o + x] = ((255 << 24) | (bb << 16) | (gg << 8) | rr) >>> 0;
+      }
+    }
+    skyCtx.putImageData(im, 0, 0);
   };
 
   const draw = (name: string, x: number, y: number, frame = 0, flip = false): void => {
@@ -706,24 +760,33 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
 
     if (full) paintEarth();
 
-    // Sky: six flat bands blended for the hour, the lowest one glows behind the hills. During the boot
-    // each band dissolves in through a Bayer threshold, top band first.
+    // Sky: the cached gradient through the six band colors blended for the hour (paintSky), the
+    // lowest one glowing behind the hills. During the boot each band's rows dissolve in through a Bayer
+    // threshold, top band first: the rows are laid whole, the cells not yet shown are punched out and
+    // the earth is put back under them.
+    paintSky(hour);
     const edges = [0, 0.3, 0.5, 0.65, 0.78, 0.9].map((f) => Math.round(L.horizon * f));
     edges.push(L.groundTop + 2);
-    const bandStep: number[] = [];
-    for (let i = 0; i < 6; i++) {
-      const color = skyColor(`K${i + 1}`, hour);
-      const step = full ? stepOf(bt, 400 + i * 90, 240, 6) : 6;
-      bandStep.push(step);
-      if (step <= 0) continue;
-      sctx.fillStyle = step >= 6 ? color : bayerPattern(color, step);
-      sctx.fillRect(0, edges[i], L.sw, edges[i + 1] - edges[i]);
-    }
-    for (let i = 1; i < 6; i++) {
-      if (bandStep[i - 1] < 6 || bandStep[i] < 6) continue;
-      const y = edges[i];
-      sctx.fillStyle = skyColor(`K${i}`, hour);
-      for (let x = y & 1; x < L.sw; x += 2) sctx.fillRect(x, y, 1, 1);
+    const bandStep = edges.slice(0, 6).map((_, i) => (full ? stepOf(bt, 400 + i * 90, 240, 6) : 6));
+    if (!full) sctx.drawImage(sky, 0, 0);
+    else {
+      let punched = false;
+      for (let i = 0; i < 6; i++) {
+        if (bandStep[i] <= 0) continue;
+        const h = edges[i + 1] - edges[i];
+        sctx.drawImage(sky, 0, edges[i], L.sw, h, 0, edges[i], L.sw, h);
+        if (bandStep[i] >= 6) continue;
+        sctx.globalCompositeOperation = "destination-out";
+        sctx.fillStyle = bayerPattern(null, bandStep[i]);
+        sctx.fillRect(0, edges[i], L.sw, h);
+        sctx.globalCompositeOperation = "source-over";
+        punched = true;
+      }
+      if (punched) {
+        sctx.globalCompositeOperation = "destination-over";
+        paintEarth();
+        sctx.globalCompositeOperation = "source-over";
+      }
     }
 
     // Stars, then the sun and moon on their arcs. In the boot they rise from behind the horizon line.
@@ -903,8 +966,11 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
       // The swing hangs from the branch on the left; its cell is 13 wide so the swung frame keeps both ropes.
       draw("swing", ox + 3, oy + 36, live ? Math.floor(t / (swingFast ? 250 : 900)) % 2 : 0);
       hit("swing", 0, ox + 3, oy + 36, 13, 17);
+      // The cat's tail hangs from the leaves on the right and wiggles; a click on it brings the rest of him.
+      draw("cattail", ox + 37, oy + 31, live ? [0, 1, 0, 2][Math.floor(t / 450) % 4] : 0);
+      hit("cat", 0, ox + 36, oy + 30, 10, 13);
       const cf = cheshireFrame(now);
-      if (cf >= 0) draw("cheshire", ox + 22, oy + 4, cf);
+      if (cf >= 0) draw("cheshire", ox + 11, oy + 3, cf);
     }
 
     // The pond with its ducks, the fish that jumps, the flamingo and the croquet hoops.
@@ -1111,11 +1177,11 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
   function cheshireFrame(now: number): number {
     if (!cheshireAt) return -1;
     const age = now - cheshireAt;
-    if (age < 400) return 0;
-    if (age < 900) return 1;
-    if (age < 3700) return 2;
-    if (age < 4300) return 1;
-    if (age < 5000) return 0;
+    if (age < 450) return 0;
+    if (age < 950) return 1;
+    if (age < 5200) return 2;
+    if (age < 5800) return 1;
+    if (age < 6500) return 0;
     cheshireAt = 0;
     return -1;
   }
@@ -1243,6 +1309,10 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
         blipFor("creak");
         return;
       case "swing":
+        blipFor("wiggle");
+        return;
+      case "cat":
+        cheshireAt = now;
         blipFor("wiggle");
         return;
       case "tea":
@@ -1546,6 +1616,9 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
     },
     oakRect: () => (lay ? rectOf(lay.oak.x, lay.oak.y, 47, 40) : null),
     shownHour,
+    releaseScrub: () => {
+      scrub = null;
+    },
     bootElapsed: () => opts.getBoot().elapsed,
     weather: () => (rainUntil > performance.now() ? "rain" : "clear"),
     event: (name) => {
