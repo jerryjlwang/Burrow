@@ -8,10 +8,10 @@ loadEnv({ path: resolve(here, "../../.env"), quiet: true });
 export interface Config {
   port: number;
   deepgramApiKey: string;
-  llmProvider: "anthropic" | "mock";
+  llmProvider: "anthropic" | "openai" | "mock";
   llmApiKey: string;
   llmModel: string;
-  llmEffort: "low" | "medium" | "high";
+  llmEffort: "minimal" | "low" | "medium" | "high";
   ttsModel: string;
   ttsSpeed: number;
   ttsExpressivity: number;
@@ -25,11 +25,15 @@ function num(v: string | undefined, fallback: number): number {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const llmApiKey = env.LLM_API_KEY || env.ANTHROPIC_API_KEY || "";
+  const llmApiKey = env.LLM_API_KEY || env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY || "";
   const requested = (env.LLM_PROVIDER || "").toLowerCase();
   const demoMode = env.DEMO_MODE === "1" || env.DEMO_MODE === "true";
-  let llmProvider: Config["llmProvider"] = requested === "mock" ? "mock" : "anthropic";
-  if (requested !== "anthropic" && requested !== "mock" && !llmApiKey && !env.ANTHROPIC_AUTH_TOKEN) llmProvider = "mock";
+  // Provider: explicit LLM_PROVIDER wins; otherwise sniff the key format (sk-ant-… = Anthropic, sk-… = OpenAI).
+  let llmProvider: Config["llmProvider"];
+  if (requested === "mock" || requested === "openai" || requested === "anthropic") llmProvider = requested;
+  else if (llmApiKey.startsWith("sk-ant-") || (!llmApiKey && env.ANTHROPIC_AUTH_TOKEN)) llmProvider = "anthropic";
+  else if (llmApiKey.startsWith("sk-") || env.OPENAI_API_KEY) llmProvider = "openai";
+  else llmProvider = "mock";
   if (demoMode) llmProvider = "mock";
   const effortRaw = (env.LLM_EFFORT || "low").toLowerCase();
   return {
@@ -37,8 +41,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     deepgramApiKey: env.DEEPGRAM_API_KEY || "",
     llmProvider,
     llmApiKey,
-    llmModel: env.LLM_MODEL || "claude-opus-5",
-    llmEffort: effortRaw === "medium" || effortRaw === "high" ? effortRaw : "low",
+    llmModel: env.LLM_MODEL || (llmProvider === "openai" ? "gpt-5.4-mini" : "claude-opus-5"),
+    llmEffort: effortRaw === "medium" || effortRaw === "high" || effortRaw === "minimal" ? effortRaw : "low",
     ttsModel: env.DEEPGRAM_TTS_MODEL || "flux-rufus-en",
     ttsSpeed: num(env.DEEPGRAM_TTS_SPEED, 1),
     ttsExpressivity: num(env.DEEPGRAM_TTS_EXPRESSIVITY, 0),

@@ -76,8 +76,12 @@ export function attachTtsSession(client: WebSocket, cfg: Config): void {
           }
           switch (m.type) {
             case "Flushed":
+              // Acknowledges the flush; audio frames follow, and SpeechMetadata marks the end.
+              break;
+            case "SpeechMetadata":
               if (current) {
                 const id = current.id;
+                // Queue behind the audio forwarding chain so "done" arrives after the last frame.
                 chain = chain.then(() => {
                   if (current?.id === id) {
                     sendJson(client, { type: "done", id });

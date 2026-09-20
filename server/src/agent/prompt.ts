@@ -124,6 +124,7 @@ export function formatDecisionContext(input: AgentInput): string {
   lines.push("");
   lines.push(formatPage(input.page));
   if (input.screenshot) lines.push("\n(A screenshot of the current viewport is attached.)");
+  if (input.retryNote) lines.push(`\nYOUR PREVIOUS OUTPUT WAS INVALID: ${input.retryNote}. Return a corrected action (element actions need an elementId from the list above; otherwise use speak).`);
   return lines.join("\n");
 }
 
