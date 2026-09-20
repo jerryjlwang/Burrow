@@ -15,6 +15,8 @@ const CUES: Record<string, Note[]> = {
   land: [[150, 0.06], [110, 0.08]],
   panic: [[880, 0.05], [740, 0.05], [880, 0.05], [740, 0.05]],
   wave: [[587, 0.06], [784, 0.1]],
+  // A chalk squeak: one quick high chirp as each line on the board starts.
+  chalk: [[1319, 0.03], [1760, 0.03], [1568, 0.05]],
 };
 
 let ctx: AudioContext | null = null;

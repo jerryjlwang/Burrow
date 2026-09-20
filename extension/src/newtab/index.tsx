@@ -209,10 +209,55 @@ function Clock({ now, hour, boot }: { now: Date; hour: number; boot: Boot }) {
   );
 }
 
+/** Prompts the empty plank types out, one at a time, so the kid sees what it is for. */
+// The plank types a question, holds it, backspaces it and types the next, the way a kid tries things.
+const PROMPTS = ["Ask the meadow", "Why is the sky blue?", "How do birds fly?", "What is a moat?", "Why do cats purr?", "How big is the moon?", "Where does rain come from?", "Teach him about volcanoes"];
+const PROMPT_TYPE_MS = 60;
+const PROMPT_DELETE_MS = 35;
+const PROMPT_HOLD_MS = 4200;
+const PROMPT_GAP_MS = 240;
+type PromptPhase = "type" | "hold" | "delete" | "gap";
+
 function Search({ boot }: { boot: Boot }) {
   const [value, setValue] = useState("");
   const [pops, setPops] = useState(0);
   const [tail, setTail] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [plucked, setPlucked] = useState(false);
+  const [nudge, setNudge] = useState<"" | "shake" | "stamp">("");
+  // The typed-out prompt: which one, how much of it is showing, and what the plank is doing with it.
+  const [prompt, setPrompt] = useState<{ i: number; n: number; phase: PromptPhase }>({ i: 0, n: PROMPTS[0].length, phase: "hold" });
+  useEffect(() => {
+    if (reducedMotion || !boot.done || value || focused) return;
+    let timer = 0;
+    let i = prompt.i;
+    let n = prompt.n;
+    // A whole prompt is on hold and goes next; a partial one keeps typing, or keeps going if it was on its way out.
+    let deleting = prompt.phase === "delete" || n >= PROMPTS[i].length;
+    const step = () => {
+      if (deleting && n > 0) {
+        n -= 1;
+        setPrompt({ i, n, phase: "delete" });
+        timer = window.setTimeout(step, PROMPT_DELETE_MS);
+      } else if (deleting) {
+        deleting = false;
+        i = (i + 1) % PROMPTS.length;
+        setPrompt({ i, n, phase: "gap" });
+        timer = window.setTimeout(step, PROMPT_GAP_MS);
+      } else if (n < PROMPTS[i].length) {
+        n += 1;
+        const whole = n === PROMPTS[i].length;
+        setPrompt({ i, n, phase: whole ? "hold" : "type" });
+        timer = window.setTimeout(step, whole ? PROMPT_HOLD_MS : PROMPT_TYPE_MS);
+      } else {
+        deleting = true;
+        step();
+      }
+    };
+    timer = window.setTimeout(step, deleting ? PROMPT_HOLD_MS : PROMPT_TYPE_MS);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boot.done, value, focused]);
   const board = useRef<HTMLDivElement>(null);
   const mirror = useRef<HTMLSpanElement>(null);
   const inner = useRef<HTMLSpanElement>(null);
@@ -245,6 +290,7 @@ function Search({ boot }: { boot: Boot }) {
     setValue(v);
   };
   const onFocus = () => {
+    setFocused(true);
     const b = board.current?.getBoundingClientRect();
     const body = petBody();
     if (b) {
@@ -258,21 +304,37 @@ function Search({ boot }: { boot: Boot }) {
     }
     send("burrow:play", { state: "listening" });
   };
-  const onBlur = () => send("burrow:play", { state: "idle" });
+  const onBlur = () => {
+    setFocused(false);
+    send("burrow:play", { state: "idle" });
+  };
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const q = value.trim();
-    if (!q) return;
+    if (!q) {
+      // Nothing to ask yet: the plank shakes its head.
+      setNudge("");
+      window.requestAnimationFrame(() => setNudge("shake"));
+      input.current?.focus();
+      return;
+    }
+    if (plucked) return;
     const url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
-    send("burrow:leave", { url, line: "Let's go find out!", arriveLine: "Here's what I found." });
+    // The carrot is plucked and the plank stamps, then he dives with the question.
+    setPlucked(true);
+    setNudge("stamp");
+    blip(9);
+    window.setTimeout(() => send("burrow:leave", { url, line: "Let's go find out!", arriveLine: "Here's what I found." }), reducedMotion ? 0 : 260);
   };
 
   const head = value.slice(0, -1);
   const last = value.slice(-1);
   const drop = boot.mode === "full" && !boot.done ? dropClass(boot.elapsed, 1780) : "";
+  // While the plank shows a prompt of its own, the caret shows what it is doing: steady while it types or deletes, blinking on hold.
+  const demo = !value && !focused && !reducedMotion && boot.done ? ` demo-${prompt.phase}` : "";
   return (
     <form className={`search ${drop}`} role="search" data-pops={pops} onSubmit={onSubmit}>
-      <div className="board" ref={board}>
+      <div className={`board${nudge ? ` ${nudge}` : ""}${demo}`} ref={board} onAnimationEnd={() => setNudge("")}>
         <span className={`mirror${tail ? " tail" : ""}`} ref={mirror} aria-hidden="true">
           <span className="inner" ref={inner}>
             {value ? (
@@ -283,11 +345,13 @@ function Search({ boot }: { boot: Boot }) {
                 </b>
               </>
             ) : (
-              <span className="ph">Ask the meadow</span>
+              <span className="ph">{focused || reducedMotion ? "Ask the meadow" : PROMPTS[prompt.i].slice(0, prompt.n)}</span>
             )}
             <i className="caret" />
           </span>
         </span>
+        <span className={`dirt${plucked ? " puff" : ""}`} aria-hidden="true" />
+        <button type="submit" className={`carrot${value.trim() ? " ready" : ""}${plucked ? " plucked" : ""}`} aria-label="Ask" title="Ask" tabIndex={-1} />
         <input
           ref={input}
           name="q"

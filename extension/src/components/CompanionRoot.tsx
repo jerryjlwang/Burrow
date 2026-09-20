@@ -5,8 +5,10 @@ import { Character } from "./Character";
 import { besidePoint, type PetBox, type PetController } from "./pet";
 import { Panel } from "./Panel";
 import { Bubble } from "./Bubble";
+import { TeachCard } from "./TeachCard";
 import { Overlay } from "./Overlay";
 import { Board } from "./Board";
+import { SketchOverlay } from "./SketchOverlay";
 import { PlanMap } from "./PlanMap";
 import { DebugPanel } from "./DebugPanel";
 import { escort, pageRole, pendingJumpTo, readArrival, startHandoff, type Arrival } from "./handoff";
@@ -17,12 +19,8 @@ import { isOwnKey } from "../actions/surface";
 const DOCK_EDGE = 18;
 const DOCK_GAP = 10;
 const PANEL_WIDTH = 351;
-/** A press shorter than this is a tap: it leaves voice on until the next tap. */
-const TAP_MS = 350;
 /** When this page took over. Replies older than this were shown on the page before; they don't type again here. */
 const LOADED_AT = Date.now();
-/** After a held press ends, wait this long before stopping so the last words land. */
-const RELEASE_GRACE_MS = 800;
 
 function assetUrl(path: string): string {
   try {
@@ -200,38 +198,7 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
     [controller],
   );
 
-  // Hold to talk. A tap turns voice on (or off when it was on); a hold listens until release plus a grace period.
-  const press = useRef<{ at: number; wasOn: boolean } | null>(null);
-  const stopTimer = useRef<number | null>(null);
-  const clearStop = () => {
-    if (stopTimer.current !== null) window.clearTimeout(stopTimer.current);
-    stopTimer.current = null;
-  };
-  const onTalkDown = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    clearStop();
-    const mode = store.getState().voice.mode;
-    const wasOn = mode === "listening" || mode === "starting";
-    press.current = { at: Date.now(), wasOn };
-    if (!wasOn) void controller.toggleVoice();
-  };
-  const onTalkUp = () => {
-    const p = press.current;
-    press.current = null;
-    if (!p) return;
-    const held = Date.now() - p.at;
-    const stopIfOn = () => {
-      const mode = store.getState().voice.mode;
-      if (mode === "listening" || mode === "starting") void controller.toggleVoice();
-    };
-    if (p.wasOn) {
-      if (held < TAP_MS) stopIfOn();
-      return;
-    }
-    if (held >= TAP_MS) stopTimer.current = window.setTimeout(stopIfOn, RELEASE_GRACE_MS);
-  };
+  // Push to talk: one press starts listening, the next stops it.
   const talkRight = !!petBox && petBox.left < 90;
   const listening = voice.mode === "listening";
 
@@ -320,28 +287,31 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
     <div className={`pip-root${reduced ? " reduced" : ""}`} style={UI_VARS}>
       <Overlay />
       <Board />
+      <SketchOverlay />
       <PlanMap controller={controller} />
       {settings.debugMode && <DebugPanel pet={petRef} />}
       <div className={`pip-dock${below ? " below" : ""}`} style={dockStyle}>
         <div className="pip-dock-stack" style={stackStyle}>
           {bubble && !panelOpen && <Bubble bubble={bubble} onAction={(v) => controller.bubbleAction(v)} />}
           {bubble && panelOpen && (bubble.kind === "offer" || bubble.kind === "confirmation" || bubble.kind === "error") && <Bubble bubble={bubble} onAction={(v) => controller.bubbleAction(v)} />}
+          <TeachCard controller={controller} />
           {panelOpen && <Panel controller={controller} />}
         </div>
         <div className="pip-char-wrap">
           <button
             type="button"
             className={`pip-talk${listening ? " on" : ""}${voice.mode === "starting" ? " starting" : ""}${talkRight ? " right" : ""}`}
-            aria-label={listening ? "Listening. Let go or tap to stop." : "Hold to talk"}
+            aria-label={listening ? "Listening. Press to stop." : "Talk to him"}
             aria-pressed={listening}
-            onPointerDown={onTalkDown}
-            onPointerUp={onTalkUp}
-            onPointerCancel={onTalkUp}
-            onContextMenu={(e) => e.preventDefault()}
+            title={listening ? "Listening. Press to stop." : "Talk"}
+            onClick={() => void controller.toggleVoice()}
           >
-            <span className="pip-talk-meter" style={{ height: listening ? Math.round(level * 14) * 3 : 0 }} aria-hidden="true" />
-            <span className="pip-talk-ear" aria-hidden="true" />
-            <span className="pip-talk-label" aria-hidden="true">{listening ? "Listening" : "Hold to talk"}</span>
+            <span className="pip-talk-meter" style={{ height: listening ? Math.round(level * 8) * 3 : 0 }} aria-hidden="true" />
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="9" y="3" width="6" height="11" rx="3" />
+              <path d="M5 11a7 7 0 0 0 14 0" />
+              <path d="M12 18v3M9 21h6" />
+            </svg>
           </button>
           {voice.mode === "listening" && <span className="pip-mic-badge" title="Microphone is on" aria-hidden="true" />}
           {unread > 0 && !panelOpen && bubble?.kind !== "reply" && <span className="pip-unread" aria-hidden="true">{unread}</span>}
