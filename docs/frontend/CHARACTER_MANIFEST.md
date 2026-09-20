@@ -43,4 +43,6 @@ Base states: `idle`, `listening`, `thinking`, `aha`, `confused`, `celebrate`, `w
 
 Transitions, reached only through `enter` and `exit`: `to_listening`, `from_listening`, `to_thinking`, `to_confused`, `from_confused`, `to_sleepy`, `from_sleepy`. `thinking` exits through `aha`.
 
-Other characters reuse these names. Idle variants will be added through `variants`, so the player must not assume the list is fixed. The generator's `verify()` checks that every transition ends on the frame it hands off to.
+Idle variants, reached only through `idle.variants`: `idle_tap`, `idle_watch`, `idle_flick`. They list `blink` and `mouth` overlays so speech keeps working while one plays.
+
+Other characters reuse these names. The player must not assume the list is fixed. The generator's `verify()` checks that every transition and variant ends on the frame it hands off to, and that no frame's rim is clipped by the cell edge.

@@ -15,9 +15,11 @@ Updated: 2026-09-19
 
 - Task 3, transitions: hand-placed `to_listening` (ears rise a pixel at a time, eyes widen a frame later), `from_listening` (ears dip below rest once, then settle), `to_thinking` (trail, then bubble, then watch), `to_confused` and `from_confused` (left ear folds half way through a new 45 degree ear), `to_sleepy` (sag, half fold with heavy eyes, flop) and `from_sleepy` (half up, stretch above rest, settle). The manifest carries `enter` and `exit` per state, and the generator's `verify()` checks every transition ends on the frame it hands off to. Contract in `docs/frontend/CHARACTER_MANIFEST.md`. Checked at 6x, 12x and 14x on light and dark.
 
+- Task 4, motion: `celebrate` is now crouch, launch, peak, fall, land squash, recover, settle (8 frames, 10 fps) with the ears lagging the body and the pocket watch lagging and swinging on a re-linked chain. `wave` runs through the half-folded ear and settles on idle frame 0. The idle breath has the ears lag the head by a frame. Three idle variants, `idle_tap` (foot lifts twice), `idle_watch` (lifts the watch, glances at it, lets it drop) and `idle_flick` (left ear flicks twice), are listed in `idle.variants` with weights. The hop tops out at three pixels because the ears have only three rows of room, and the verifier now flags any frame whose rim would be clipped. Checked at 6x to 12x on light and dark.
+
 ## In progress
 
-- Task 4, anticipation, settle and secondary motion, plus idle variety. `celebrate` and `wave` still end off idle frame 0; the verifier warns about them and Task 4 adds their settle frames.
+- Task 5, pixel alignment audit of every frame.
 - Task 6, the on-page player, is being built in parallel in `extension/src/components/pet`.
 
 ## Blocked
@@ -26,9 +28,9 @@ Updated: 2026-09-19
 
 ## Next three tasks
 
-1. Task 4: anticipation, settle and secondary motion, plus random idle variety.
-2. Task 5: pixel alignment audit of every frame.
-3. Task 6: integrate and check the on-page player on light and dark pages.
+1. Task 5: pixel alignment audit of every frame.
+2. Task 6: integrate and check the on-page player on light and dark pages.
+3. Task 7: kid UI, then parent UI, after sign-off on the rabbit.
 
 ## Notes
 

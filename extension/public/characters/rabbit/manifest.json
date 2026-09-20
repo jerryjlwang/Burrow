@@ -68,7 +68,53 @@
         "blink",
         "mouth"
       ],
-      "variants": []
+      "variants": [
+        {
+          "state": "idle_tap",
+          "weight": 3
+        },
+        {
+          "state": "idle_watch",
+          "weight": 2
+        },
+        {
+          "state": "idle_flick",
+          "weight": 2
+        }
+      ]
+    },
+    "idle_tap": {
+      "file": "rabbit_idle_tap.png",
+      "frames": 8,
+      "fps": 10,
+      "loop": false,
+      "notes": "Idle variant. The right foot taps twice.",
+      "overlays": [
+        "blink",
+        "mouth"
+      ]
+    },
+    "idle_watch": {
+      "file": "rabbit_idle_watch.png",
+      "frames": 7,
+      "fps": 6,
+      "loop": false,
+      "notes": "Idle variant. He lifts the pocket watch, checks it, and lets it drop.",
+      "overlays": [
+        "blink",
+        "mouth"
+      ]
+    },
+    "idle_flick": {
+      "file": "rabbit_idle_flick.png",
+      "frames": 4,
+      "fps": 8,
+      "loop": false,
+      "notes": "Idle variant. The left ear flicks twice.",
+      "overlays": [
+        "blink",
+        "mouth"
+      ]
     },
     "to_listening": {
       "file": "rabbit_to_listening.png",
@@ -148,17 +194,17 @@
     },
     "celebrate": {
       "file": "rabbit_celebrate.png",
-      "frames": 6,
-      "fps": 9,
+      "frames": 8,
+      "fps": 10,
       "loop": false,
-      "notes": "A hop with happy eyes and sparkles, landing with a squash. Play once."
+      "notes": "Crouch, hop with sparkles, land with a squash, settle. Ears and watch lag the body. Play once."
     },
     "wave": {
       "file": "rabbit_wave.png",
-      "frames": 4,
-      "fps": 5,
+      "frames": 8,
+      "fps": 10,
       "loop": false,
-      "notes": "He waves with his ear. Use for greetings."
+      "notes": "He waves with his left ear, twice, then settles. Use for greetings."
     },
     "to_sleepy": {
       "file": "rabbit_to_sleepy.png",

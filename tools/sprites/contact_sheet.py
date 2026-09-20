@@ -1,7 +1,7 @@
 """
 Render rabbit states as a contact sheet on a light and a dark background.
 
-Usage: python tools/sprites/contact_sheet.py [--states idle,thinking] [--scale 8] [--out path.png]
+Usage: python tools/sprites/contact_sheet.py [--states idle,thinking] [--frames 0,3] [--scale 8] [--out path.png]
 
 Defaults to every state at 4x. Nothing here touches the shipped strips.
 """
@@ -20,12 +20,17 @@ DARK = (24, 28, 38, 255)
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--states", default="", help="comma separated state names, default all")
+    ap.add_argument("--frames", default="", help="comma separated frame indexes to keep, default all")
     ap.add_argument("--scale", type=int, default=4)
     ap.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "contact_sheet.png"))
     args = ap.parse_args()
 
     S = rabbit_px.build()
     names = [n for n in args.states.split(",") if n] or list(S)
+    keep = [int(i) for i in args.frames.split(",") if i]
+    if keep:
+        for n in names:
+            S[n] = dict(S[n], frames=[f for i, f in enumerate(S[n]["frames"]) if i in keep])
     sc, pad, label_h = args.scale, 6, 16
     W, H = rabbit_px.W, rabbit_px.H
     cw, ch = W * sc + pad, H * sc + pad

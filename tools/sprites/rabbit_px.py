@@ -118,7 +118,6 @@ FACE = {
     27: [(0, 0, "n"), (8, 9, "b")],
 }
 WATCH = ["..ooo..", ".ogggo.", "ogfofgo", "ogfoogo", "ogfffgo", ".ogggo.", "..ooo.."]  # rows 42..48, cols 34..40
-CHAIN = [(41, 37), (40, 36), (39, 35), (38, 34)]
 
 EYES = {
     "open": FACE,
@@ -167,8 +166,8 @@ BUBBLE = [
     "....ooRRRRRRRRoo....",
     "......oooooooo......",
 ]
-BUBBLE_AT = (43, 0)  # (col, row) of the top left of BUBBLE
-TRAIL = [([".oo.", "oRRo", "oRRo", ".oo."], (47, 16)), ([".o.", "oRo", ".o."], (45, 22))]
+BUBBLE_AT = (43, 1)  # (col, row) of the top left of BUBBLE, one row down so the rim fits above it
+TRAIL = [([".oo.", "oRRo", "oRRo", ".oo."], (47, 17)), ([".o.", "oRo", ".o."], (45, 23))]
 CLOCK = [
     "...ooo...",
     ".oogggoo.",
@@ -180,7 +179,7 @@ CLOCK = [
     ".oogggoo.",
     "...ooo...",
 ]
-CLOCK_AT = (48, 2)
+CLOCK_AT = (48, 3)
 # One hand, two pixels long, ticking round: up, right, down, left. (row, col) inside CLOCK.
 CLOCK_HANDS = [[(3, 4), (2, 4)], [(4, 5), (4, 6)], [(5, 4), (6, 4)], [(4, 3), (4, 2)]]
 BULB = [
@@ -194,8 +193,8 @@ BULB = [
     "..ogo..",
     "..ooo..",
 ]
-BULB_AT = (49, 2)
-BULB_SPARKS = [(46, 3), (57, 3)]
+BULB_AT = (49, 3)
+BULB_SPARKS = [(46, 4), (57, 4)]
 
 
 def stamp(g, art, x, y, sub=None):
@@ -266,7 +265,32 @@ def ear(g, side, kind="up", dy=0):
         paint(g, {15: EAR_UP[15]}, side)
 
 
-def rabbit(ear_l="up", ear_r="up", eyes="open", mouth="smile", look=False, perk=False, twitch=False, ear_dy=0):
+def watch(g, dx=0, dy=0):
+    """Pocket watch on its chain. dx swings it sideways by one pixel, dy lets it lag up or down.
+    The chain keeps its top three links and bends its last link to meet the watch."""
+    links = [(38, 34), (39, 35), (40, 36)]
+    if dy >= 0:
+        links += [(41, 37 + dx)] if dx <= 0 else [(41, 37), (41, 38)]
+        links += [(41 + k, 37 + dx) for k in range(1, dy + 1)]
+    else:
+        links = links[: 3 + dy] if dy > -3 else links[:1]
+    for r, c in links:
+        g[r][c + OFF] = "g"
+    for i, row in enumerate(WATCH):
+        for j, ch in enumerate(row):
+            if ch != "." and 0 <= 42 + dy + i < H:
+                g[42 + dy + i][34 + OFF + dx + j] = ch
+
+
+def squash(g, n):
+    """Press the rabbit down n whole pixels by taking n rows out of the jacket, like the breath does."""
+    for _ in range(n):
+        g = bob(g)
+    return g
+
+
+def rabbit(ear_l="up", ear_r="up", eyes="open", mouth="smile", look=False, perk=False, twitch=False, ear_dy=0,
+           watch_dx=0, watch_dy=0):
     g = blank()
     if perk:
         ear_dy = -2
@@ -293,12 +317,7 @@ def rabbit(ear_l="up", ear_r="up", eyes="open", mouth="smile", look=False, perk=
     clear_region(g, range(28, 31), 0, 3)
     g[31][CX] = g[31][CX + 1] = "w"
     paint(g, MOUTHS[mouth])
-    for i, row in enumerate(WATCH):
-        for j, ch in enumerate(row):
-            if ch != ".":
-                g[42 + i][34 + OFF + j] = ch
-    for r, c in CHAIN:
-        g[r][c + OFF] = "g"
+    watch(g, watch_dx, watch_dy)
     return g
 
 
@@ -316,6 +335,20 @@ def moved(g, dx, dy):
         for c in range(W):
             if g[r][c] != "." and 0 <= r + dy < H and 0 <= c + dx < W:
                 out[r + dy][c + dx] = g[r][c]
+    return out
+
+
+def foot_up(g, n):
+    """Lift the right foot n whole pixels. The foot's rows 50 to 53 move up over the jacket hem."""
+    out = [row[:] for row in g]
+    lo, hi = CX + 1 + 2, CX + 1 + 10
+    for r in range(50, 54):
+        for c in range(lo, hi + 1):
+            out[r][c] = "."
+    for r in range(50, 54):
+        for c in range(lo, hi + 1):
+            if g[r][c] != ".":
+                out[r - n][c] = g[r][c]
     return out
 
 
@@ -397,8 +430,21 @@ def patch(rows, a, b, draw):
 def build():
     S = {}
     a, b = rabbit(), rabbit(twitch=True)
-    S["idle"] = dict(frames=[a, b, bob(a), bob(a)], fps=3, loop=True, head_dy=[0, 0, 1, 1],
-                     overlays=["blink", "mouth"], variants=[])
+    S["idle"] = dict(frames=[a, b, bob(rabbit(ear_dy=-1)), bob(a)], fps=3, loop=True, head_dy=[0, 0, 1, 1],
+                     overlays=["blink", "mouth"],
+                     variants=[{"state": "idle_tap", "weight": 3}, {"state": "idle_watch", "weight": 2},
+                               {"state": "idle_flick", "weight": 2}])
+    # Foot tap: the right foot lifts two pixels and comes down, twice.
+    S["idle_tap"] = dict(frames=[foot_up(a, 1), foot_up(a, 2), foot_up(a, 1), a, foot_up(a, 1), foot_up(a, 2), foot_up(a, 1), a],
+                         fps=10, loop=False, overlays=["blink", "mouth"])
+    # Watch check: he lifts the watch and glances down at it, then lets it drop.
+    S["idle_watch"] = dict(frames=[rabbit(watch_dy=-1, mouth="flat"), rabbit(look=True, watch_dy=-3, mouth="flat"),
+                                   rabbit(look=True, watch_dy=-3, mouth="flat"), rabbit(look=True, watch_dy=-3, mouth="flat"),
+                                   rabbit(watch_dy=-1), rabbit(watch_dy=1), a],
+                           fps=6, loop=False, overlays=["blink", "mouth"])
+    # Ear flick: the left ear folds half way and snaps back, twice.
+    S["idle_flick"] = dict(frames=[rabbit(ear_l="half"), a, rabbit(ear_l="half"), a], fps=8, loop=False,
+                           overlays=["blink", "mouth"])
     # Ears rise one pixel at a time, then the eyes widen a frame later. Leaving, the ears dip below rest once.
     S["to_listening"] = dict(frames=[rabbit(ear_dy=-1), rabbit(ear_dy=-2), rabbit(ear_dy=-2, eyes="wide")], fps=12, loop=False)
     S["listening"] = dict(frames=[rabbit(ear_dy=-2, eyes="wide")], fps=8, loop=False, head_dy=[0], hold=True,
@@ -426,17 +472,28 @@ def build():
     S["to_confused"] = dict(frames=[rabbit(ear_l="half", mouth="flat"), cf[0]], fps=8, loop=False)
     S["confused"] = dict(frames=cf, fps=4, loop=True, enter="to_confused", exit="from_confused")
     S["from_confused"] = dict(frames=[rabbit(ear_l="half", mouth="flat"), a], fps=8, loop=False)
-    ce = []
-    for i, dy in enumerate((0, -2, -3, -2, 0, 0)):
-        g = rabbit(eyes="happy", mouth="open")
-        g = bob(g) if i == 5 else moved(g, 0, dy)
-        for k, (sx, sy) in enumerate(((2, 24), (43, 20), (3, 40), (44, 36))):
-            if (i + k) % 3 == 0:
-                glyph(g, "spark", sx + OFF, sy)
-        ce.append(g)
-    S["celebrate"] = dict(frames=ce, fps=9, loop=False)
-    S["wave"] = dict(frames=[rabbit(eyes="happy", mouth="open", ear_l=e) for e in ("up", "flop", "up", "flop")],
-                     fps=5, loop=False)
+    def happy(**kw):
+        return rabbit(eyes="happy", mouth="open", **kw)
+
+    # The ears have three rows of room above them, so the hop tops out at three pixels with the
+    # ears trailing one below, and the rim never leaves the cell.
+    ce = [squash(happy(ear_dy=-1), 2),                        # crouch: ears lag behind the drop
+          moved(happy(ear_dy=1, watch_dy=1), 0, -2),           # launch: ears and watch trail below
+          moved(happy(ear_dy=1, watch_dy=1), 0, -3),           # peak, ears still catching up
+          moved(happy(ear_dy=1), 0, -3),                       # peak, watch catches up
+          moved(happy(ear_dy=-1, watch_dy=-1), 0, -1),         # fall: ears and watch trail above
+          squash(happy(ear_dy=-1, watch_dy=1), 2),             # land: squash, watch swings down
+          bob(happy(watch_dx=1)),                              # recover: watch swings out
+          a]                                                   # settle on idle frame 0
+    for i, g in enumerate(ce):
+        if 2 <= i <= 5:
+            for k, (sx, sy) in enumerate(((2, 24), (43, 20), (3, 40), (44, 36))):
+                if (i + k) % 3 == 0:
+                    glyph(g, "spark", sx + OFF, sy)
+    S["celebrate"] = dict(frames=ce, fps=10, loop=False)
+    # Wave with the left ear: half, flop, half, up, twice, then settle.
+    S["wave"] = dict(frames=[happy(ear_l=e) for e in ("half", "flop", "half", "up", "half", "flop", "half")] + [a],
+                     fps=10, loop=False)
     sl = []
     for i in range(4):
         g = rabbit(ear_l="flop", ear_r="flop", eyes="closed", mouth="flat")
@@ -485,8 +542,11 @@ NOTES = {
     "to_sleepy": "Ears sag, fold half way, then flop as the eyes close. Enter transition for sleepy.",
     "from_sleepy": "Ears half up with heavy eyes, a stretch above rest, then settle. Exit transition for sleepy.",
     "confused": "One ear flops over and a question mark bobs.",
-    "celebrate": "A hop with happy eyes and sparkles, landing with a squash. Play once.",
-    "wave": "He waves with his ear. Use for greetings.",
+    "celebrate": "Crouch, hop with sparkles, land with a squash, settle. Ears and watch lag the body. Play once.",
+    "wave": "He waves with his left ear, twice, then settles. Use for greetings.",
+    "idle_tap": "Idle variant. The right foot taps twice.",
+    "idle_watch": "Idle variant. He lifts the pocket watch, checks it, and lets it drop.",
+    "idle_flick": "Idle variant. The left ear flicks twice.",
     "sleepy": "Both ears flopped, eyes shut, z's rising. Bedtime and session limits.",
     "dragged": "Startled and swinging while the kid drags him.",
     "hole_only": "An empty rabbit hole opening. Reverse it to close.",
@@ -558,6 +618,13 @@ def verify(S):
                 problems.append(f"{name} variant {v['state']} is missing")
             elif S[v["state"]]["frames"][-1] != idle0:
                 problems.append(f"variant {v['state']} does not end on idle frame 0")
+    for name, st in S.items():
+        if name.startswith("overlay") or name == "dive":
+            continue
+        for i, f in enumerate(st["frames"]):
+            edge = [c for c in range(W) if f[0][c] not in ".R"] + [r for r in range(H) if f[r][0] not in ".R" or f[r][W - 1] not in ".R"]
+            if edge:
+                problems.append(f"{name} frame {i} touches the cell edge, so its rim is clipped")
     enters = {st.get("enter") for st in S.values()}
     for name, st in S.items():
         if st["loop"] or st.get("hold") or name.startswith("overlay") or name.startswith("hole") or name == "dive":
