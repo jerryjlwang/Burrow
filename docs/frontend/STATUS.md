@@ -1,6 +1,6 @@
 # Front end status
 
-Updated: 2026-09-19
+Updated: 2026-09-20
 
 ## Done
 
@@ -42,6 +42,8 @@ Updated: 2026-09-19
 - Meadow round two: 86 hand-placed pieces over five parallax layers. Boot sequence on the first new tab of a session (dark earth and a typed "BURROW" line with a block bar, sky dissolving in band by band, sun rising, hills sliding up, fences and signs dropping in, grass sprouting, clock digits one by one, then `burrow:enter` pops the rabbit out of his hole; quick version afterwards; any click skips; reduced motion skips). Pet him for hearts and a wave, feed him carrots that regrow, drag the sun or moon to scrub the hour, click reactions on flowers, mushrooms, clouds, birds, grass, chimney, door, pond, flamingo, oak (Cheshire grin), tea party, roses (paint one red), giant mushroom and caterpillar, card soldiers (salute), sheep, windmill and the arrow sign. Timed life: ducks, fish, patrols, the grin, balloon, cloud shadow, gusts, bees, showers and a rainbow. Concept flowers from `burrow.graph` with signs. Pixel cursors, WebAudio ambience with a speaker sign, a HUD. Clock at half size. `tools/pet/check.mjs`: 86 of 86.
 - Extension icons are the rabbit's face, hand-placed (`tools/sprites/icons_px.py`). Onboarding: he pops out of his hole and waves.
 
+- Tablet watcher (2026-09-20). Alt+Shift+D, or "Watch the tablet" in the popup, opens excalidraw.com in a Chrome window on the touch display (`chrome.system.display`: the non-primary screen with touch, else any secondary, else a window beside you) and starts watching it. `extension/src/background/tablet.ts` captures that window's active tab about twice a second, diffs frames with the pure rules in `ink-trigger.ts`, and when enough new ink lands or the pen pauses posts the frame plus a screenshot and title of the laptop tab to `POST /api/ink/judge`. `server/src/api/ink.ts` asks Gemini (`GEMINI_API_KEY`, `INK_MODEL`, default gemini-3.8-flash) for one JSON verdict: the lines it read, ok, off or unclear, the first wrong line, a nudge that names the step and never the fix, a confidence, and solved. Without a key a scripted mock cycles fine, slip, solved. The contract and validator live in `shared/src/ink.ts`. The verdict reaches the laptop tab as an `ink.judgement` broadcast and `ProactiveEngine.onInkJudgement` speaks a confident off verdict at once through the normal voice path with a 25 s cooldown per issue, only glances below 0.6 confidence, and celebrates once on solved. The popup shows the watch state and the last verdict. Set `INK_DEBUG_DIR` on the server to dump every judged frame, its context and verdict. Backend-lane files were touched for this, see `BACKEND_REQUESTS.md` item 7.
+
 ## In progress
 
 - Nothing.
@@ -55,6 +57,12 @@ Updated: 2026-09-19
 1. Rehearse the four demo beats end to end with the real server and a Deepgram key on two laptops once the backend relay exists.
 2. The teach loop in the kid UI: "Did I get that right?" cards, once the backend persona teaches instead of tutors.
 3. If time: the burrow diorama on the new tab page.
+
+## Verification as of the tablet watcher (2026-09-20)
+
+- Before merging main: `npx tsc -p tsconfig.json --noEmit` clean, `npx vitest run` 173 tests (11 new for the trigger rules and the verdict validator), `node extension/build.mjs` ok, `node tools/pet/check.mjs` 86 of 86, `npm run e2e` 35 of 35 on the branch alone. After merging main (the plans, sketch and speech-queue layer): typecheck clean, 288 tests, pet check 86 of 86, `npm run e2e` 54 of 54, and the tablet run below 15 of 15. One merge follow-up: an ink nudge now dismisses an ambient path offer that is already up, otherwise the rabbit stayed quiet about the tablet while asking about prerequisites.
+- End to end with the real judge (a Playwright run of the built extension against the live server with a Gemini key): the board opens from the background, a wrong second line is flagged about 4 s after it is typed with confidence 0.98 and a bubble on the task page ("Check what operation undoes adding 5."), the corrected work is judged solved 3 s after the last line, and stop closes the board. 14 of 14 checks. Judge latency 1.4 to 2.4 s per call.
+- Known: Chrome's own Alt+Shift+T focuses the toolbar, so the shortcut is Alt+Shift+D. If Chrome does not assign it on reload, set it at chrome://extensions/shortcuts. Headless Chromium never answers the display query, so it is raced against a 1.5 s timeout.
 
 ## Verification as of the meadow round two (2026-09-20)
 
