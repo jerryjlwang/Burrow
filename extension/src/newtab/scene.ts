@@ -48,6 +48,13 @@ export interface HoverSign {
   pinned?: boolean;
 }
 
+/** The far hills' line in viewport pixels, and the stretch of it clear of the windmill and the oak. */
+export interface Ridge {
+  y: number;
+  left: number;
+  right: number;
+}
+
 export interface SceneOptions {
   /** Real hour of the day, fractional, read on every tick. */
   hour: () => number;
@@ -59,6 +66,8 @@ export interface SceneOptions {
   /** Viewport x of DOM posts planted in the front grass, so concept flowers stay clear of them. */
   postXs?: () => number[];
   onPalette?: (tod: Tod, ground: string) => void;
+  /** The layout settled for this viewport: where DOM signposts may stand. */
+  onLayout?: (ridge: Ridge) => void;
   onHover?: (info: HoverSign | null) => void;
   /** First pointer or key on the scene, for starting sound. */
   onInteract?: () => void;
@@ -103,6 +112,8 @@ const PET_HOLD_MS = 600;
 const PET_STROKE_PX = 60;
 const PET_GAP_MS = 4000;
 const SCRUB_HOLD_MS = 60_000;
+/** A change of light dithers the old picture away over seven Bayer steps. */
+const FADE_STEP_MS = 60;
 const REGROW_MS = 20_000;
 const MAX_CONCEPTS = 10;
 const RAIN_MS = 75_000;
@@ -405,8 +416,6 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
   let flamingoLeg = 0;
   let flamingoAt = t0 + between(5000, 10_000);
   const cards = { start: 0, dir: 1, salute: [0, 0], nextAt: t0 + between(25_000, 60_000) };
-  let cheshireAt = 0;
-  let cheshireNext = t0 + between(30_000, 70_000);
   let steamUntil = 0;
   let rattleUntil = 0;
   const roses: ("w" | "r")[] = ["w", "w", "w"];
@@ -425,6 +434,12 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
   // whole hour at a time.
   let scrub: { hour: number; heldUntil: number } | null = null;
   let easeAt = 0;
+  let cheshireAt = 0;
+  let cheshireNext = t0 + between(30_000, 70_000);
+  // The last picture drawn with the previous palette, dithered away over the new one.
+  const old = document.createElement("canvas");
+  const octx = old.getContext("2d")!;
+  let fade: { at: number } | null = null;
   const shownHour = (): number => (scrub ? scrub.hour : opts.hour()) % 24;
 
   // Pointer state: which thing is pressed or dragged, and how long the pointer has rested on the rabbit.
@@ -546,6 +561,7 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
     canvas.style.width = `${sw * SCALE}px`;
     canvas.style.height = `${sh * SCALE}px`;
     plantConcepts();
+    opts.onLayout?.({ y: lay.horizon * SCALE, left: (lay.windmill.x + 24) * SCALE, right: (lay.oak.x - 6) * SCALE });
     return true;
   };
 
@@ -636,7 +652,7 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
     };
     const left = Math.round(L.sw / 2) - 58;
     if (!nodes.length) {
-      concepts = [{ id: "sprout", label: "Teach me something and the meadow grows.", piece: "sprout", x: clear(Math.round(L.sw / 2) - 2), y: L.conceptY - piece("sprout").h, phase: 0, pinned: true }];
+      concepts = [{ id: "sprout", label: "Teach me something and the meadow grows.", piece: "sprout", x: clear(Math.round(L.sw / 2) - 2), y: L.conceptY - piece("sprout").h, phase: 0 }];
       return;
     }
     concepts = nodes.map((n, i) => {
@@ -885,7 +901,7 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
       draw("swing", ox + 6, oy + 36, live ? Math.floor(t / (swingFast ? 250 : 900)) % 2 : 0);
       hit("swing", 0, ox + 6, oy + 36, 11, 17);
       const cf = cheshireFrame(now);
-      if (cf >= 0) draw("cheshire", ox + 33, oy + 14, cf);
+      if (cf >= 0) draw("cheshire", ox + 22, oy + 4, cf);
     }
 
     // The pond with its ducks, the fish that jumps, the flamingo and the croquet hoops.
@@ -1069,21 +1085,34 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
       }
     }
 
+    if (fade) {
+      const step = Math.floor((now - fade.at) / FADE_STEP_MS);
+      if (step >= 7 || old.width !== L.sw || old.height !== L.sh) fade = null;
+      else {
+        // Erase the cells the mask has reached so far, then lay what is left over the new picture.
+        octx.globalCompositeOperation = "destination-out";
+        octx.fillStyle = bayerPattern("#000", step);
+        octx.fillRect(0, 0, old.width, old.height);
+        octx.globalCompositeOperation = "source-over";
+        sctx.globalCompositeOperation = "source-over";
+        sctx.drawImage(old, 0, 0);
+      }
+    }
     const ctx = canvas.getContext("2d")!;
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(src, 0, 0, L.sw, L.sh, 0, 0, L.sw * SCALE, L.sh * SCALE);
     canvas.dataset.ready = "1";
   };
 
-  /** The grin's frame for this moment: eyes, dim teeth, full grin, then away. -1 when hidden. */
+  /** The cat's frame for this moment: the smile, then the eyes, then the whole cat, and back to the smile. -1 when hidden. */
   function cheshireFrame(now: number): number {
     if (!cheshireAt) return -1;
     const age = now - cheshireAt;
-    if (age < 500) return 0;
-    if (age < 1000) return 1;
-    if (age < 3500) return 2;
-    if (age < 4000) return 1;
-    if (age < 4500) return 0;
+    if (age < 400) return 0;
+    if (age < 900) return 1;
+    if (age < 3700) return 2;
+    if (age < 4300) return 1;
+    if (age < 5000) return 0;
     cheshireAt = 0;
     return -1;
   }
@@ -1391,6 +1420,15 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
     const image = atlases[next] ?? (await loadImage(`scene/${man.atlas.files[next]}`));
     atlases[next] = image;
     if (stopped || tod === next) return;
+    // Not the first light: keep the picture as it is and dither it away over the new one, so a
+    // dragged sun crossing into day does not snap the hills and the grass.
+    if (tod && lay && motion) {
+      old.width = lay.sw;
+      old.height = lay.sh;
+      octx.clearRect(0, 0, old.width, old.height);
+      octx.drawImage(src, 0, 0);
+      fade = { at: performance.now() };
+    }
     img = image;
     tod = next;
     canvas.dataset.tod = next;
@@ -1427,7 +1465,7 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
     }
     if (motion && opts.getBoot().done) {
       // The inhabitants keep their own time: ducks paddle, the fish jumps, the flamingo shifts, the cards
-      // patrol, the cat grins, the caterpillar puffs, the balloon and the cloud shadow cross, gusts blow.
+      // patrol, the cat smiles, the caterpillar puffs, the balloon and the cloud shadow cross, gusts blow.
       const dt = Math.floor(now / 450);
       if (dt !== duck.tick) {
         duck.tick = dt;
@@ -1510,8 +1548,8 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
     event: (name) => {
       if (lay && man) happen(name);
     },
-    cardsX: () => (cards.start ? (cards.dir > 0 ? -14 + Math.floor((performance.now() - cards.start) / 120) : (lay?.sw ?? 0) + 14 - Math.floor((performance.now() - cards.start) / 120)) * SCALE : null),
     cheshireFrame: () => cheshireFrame(performance.now()),
+    cardsX: () => (cards.start ? (cards.dir > 0 ? -14 + Math.floor((performance.now() - cards.start) / 120) : (lay?.sw ?? 0) + 14 - Math.floor((performance.now() - cards.start) / 120)) * SCALE : null),
   };
 
   void fetch("scene/manifest.json")

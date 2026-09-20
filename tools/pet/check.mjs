@@ -391,6 +391,82 @@ try {
     await page.close();
   }
 
+  // Replies on a real page, with the dev server on :8787 answering. The tab keeps its conversation
+  // across navigations, so a reply may bubble once at most: not after it was read in the open panel,
+  // and never again on the next page. Speech is off here so a click on the rabbit always toggles the panel.
+  await sw.evaluate(() => chrome.storage.local.set({ "pip.settings": { debugMode: true, onboarded: true, proactiveEnabled: false, voiceAutoResume: false, ttsEnabled: false } }));
+  const dp = await context.newPage();
+  dp.on("console", (m) => consoleLines.push(`[demo] ${m.type()}: ${m.text()}`));
+  dp.on("pageerror", (e) => consoleLines.push(`[demo] pageerror: ${e.message}`));
+  const openDemo = async (name) => {
+    await dp.goto(`http://localhost:8787/demo/${name}`, { waitUntil: "load" });
+    await dp.locator("#pip-companion-host").waitFor({ state: "attached", timeout: 15000 });
+    await dp.locator(".pet-hit").waitFor({ state: "attached", timeout: 15000 });
+    await wait(600);
+  };
+  const openDemoPanel = async () => {
+    const b = await dp.locator(".pet-hit").boundingBox();
+    await dp.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+    await dp.locator(".pip-panel").waitFor({ timeout: 5000 });
+    await wait(300);
+  };
+  const askDemo = async (text) => {
+    await dp.locator(".pip-input").fill(text);
+    await dp.locator(".pip-send").click();
+  };
+  /** The companion's messages in the open panel; plain is false for an offer or a confirmation. */
+  const demoReplies = () => dp.locator(".pip-msg.companion").evaluateAll((els) => els.map((el) => ({ text: el.querySelector(".pip-msg-text")?.textContent ?? "", plain: !/kind-(offer|confirmation)/.test(el.className) })));
+  /** The texts of the reply bubbles on screen right now. */
+  const replyBubbles = () => dp.locator(".pip-bubble.kind-reply").evaluateAll((els) => els.map((el) => el.querySelector(".pip-bubble-text")?.textContent ?? ""));
+  /** Every distinct reply bubble text seen while polling for this long. */
+  const watchBubbles = async (ms) => {
+    const seen = [];
+    const t0 = Date.now();
+    while (Date.now() - t0 < ms) {
+      for (const t of await replyBubbles()) if (!seen.includes(t)) seen.push(t);
+      await wait(100);
+    }
+    return seen;
+  };
+
+  // A reply that arrived while the panel was open was read there: closing the panel must not type it again.
+  await openDemo("index.html");
+  await openDemoPanel();
+  const before1 = (await demoReplies()).length;
+  await askDemo("What is a moat? Answer in one short sentence.");
+  const replied1 = await dp.locator(".pip-msg.companion").nth(before1).waitFor({ timeout: 30000 }).then(() => true, () => false);
+  const reply1 = (await demoReplies())[before1] ?? null;
+  await dp.screenshot({ path: resolve(out, "demo-reply-in-panel.png") });
+  await dp.keyboard.press("Escape");
+  const afterClose = await watchBubbles(1000);
+  check("a reply read in the open panel does not bubble when the panel closes", replied1 && !!reply1?.plain && (await dp.locator(".pip-panel").count()) === 0 && afterClose.length === 0, JSON.stringify({ reply: reply1 ? reply1.text.slice(0, 60) : "no reply within 30 s", plain: reply1?.plain ?? null, bubbles: afterClose }));
+
+  // Close the panel before the reply lands: this one bubbles, once, on this page only. The panel's
+  // own close button is used here because Escape while he is thinking cancels the question.
+  await openDemoPanel();
+  await askDemo("Tell me one thing about castles in one short sentence.");
+  await dp.getByRole("button", { name: "Close panel", exact: true }).click();
+  const closedFirst = await dp.locator(".pip-panel").waitFor({ state: "detached", timeout: 2000 }).then(() => true, () => false);
+  let bubbled = null;
+  const bubbleT0 = Date.now();
+  while (!bubbled && Date.now() - bubbleT0 < 30000) {
+    bubbled = (await replyBubbles())[0] ?? null;
+    if (!bubbled) await wait(100);
+  }
+  check("a reply that lands while the panel is closed shows as a bubble", closedFirst && !!bubbled, bubbled ? bubbled.slice(0, 60) : `panel closed ${closedFirst}, no reply bubble within 30 s`);
+  await dp.screenshot({ path: resolve(out, "demo-reply-bubble.png") });
+  const head = (bubbled ?? "").slice(0, 40);
+  // The tab's conversation mirrors to the background 400 ms after a turn; let that land before leaving.
+  await wait(800);
+  await openDemo("modules.html");
+  const onNextPage = await watchBubbles(3000);
+  check("a bubble shown on one page does not type again on the next", !!bubbled && !onNextPage.some((t) => t.startsWith(head)), JSON.stringify({ head, bubbles: onNextPage }));
+  await openDemoPanel();
+  const carried = await demoReplies();
+  check("the conversation follows the tab to the next page", !!bubbled && carried.some((r) => r.text.startsWith(head)), JSON.stringify({ head, replies: carried.map((r) => r.text.slice(0, 40)) }));
+  await dp.screenshot({ path: resolve(out, "demo-after-navigation.png") });
+  await dp.close();
+
   // Onboarding page renders the rabbit at 2x.
   const ob = await context.newPage();
   await ob.goto(`chrome-extension://${extId}/onboarding.html`);
@@ -517,7 +593,27 @@ try {
   check("new tab scene wears the pixel cursor", /cursor_arrow\.png/.test(scene.cursor), scene.cursor);
   const clock = await nt.locator("canvas.clock").evaluate((c) => ({ w: c.width, h: c.height, cssW: c.getBoundingClientRect().width, rendering: getComputedStyle(c).imageRendering, label: c.getAttribute("aria-label") }));
   check("new tab draws the pixel clock at about half size", clock.w > 0 && clock.h >= 45 && clock.h <= 60 && clock.w === clock.cssW && clock.rendering === "pixelated" && /^Current time \d{1,2}:\d{2} [AP]M$/.test(clock.label ?? ""), JSON.stringify(clock));
-  check("new tab shows the meadow HUD", (await nt.locator(".hud .hud-sign").count()) === 3 && /things taught/.test((await nt.locator(".hud").textContent()) ?? ""));
+  check("new tab shows the meadow HUD", (await nt.locator(".hud .hud-sign").count()) === 2, `${await nt.locator(".hud .hud-sign").count()} signs`);
+  // The welcome hint waits in the sky after the boot; the first click anywhere fades it out.
+  const hint0 = await nt.locator(".hint").evaluate((el) => ({ gone: el.classList.contains("gone"), opacity: getComputedStyle(el).opacity, text: (el.textContent ?? "").trim() }));
+  check("the welcome hint shows after the boot", !hint0.gone && hint0.opacity === "1" && /is here\./.test(hint0.text), JSON.stringify(hint0));
+  // The site signposts stay out of the meadow until the Sites sign is pressed, and leave on Escape.
+  check("site signposts are hidden until asked for", (await nt.locator(".shortcuts").count()) === 0);
+  await nt.locator(".hud-sign .sites").click();
+  const hintClickAt = Date.now();
+  await wait(300);
+  const signposts = await nt.locator(".shortcut").count();
+  check("pressing Sites brings the signposts out on the ridge", signposts >= 1, `${signposts}`);
+  const hintFaded = await nt
+    .waitForFunction(() => {
+      const el = document.querySelector(".hint");
+      return !!el && el.classList.contains("gone") && getComputedStyle(el).opacity === "0";
+    }, null, { timeout: 2000 })
+    .then(() => Date.now() - hintClickAt, () => -1);
+  check("the first click fades the welcome hint out within about a second", hintFaded >= 0 && hintFaded <= 1200, hintFaded < 0 ? "hint still showing after 2 s" : `${hintFaded} ms after the click`);
+  await nt.keyboard.press("Escape");
+  await wait(300);
+  check("Escape puts the signposts away", (await nt.locator(".shortcuts").count()) === 0);
   await nt.screenshot({ path: resolve(out, "newtab.png") });
   const pieceCount = await nt.evaluate(() => fetch("scene/manifest.json").then((r) => r.json()).then((m) => Object.keys(m.pieces).length));
   check("scene manifest lists at least 40 hand-placed pieces", pieceCount >= 40, `${pieceCount}`);
@@ -571,7 +667,7 @@ try {
   ] } }));
   await nt.waitForFunction(() => window.__meadow?.concepts?.() === 3, null, { timeout: 4000 }).catch(() => null);
   const planted = await nt.evaluate(() => window.__meadow.concepts());
-  check("a three node graph plants three concept flowers", planted === 3 && /3 things taught/.test((await nt.locator(".hud").textContent()) ?? ""), `${planted}`);
+  check("a three node graph plants three concept flowers", planted === 3, `${planted}`);
   const fr = await nt.evaluate(() => window.__meadow.conceptRect(0));
   await nt.mouse.move(fr.x + fr.width / 2, fr.y + fr.height / 2);
   await wait(300);

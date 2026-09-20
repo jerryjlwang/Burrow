@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Bubble as BubbleModel, BubbleAction } from "../content/store";
 import { voiceBlip } from "./sounds";
+import { plainCopy } from "./copy";
 
 /** Characters revealed per second while the rabbit "talks". */
 const CHARS_PER_SECOND = 42;
@@ -17,7 +18,10 @@ const TICK_MS = 40;
  */
 function useTypewriter(text: string, id: string): { shown: number; done: boolean; skip: () => void } {
   const [shown, setShown] = useState(0);
+  // A click shows the whole sentence at once; the ticking must not take it back.
+  const skipped = useRef(false);
   useEffect(() => {
+    skipped.current = false;
     if (document.visibilityState === "hidden") {
       setShown(text.length);
       return;
@@ -27,6 +31,7 @@ function useTypewriter(text: string, id: string): { shown: number; done: boolean
     let last = 0;
     let timer = 0;
     const tick = () => {
+      if (skipped.current) return;
       const n = document.visibilityState === "hidden" ? text.length : Math.min(text.length, Math.floor(((performance.now() - start) / 1000) * CHARS_PER_SECOND));
       if (n !== last) {
         for (let i = last; i < Math.min(n, last + 8); i++) {
@@ -48,7 +53,11 @@ function useTypewriter(text: string, id: string): { shown: number; done: boolean
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [text, id]);
-  return { shown, done: shown >= text.length, skip: () => setShown(text.length) };
+  const skip = () => {
+    skipped.current = true;
+    setShown(text.length);
+  };
+  return { shown, done: shown >= text.length, skip };
 }
 
 /** Buttons appear when typing ends or after a short cap, whichever comes first. */
@@ -63,10 +72,11 @@ function useButtonsReady(done: boolean, id: string): boolean {
 }
 
 export function Bubble({ bubble, onAction }: { bubble: BubbleModel; onAction: (value: BubbleAction["value"]) => void }) {
-  const { shown, done, skip } = useTypewriter(bubble.text, bubble.id);
+  const text = plainCopy(bubble.text);
+  const { shown, done, skip } = useTypewriter(text, bubble.id);
   const buttonsReady = useButtonsReady(done, bubble.id);
-  const head = bubble.text.slice(0, shown);
-  const tail = bubble.text.slice(shown);
+  const head = text.slice(0, shown);
+  const tail = text.slice(shown);
   return (
     <div className={`pip-bubble kind-${bubble.kind}${done ? "" : " typing"}`} role={bubble.kind === "confirmation" ? "alertdialog" : "status"} aria-live="polite" onClick={done ? undefined : skip}>
       <p className="pip-bubble-text">

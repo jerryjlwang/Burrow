@@ -116,13 +116,13 @@ export function DebugPanel({ pet }: { pet?: RefObject<PetController | null> }) {
       <div className="pip-debug-grid">
         <span>character</span><b>{characterState}</b>
         <span>voice</span><b>{voice.mode}{voice.ttsPlaying ? " · tts" : ""}{voice.serverOk === false ? " · server ✗" : voice.serverOk ? " · server ✓" : ""}</b>
-        <span>goal</span><b>{debug.goal ?? "—"}</b>
-        <span>transcript</span><b>{debug.lastTranscript ?? "—"}</b>
-        <span>provider</span><b>{debug.provider ?? "—"}{debug.degraded ? " (degraded)" : ""}{debug.latencyMs != null ? ` · ${debug.latencyMs}ms` : ""}</b>
-        <span>decision</span><b>{debug.lastDecision ? `${debug.lastDecision.action}${debug.lastDecision.elementId != null ? ` #${debug.lastDecision.elementId}` : ""} — ${debug.lastDecision.reason}` : "—"}</b>
-        <span>result</span><b>{debug.lastResult ? `${debug.lastResult.ok ? "ok" : "fail"}: ${debug.lastResult.message}` : "—"}</b>
+        <span>goal</span><b>{debug.goal ?? "none"}</b>
+        <span>transcript</span><b>{debug.lastTranscript ?? "none"}</b>
+        <span>provider</span><b>{debug.provider ?? "none"}{debug.degraded ? " (degraded)" : ""}{debug.latencyMs != null ? ` · ${debug.latencyMs}ms` : ""}</b>
+        <span>decision</span><b>{debug.lastDecision ? `${debug.lastDecision.action}${debug.lastDecision.elementId != null ? ` #${debug.lastDecision.elementId}` : ""}: ${debug.lastDecision.reason}` : "none"}</b>
+        <span>result</span><b>{debug.lastResult ? `${debug.lastResult.ok ? "ok" : "fail"}: ${debug.lastResult.message}` : "none"}</b>
         <span>proactive</span><b>L{debug.proactiveLevel} · s={signals.strength.toFixed(2)} · {signals.summary.join("; ") || "quiet"}</b>
-        <span>page</span><b>{page ? `${page.elements.length} elements (${page.truncatedElements} dropped) · ${page.errors.length} errors · quiz=${page.hasQuizUi ? "y" : "n"}${page.isPdf ? " · pdf" : ""}` : "—"}</b>
+        <span>page</span><b>{page ? `${page.elements.length} elements (${page.truncatedElements} dropped) · ${page.errors.length} errors · quiz=${page.hasQuizUi ? "y" : "n"}${page.isPdf ? " · pdf" : ""}` : "none"}</b>
       </div>
       <PetControls pet={pet} />
       <details>

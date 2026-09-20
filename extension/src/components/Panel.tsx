@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { plainCopy } from "./copy";
 import { useStore } from "../content/store";
 import type { CompanionController } from "../content/controller";
 
@@ -110,8 +111,13 @@ export function Panel({ controller }: { controller: CompanionController }) {
         )}
         {conversation.map((t, i) => (
           <div key={`${t.at}-${i}`} className={`pip-msg ${t.role}${t.kind ? ` kind-${t.kind}` : ""}`}>
-            <div className="pip-msg-text">{t.text}</div>
-            {t.detail && t.detail !== t.text && <details className="pip-msg-detail"><summary>More</summary><pre>{t.detail}</pre></details>}
+            <div className="pip-msg-text">{plainCopy(t.text)}</div>
+            {t.detail && t.detail !== t.text && (
+              <details className="pip-msg-detail" onToggle={(e) => e.currentTarget.open && e.currentTarget.scrollIntoView({ block: "nearest" })}>
+                <summary>More</summary>
+                <pre>{plainCopy(t.detail)}</pre>
+              </details>
+            )}
           </div>
         ))}
         {interim && (
@@ -145,7 +151,7 @@ export function Panel({ controller }: { controller: CompanionController }) {
           className="pip-input"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={listening ? "Listening… or type here" : "Ask or tell me what to do…"}
+          placeholder={listening ? "Listening, or type" : "Ask me anything"}
           aria-label="Message"
           autoComplete="off"
         />

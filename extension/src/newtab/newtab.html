@@ -19,8 +19,6 @@
 
       .clockwrap { position: absolute; top: 7vh; left: 0; right: 0; text-align: center; pointer-events: none; }
       .clock { display: block; margin: 0 auto; image-rendering: pixelated; }
-      .greet { margin: 12px 0 0; font-size: 20px; min-height: 26px; color: var(--ink); }
-      body[data-tod="evening"] .greet, body[data-tod="night"] .greet { color: var(--cream); text-shadow: 3px 3px 0 var(--ink); }
 
       /* Signs drop in during the boot: three whole pixel steps and a one frame squash. */
       .drop-1 { transform: translateY(-60px); }
@@ -48,36 +46,42 @@
       .leg { width: 18px; height: 93px; background: url("scene/post.png") repeat-y; background-size: 18px 18px; image-rendering: pixelated; }
 
       /* Top sites: small signs on short posts along the hedge line. */
-      .shortcuts { position: absolute; left: 0; right: 0; bottom: 222px; display: flex; justify-content: center; gap: 12px; pointer-events: none; }
-      .shortcut { pointer-events: auto; display: flex; flex-direction: column; align-items: center; width: 120px; text-decoration: none; color: var(--ink); }
+      /* Signposts on the far ridge: a favicon each, the name on a sign when hovered or focused. */
+      .shortcuts { position: absolute; display: flex; gap: 9px; pointer-events: none; }
+      .shortcut { pointer-events: auto; display: flex; flex-direction: column; align-items: center; width: 54px; text-decoration: none; color: var(--ink); }
       .shortcut:hover, .shortcut:focus-visible { transform: translateY(-3px); outline: none; }
-      .shortcut .board { width: 120px; height: 78px; border: 15px solid transparent; border-image: url("scene/sign.png") 5 fill / 15px repeat; image-rendering: pixelated; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; box-shadow: var(--shadow); }
+      .shortcut .board { width: 54px; height: 54px; border: 15px solid transparent; border-image: url("scene/sign.png") 5 fill / 15px repeat; image-rendering: pixelated; display: grid; place-items: center; box-shadow: var(--shadow); }
       .shortcut:hover .board, .shortcut:focus-visible .board { box-shadow: 6px 6px 0 rgba(59, 42, 35, 0.25); }
-      .shortcut img { width: 24px; height: 24px; image-rendering: auto; }
-      .shortcut .label { font-size: 17px; line-height: 1; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .shortcut .post, .hud-sign .post, .concept-sign .post { width: 18px; height: 60px; margin-top: -3px; background: url("scene/post.png") repeat-y; background-size: 18px 18px; image-rendering: pixelated; }
-      .empty { position: absolute; left: 0; right: 0; bottom: 255px; margin: 0; text-align: center; color: var(--cream); text-shadow: 3px 3px 0 var(--ink); font-size: 17px; pointer-events: none; }
+      .shortcut img { display: block; width: 24px; height: 24px; image-rendering: auto; }
+      .shortcut .post, .hud-sign .post, .concept-sign .post { width: 18px; height: 15px; margin-top: -3px; background: url("scene/post.png") repeat-y; background-size: 18px 18px; image-rendering: pixelated; }
+      .empty { position: absolute; left: 0; right: 0; margin: 0; text-align: center; color: var(--cream); text-shadow: 3px 3px 0 var(--ink); font-size: 17px; pointer-events: none; }
 
       /* The hint is a note pinned in the top right of the sky. */
       .hint { position: absolute; right: 18px; top: 18px; margin: 0; width: max-content; max-width: 300px; font-size: 17px; line-height: 1.25; min-height: 51px; pointer-events: none; }
       .hint b { font-weight: 400; color: var(--teal-deep); }
+      .hint.gone { opacity: 0; transition: opacity 0.6s ease; }
+      @media (prefers-reduced-motion: reduce) { .hint.gone { display: none; transition: none; } }
 
       /* Bottom left: cream signs on posts for what he learned, the weather, and the speaker. */
       .hud { position: absolute; left: 18px; bottom: 18px; display: flex; align-items: flex-end; gap: 9px; pointer-events: none; }
       .hud-sign { display: flex; flex-direction: column; align-items: center; pointer-events: auto; }
-      .hud-sign .board { display: grid; place-items: center; min-width: 45px; height: 45px; padding: 0 3px; border: 15px solid transparent; border-image: url("ui/bubble.png") 5 fill / 15px repeat; image-rendering: pixelated; box-shadow: var(--shadow); font-size: 17px; line-height: 1; white-space: nowrap; color: var(--ink); }
-      .hud-sign .post { height: 15px; }
-      .hud-sign .speaker { cursor: pointer; padding: 0; margin: 0; width: 45px; }
+      /* 57px boards: 27px inside the painted rim, room for 19px text or the 33 x 27 speaker. */
+      /* Plain rounded frames: no browser button background and no square shadow peeking out at the corners. */
+      .hud-sign .board { display: grid; place-items: center; min-width: 51px; height: 57px; padding: 0 6px; border: 15px solid transparent; border-image: url("ui/bubble.png") 5 fill / 15px repeat; image-rendering: pixelated; background: none; border-radius: 0; font-size: 17px; line-height: 27px; white-space: nowrap; color: var(--ink); }
+      .hud-sign .speaker { cursor: pointer; padding: 0; margin: 0; width: 63px; }
+      .hud-sign .sites { cursor: pointer; margin: 0; font: inherit; font-size: 17px; line-height: 27px; }
+      .hud-sign .sites[aria-pressed="true"] { color: var(--teal-deep); }
+      .hud-sign .sites:active { transform: translateY(3px); }
       .hud-sign .speaker img { display: block; image-rendering: pixelated; }
       .hud-sign .speaker:active { transform: translateY(3px); }
 
       /* Hovering a concept flower: its name on a little wooden sign. */
       .concept-sign { position: absolute; display: flex; flex-direction: column; align-items: center; pointer-events: none; }
-      .concept-sign .board { display: block; padding: 0 3px; height: 45px; line-height: 15px; max-width: 420px; border: 15px solid transparent; border-image: url("scene/sign.png") 5 fill / 15px repeat; image-rendering: pixelated; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); box-shadow: var(--shadow); }
-      .concept-sign .post { height: 15px; }
+      .concept-sign .board { display: block; padding: 0 6px; height: 51px; line-height: 21px; max-width: 420px; border: 15px solid transparent; border-image: url("scene/sign.png") 5 fill / 15px repeat; image-rendering: pixelated; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); box-shadow: var(--shadow); }
       .concept-sign.below { flex-direction: column-reverse; }
       .concept-sign.below .post { margin-top: 0; margin-bottom: -3px; }
-      .concept-sign.pinned .board { white-space: normal; width: 306px; height: auto; min-height: 60px; text-align: center; line-height: 1.2; }
+      .concept-sign.beside .post { display: none; }
+      .concept-sign.pinned .board { white-space: normal; width: 306px; height: auto; min-height: 60px; padding: 6px 9px; text-align: center; line-height: 1.2; }
 
       /* The boot line: what is being dug up, and a bar of whole blocks. */
       .boot { position: absolute; left: 18px; bottom: 18px; pointer-events: none; color: var(--cream); font-size: 17px; }

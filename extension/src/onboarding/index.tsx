@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { Character } from "../components/Character";
 import type { PetController } from "../components/pet";
@@ -13,10 +13,14 @@ function Onboarding() {
   const [name, setName] = useState("White Rabbit");
   const [serverUrl, setServerUrl] = useState("http://localhost:8787");
   // He pops out of his hole when the art loads, then waves hello.
-  const onPet = (c: PetController | null) => {
-    if (!c) return;
+  // He pops out of his hole once. The player re-hands its controller on every render, so this must
+  // not be a fresh closure that dives him again at each step.
+  const arrived = useRef(false);
+  const onPet = useCallback((c: PetController | null) => {
+    if (!c || arrived.current) return;
+    arrived.current = true;
     void c.jumpIn(new Promise((r) => setTimeout(r, 600))).then(() => c.play("wave"));
-  };
+  }, []);
 
   useEffect(() => {
     void getSettings().then((s) => {
@@ -58,11 +62,11 @@ function Onboarding() {
       {step === 0 && (
         <>
           <h1>Meet the {name}.</h1>
-          <p>Your learning companion lives right in your browser—a tiny character in the corner of every page.</p>
+          <p>Your learning companion lives right in your browser: a tiny character in the corner of every page.</p>
           <ul>
-            <li>Ask it questions about what's on screen.</li>
-            <li>Let it show you where things are (it points!).</li>
-            <li>If you get stuck, it can notice and offer a hint—without doing the work for you.</li>
+            <li>Ask him questions about what's on screen.</li>
+            <li>Let him show you where things are (he points!).</li>
+            <li>If you get stuck, he can notice and offer a hint, without doing the work for you.</li>
           </ul>
           <div className="row">
             <button className="btn primary" onClick={() => setStep(1)}>
@@ -76,7 +80,7 @@ function Onboarding() {
           <h1>Enable your microphone</h1>
           <p>Voice mode lets you just talk to {name}. Chrome will ask once; you can always mute from the panel.</p>
           {mic === "granted" && <p className="ok">Microphone enabled. You can turn voice mode on from {name}'s panel.</p>}
-          {mic === "denied" && <p className="err">Microphone was blocked. You can allow it from the site permissions (lock icon) later—text chat works either way.</p>}
+          {mic === "denied" && <p className="err">Microphone was blocked. You can allow it from the site permissions (lock icon) later, text chat works either way.</p>}
           <div className="row">
             {mic !== "granted" && (
               <button className="btn primary" onClick={() => void requestMic()} disabled={mic === "asking"}>
@@ -94,8 +98,8 @@ function Onboarding() {
           <h1>How {name} treats your data</h1>
           <div className="privacy">
             <p>When voice mode is on, your microphone audio is streamed to your own local server and on to Deepgram to understand what you're saying. Nothing is recorded or stored.</p>
-            <p>{name} reads the current page only when it needs context to help you. Passwords and payment fields are never read, and {name} will never type them.</p>
-            <p style={{ marginBottom: 0 }}>A green dot on the character always means the microphone is live. One click mutes it.</p>
+            <p>{name} reads the current page only when he needs context to help you. Passwords and payment fields are never read, and {name} will never type them.</p>
+            <p style={{ marginBottom: 0 }}>A green dot on the rabbit always means the microphone is live. One click mutes it.</p>
           </div>
           <p style={{ marginTop: 14 }}>
             Local server: <code>{serverUrl}</code> (change in the extension popup if needed).

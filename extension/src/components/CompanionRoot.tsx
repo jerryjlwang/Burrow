@@ -15,9 +15,11 @@ import { armSounds, playCue, setSoundsEnabled } from "./sounds";
 /** Must match .pip-dock right/bottom/gap and .pip-panel width in styles.css. */
 const DOCK_EDGE = 18;
 const DOCK_GAP = 10;
-const PANEL_WIDTH = 350;
+const PANEL_WIDTH = 351;
 /** A press shorter than this is a tap: it leaves voice on until the next tap. */
 const TAP_MS = 350;
+/** When this page took over. Replies older than this were shown on the page before; they don't type again here. */
+const LOADED_AT = Date.now();
 /** After a held press ends, wait this long before stopping so the last words land. */
 const RELEASE_GRACE_MS = 800;
 
@@ -221,29 +223,45 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
   const talkRight = !!petBox && petBox.left < 90;
   const listening = voice.mode === "listening";
 
-  // When a new "point" highlight appears while the panel is closed, go stand beside it.
-  const seenPoints = useRef(new Set<string>());
+  // A new highlight under the open panel closes the panel so the ring can be seen; a new "point"
+  // highlight while the panel is closed sends him to stand beside it.
+  const seenHighlights = useRef(new Set<string>());
   useEffect(() => {
-    const points = highlights.filter((h) => h.kind === "point");
-    const key = (h: (typeof points)[number]) => `${h.id}:${h.expiresAt}`;
-    const fresh = points.filter((h) => !seenPoints.current.has(key(h)));
-    seenPoints.current = new Set(points.map(key));
-    if (panelOpen || !fresh.length) return;
+    const key = (h: (typeof highlights)[number]) => `${h.id}:${h.kind}:${h.expiresAt}`;
+    const fresh = highlights.filter((h) => !seenHighlights.current.has(key(h)));
+    seenHighlights.current = new Set(highlights.map(key));
+    if (!fresh.length) return;
+    if (panelOpen) {
+      const panel = document.getElementById("pip-companion-host")?.shadowRoot?.querySelector(".pip-panel")?.getBoundingClientRect();
+      const under = !!panel && fresh.some((h) => h.rect.x < panel.right && panel.left < h.rect.x + h.rect.width && h.rect.y < panel.bottom && panel.top < h.rect.y + h.rect.height);
+      if (under) controller.closePanel();
+      return;
+    }
+    const points = fresh.filter((h) => h.kind === "point");
+    if (!points.length) return;
     const pet = petRef.current;
     const body = pet?.getBodyRect();
     if (!pet || !body) return;
-    const target = besidePoint(fresh[fresh.length - 1].rect, body.width, body.height, window.innerWidth);
+    const target = besidePoint(points[points.length - 1].rect, body.width, body.height, window.innerWidth);
     if (Math.hypot(target.x - (body.left + body.width / 2), target.y - (body.top + body.height / 2)) < 60) return;
     void pet.goTo(target.x, target.y);
-  }, [highlights, panelOpen]);
+  }, [highlights, panelOpen, controller]);
 
-  // Show the latest short companion reply as a bubble while the panel is closed.
+  // Show the latest short companion reply as a bubble while the panel is closed. A reply is shown
+  // once: one that arrived while the panel was open was read there, and one from before this page
+  // loaded was typed out on the page before, so neither types again.
+  const seenReplyAt = useRef(LOADED_AT);
   useEffect(() => {
-    if (panelOpen) return;
     const last = conversation[conversation.length - 1];
     if (!last || last.role !== "companion" || last.kind === "offer" || last.kind === "confirmation") return;
+    if (last.at <= seenReplyAt.current) return;
+    if (panelOpen) {
+      seenReplyAt.current = last.at;
+      return;
+    }
     const s = store.getState();
     if (s.bubble && (s.bubble.kind === "offer" || s.bubble.kind === "confirmation")) return;
+    seenReplyAt.current = last.at;
     controller.showBubble({ id: `reply-${last.at}`, text: last.text.length > 220 ? last.text.slice(0, 217) + "…" : last.text, kind: "reply", expiresAt: Date.now() + Math.min(14000, 4000 + last.text.length * 60) });
   }, [conversation, panelOpen, controller]);
 
@@ -314,7 +332,7 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
             <span className="pip-talk-label" aria-hidden="true">{listening ? "Listening" : "Hold to talk"}</span>
           </button>
           {voice.mode === "listening" && <span className="pip-mic-badge" title="Microphone is on" aria-hidden="true" />}
-          {unread > 0 && !panelOpen && <span className="pip-unread" aria-hidden="true">{unread}</span>}
+          {unread > 0 && !panelOpen && bubble?.kind !== "reply" && <span className="pip-unread" aria-hidden="true">{unread}</span>}
           <button type="button" className={`pip-char-btn${busy ? " busy" : ""}`} onClick={() => controller.charClicked()} aria-label={label} aria-expanded={panelOpen} title={panelOpen ? "Close" : `Talk to ${settings.characterName}`}>
             <Character state={characterState} level={level} lookAt={lookAt} attention={attention} reducedMotion={reduced} scale={petScale} onAnchor={onAnchor} onPosition={onPosition} onController={onControllerWithArrival} quiet={quiet} onShown={onShown} startHidden={!!arrival || bootPage.current} />
           </button>

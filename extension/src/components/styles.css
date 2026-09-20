@@ -94,7 +94,7 @@
 }
 .pip-unread {
   position: absolute; right: -3px; top: 0; min-width: 21px; height: 21px; padding: 0 6px;
-  background: var(--red); color: var(--paper); font: 15px/1 var(--pip-font); display: grid; place-items: center;
+  background: var(--red); color: var(--paper); font: 17px/1 var(--pip-font); display: grid; place-items: center;
   border: 3px solid var(--ink); z-index: 2;
 }
 .pip-mini {
@@ -103,22 +103,21 @@
 }
 .pip-mini-dot { width: 9px; height: 9px; background: var(--ink); }
 
-/* ---------- Hold to talk: a big ear button at the rabbit's feet ---------- */
+/* ---------- Hold to talk: a cream pill at the rabbit's side that says what it is ---------- */
 .pip-talk {
-  position: absolute; right: 100%; bottom: 12px; margin-right: 9px; width: 66px; height: 66px;
-  pointer-events: auto; padding: 0; display: grid; place-items: center; touch-action: none;
-  -webkit-user-select: none; user-select: none; overflow: hidden;
+  position: absolute; right: 100%; bottom: 51px; margin-right: 9px; height: 69px; padding: 0 12px 0 9px;
+  pointer-events: auto; display: flex; align-items: center; gap: 9px; touch-action: none;
+  -webkit-user-select: none; user-select: none; overflow: hidden; white-space: nowrap;
+  border-image-source: var(--ui-btn-quiet);
 }
 .pip-talk.right { right: auto; left: 100%; margin-right: 0; margin-left: 9px; }
-.pip-talk.on { border-image-source: var(--ui-btn-primary); }
+.pip-talk.on { border-image-source: var(--ui-btn-primary); color: var(--paper); }
 .pip-talk.starting { opacity: 0.7; }
-.pip-talk-meter { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: var(--gold); opacity: 0.8; }
-.pip-talk-ear { position: relative; width: 24px; height: 45px; background: var(--ui-ear) no-repeat; background-size: 24px 45px; image-rendering: pixelated; }
-.pip-talk-label {
-  position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); margin-bottom: 6px; white-space: nowrap;
-  font-size: 15px; color: var(--ink); background: var(--cream); padding: 0 6px; border: 3px solid var(--ink); pointer-events: none; opacity: 0;
-}
-.pip-talk:hover .pip-talk-label, .pip-talk:focus-visible .pip-talk-label { opacity: 1; }
+/* The loudness meter rises behind the ear and the words, as a tint so they stay readable. */
+.pip-talk-meter { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: var(--teal); opacity: 0.35; }
+.pip-talk-ear { position: relative; flex-shrink: 0; width: 24px; height: 45px; background: var(--ui-ear) no-repeat; background-size: 24px 45px; image-rendering: pixelated; }
+.pip-talk-label { position: relative; font-size: 17px; line-height: 21px; color: inherit; }
+.pip-talk.on .pip-talk-meter { opacity: 0.45; }
 
 /* ---------- Pet (sprite player; the art comes from public/characters) ---------- */
 /* The footprint is as wide as the body box and as tall as the cell. The canvas overflows it on both
@@ -150,6 +149,7 @@
   max-width: 300px;
   color: var(--ink);
   font-size: 18px;
+  line-height: 24px;
   line-height: 1.3;
   padding: 0 24px 0 0;
   margin: 0 9px 15px 0;
@@ -184,7 +184,7 @@
 /* ---------- Panel ---------- */
 .pip-panel {
   pointer-events: auto;
-  width: 350px;
+  width: 351px;
   max-width: calc(100vw - 36px);
   max-height: min(560px, 72vh);
   display: flex;
@@ -201,38 +201,38 @@
 }
 .pip-panel-title { display: flex; flex-direction: column; gap: 0; min-width: 0; }
 .pip-panel-title strong { font-size: 20px; font-weight: 400; }
-.pip-status { font-size: 15px; color: rgba(255, 253, 245, 0.85); display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pip-status { font-size: 17px; color: var(--paper); display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pip-status.live { color: var(--gold); }
 .pip-live-dot { width: 9px; height: 9px; background: var(--gold); animation: pip-blink 1.2s steps(2) infinite; }
 .pip-panel-tools { display: flex; gap: 3px; }
 .pip-icon-btn { width: 30px; height: 30px; border: 0; background: transparent; color: var(--paper); cursor: pointer; font-size: 18px; line-height: 1; padding: 0; }
 .pip-icon-btn:hover { background: var(--teal-deep); }
-.pip-settings { padding: 9px 12px; border-bottom: 3px solid var(--ink); display: flex; flex-direction: column; gap: 6px; font-size: 15px; background: var(--paper); }
+.pip-settings { padding: 9px 12px; border-bottom: 3px solid var(--ink); display: flex; flex-direction: column; gap: 6px; font-size: 17px; background: var(--paper); }
 .pip-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .pip-toggle input { accent-color: var(--teal); width: 16px; height: 16px; }
 .pip-settings-links { display: flex; gap: 12px; flex-wrap: wrap; }
 .pip-link { border: 0; background: none; color: var(--teal-deep); cursor: pointer; padding: 0; font: inherit; text-decoration: underline; }
 .pip-messages { flex: 1; overflow-y: auto; padding: 9px 3px; display: flex; flex-direction: column; gap: 9px; scroll-behavior: smooth; min-height: 120px; }
-.pip-empty { color: var(--pip-muted); font-size: 16px; padding: 3px 6px; }
+.pip-empty { color: var(--pip-muted); font-size: 17px; padding: 3px 6px; }
 .pip-empty p { margin: 0 0 6px; }
 .pip-empty ul { margin: 0; padding-left: 18px; }
-.pip-msg { max-width: 88%; padding: 0; font-size: 17px; word-wrap: break-word; animation: pip-pop 0.15s steps(2); }
+.pip-msg { max-width: 88%; padding: 0; font-size: 17px; line-height: 21px; word-wrap: break-word; animation: pip-pop 0.15s steps(2); }
 .pip-msg.user { align-self: flex-end; border-image-source: var(--ui-bubble-teal); color: var(--paper); }
 .pip-msg.user.interim { opacity: 0.6; }
 .pip-msg.companion { align-self: flex-start; }
-.pip-msg.companion.kind-status { border: 0; border-image: none; color: var(--pip-muted); font-size: 15px; padding: 0 6px; }
-.pip-msg-detail { margin-top: 6px; font: 14px/1.4 var(--pip-font-plain); }
-.pip-msg-detail summary { cursor: pointer; color: var(--teal-deep); font-family: var(--pip-font); font-size: 15px; }
+.pip-msg.companion.kind-status { border: 0; border-image: none; color: var(--pip-muted); font-size: 17px; padding: 0 6px; }
+.pip-msg-detail { margin-top: 6px; font: 17px/1.4 var(--pip-font-plain); }
+.pip-msg-detail summary { cursor: pointer; color: var(--teal-deep); font-family: var(--pip-font); font-size: 17px; }
 .pip-msg-detail pre { white-space: pre-wrap; margin: 6px 0 0; font-family: inherit; max-height: 220px; overflow: auto; }
-.pip-offline { font-size: 15px; color: var(--ink); background: var(--gold); padding: 6px 12px; border-top: 3px solid var(--ink); }
+.pip-offline { font-size: 17px; color: var(--ink); background: var(--gold); padding: 6px 12px; border-top: 3px solid var(--ink); }
 .pip-input-row { display: flex; align-items: center; gap: 9px; padding: 9px 3px 3px; border-top: 3px solid var(--ink); }
 .pip-input { flex: 1; min-width: 0; color: var(--ink); font: 17px var(--pip-font); padding: 0; outline: none; }
-.pip-input:focus { box-shadow: 0 0 0 3px var(--gold); }
+.pip-input:focus-visible { box-shadow: 0 0 0 3px var(--gold); }
 .pip-input::placeholder { color: var(--pip-muted); }
 .pip-mic, .pip-send { width: 42px; height: 42px; display: grid; place-items: center; flex-shrink: 0; padding: 0; }
 .pip-mic.on { border-image-source: var(--ui-btn-primary); color: var(--paper); }
 .pip-mic.starting { opacity: 0.6; }
-.pip-send { border-image-source: var(--ui-btn-primary); color: var(--paper); font-size: 16px; }
+.pip-send { border-image-source: var(--ui-btn-primary); color: var(--paper); font-size: 17px; }
 .pip-send:disabled { opacity: 0.45; cursor: default; }
 @keyframes pip-pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes pip-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
@@ -241,20 +241,20 @@
 /* ---------- Overlay: highlights & beam ---------- */
 .pip-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
 .pip-hl {
-  position: fixed; border-radius: 10px; border: 2px solid var(--pip-accent); pointer-events: none;
-  box-shadow: 0 0 0 4px rgba(124, 92, 255, 0.22), 0 0 26px rgba(124, 92, 255, 0.45);
+  position: fixed; border-radius: 0; border: 3px solid var(--teal); pointer-events: none;
+  box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.25), 0 0 0 3px var(--cream);
   animation: pip-hl-in 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2), pip-hl-pulse 1.7s ease-in-out 0.3s infinite;
   transition: left 0.08s linear, top 0.08s linear, width 0.08s linear, height 0.08s linear;
 }
-.pip-hl.kind-acting { border-color: var(--pip-accent-2); box-shadow: 0 0 0 4px rgba(255, 154, 120, 0.3), 0 0 22px rgba(255, 154, 120, 0.5); animation: pip-hl-in 0.2s ease-out, pip-hl-pulse 0.8s ease-in-out 0.2s infinite; }
-.pip-hl.spotlight { box-shadow: 0 0 0 9999px rgba(18, 14, 40, 0.38), 0 0 0 4px rgba(124, 92, 255, 0.35); }
+.pip-hl.kind-acting { border-color: var(--gold); animation: pip-hl-in 0.2s ease-out, pip-hl-pulse 0.8s steps(2) 0.2s infinite; }
+.pip-hl.spotlight { box-shadow: 0 0 0 9999px rgba(59, 42, 35, 0.38), 0 0 0 3px var(--cream); }
 .pip-hl.reduced { animation: none; }
 .pip-hl-label {
-  position: absolute; left: 0; top: -28px; background: var(--pip-accent); color: #fff; font-size: 12px; font-weight: 600;
-  padding: 3px 8px; border-radius: 8px; white-space: nowrap; font-family: var(--pip-font);
+  position: absolute; left: -3px; top: -33px; background: var(--ink); color: var(--cream); font-size: 17px; line-height: 21px;
+  padding: 3px 6px; border-radius: 0; white-space: nowrap; font-family: var(--pip-font);
 }
 @keyframes pip-hl-in { from { opacity: 0; transform: scale(1.08); } to { opacity: 1; transform: scale(1); } }
-@keyframes pip-hl-pulse { 0%, 100% { box-shadow: 0 0 0 4px rgba(124, 92, 255, 0.22), 0 0 26px rgba(124, 92, 255, 0.45); } 50% { box-shadow: 0 0 0 7px rgba(124, 92, 255, 0.12), 0 0 34px rgba(124, 92, 255, 0.6); } }
+@keyframes pip-hl-pulse { 0%, 100% { box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.25), 0 0 0 3px var(--cream); } 50% { box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.25), 0 0 0 3px var(--gold); } }
 .pip-beam { position: fixed; inset: 0; pointer-events: none; overflow: visible; }
 .pip-beam-path {
   fill: none; stroke: var(--pip-accent); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 10 8;

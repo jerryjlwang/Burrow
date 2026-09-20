@@ -7,7 +7,7 @@ import { createAmbience } from "./ambience";
 import { armBlip, audioContext, blip, blipFor } from "./blip";
 import { BOOT_FULL_MS, BOOT_QUICK_MS, ENTER_DEADLINE_MS, bootLabel, decideBootMode, dropClass, enter, type BootMode } from "./boot";
 import { clockScale, clockText, drawClock, loadDigits, type Digits, type Reveal } from "./clock";
-import { startScene, todFor, type BootView, type HoverSign, type SceneHandle } from "./scene";
+import { startScene, todFor, type BootView, type HoverSign, type Ridge, type SceneHandle } from "./scene";
 
 interface Site {
   title: string;
@@ -35,10 +35,6 @@ function faviconFor(url: string): string {
   u.searchParams.set("pageUrl", url);
   u.searchParams.set("size", "32");
   return u.toString();
-}
-
-function greeting(h: number): string {
-  return h < 5 ? "Burning the midnight oil?" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : h < 22 ? "Good evening" : "Late night session";
 }
 
 /** The rabbit's body box, read from the companion's open shadow root. */
@@ -152,7 +148,7 @@ function BootLine({ boot }: { boot: Boot }) {
 
 /* ---------- pieces of the page ---------- */
 
-function Scene({ bootRef, sceneRef, onHover }: { bootRef: React.MutableRefObject<Boot>; sceneRef: React.MutableRefObject<SceneHandle | null>; onHover: (c: HoverSign | null) => void }) {
+function Scene({ bootRef, sceneRef, onHover, onLayout }: { bootRef: React.MutableRefObject<Boot>; sceneRef: React.MutableRefObject<SceneHandle | null>; onHover: (c: HoverSign | null) => void; onLayout: (r: Ridge) => void }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const c = ref.current;
@@ -176,6 +172,7 @@ function Scene({ bootRef, sceneRef, onHover }: { bootRef: React.MutableRefObject
         ambience.setMode(tod === "night" ? "night" : "day");
       },
       onHover,
+      onLayout,
       onInteract: startSound,
     });
     sceneRef.current = handle;
@@ -183,7 +180,7 @@ function Scene({ bootRef, sceneRef, onHover }: { bootRef: React.MutableRefObject
       handle.stop();
       sceneRef.current = null;
     };
-  }, [bootRef, sceneRef, onHover]);
+  }, [bootRef, sceneRef, onHover, onLayout]);
   return <canvas ref={ref} className="scene" data-boot={bootRef.current.done ? "done" : "running"} aria-hidden="true" />;
 }
 
@@ -205,11 +202,9 @@ function Clock({ now, hour, boot }: { now: Date; hour: number; boot: Boot }) {
     if (ref.current && digits) drawClock(ref.current, text, scale, digits, reveal);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, scale, digits, key]);
-  const typed = full ? Math.max(0, Math.floor((boot.elapsed - 1700) / 28)) : Infinity;
   return (
     <div className="clockwrap">
       <canvas ref={ref} className="clock" role="img" aria-label={`Current time ${text}`} />
-      <p className="greet">{greeting(hour).slice(0, typed)}</p>
     </div>
   );
 }
@@ -315,22 +310,42 @@ function Search({ boot }: { boot: Boot }) {
   );
 }
 
-function Shortcuts({ sites, boot }: { sites: Site[]; boot: Boot }) {
-  const [fit, setFit] = useState(() => Math.max(2, Math.floor((window.innerWidth - 240) / 132)));
-  useEffect(() => {
-    const onResize = () => setFit(Math.max(2, Math.floor((window.innerWidth - 240) / 132)));
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
+/** A site's name for a sign: the title up to its first separator, else the host. Never cut mid word. */
+function shortName(s: Site): string {
+  const head = s.title.split(/\s*[:|·•,\-–—]\s*/)[0]?.trim() ?? "";
+  let host = s.url;
+  try {
+    host = new URL(s.url).hostname.replace(/^www\./, "");
+  } catch {
+    /* keep the url */
+  }
+  // A title that is itself a URL (or starts with the scheme) names the site by its host instead.
+  const name = head.length >= 2 && !/^https?$/i.test(head) && !/^https?:\/\//i.test(s.title) ? head : host;
+  return name.length > 28 ? `${name.slice(0, 27).trimEnd()}…` : name;
+}
+
+/** Signposts for the most visited sites, standing on the far ridge where nothing is painted behind them. */
+function Shortcuts({ sites, boot, ridge, onHover }: { sites: Site[]; boot: Boot; ridge: Ridge | null; onHover: (h: HoverSign | null) => void }) {
   const drop = boot.mode === "full" && !boot.done ? dropClass(boot.elapsed, 1600) : "";
-  if (!sites.length) return <p className={`empty ${drop}`}>Your most visited sites will show up here.</p>;
+  if (!ridge) return null;
+  const top = Math.round((ridge.y + 6 - 69) / 3) * 3;
+  if (!sites.length) return <p className={`empty ${drop}`} style={{ top: top + 24 }}>Your most visited sites will show up here.</p>;
+  // 54px boards, 9px apart, as many as fit between the windmill and the oak.
+  const fit = Math.max(1, Math.min(8, Math.floor((ridge.right - ridge.left + 9) / 63)));
+  const shown = sites.slice(0, fit);
+  const width = shown.length * 54 + (shown.length - 1) * 9;
+  const left = Math.round((ridge.left + ridge.right - width) / 2 / 3) * 3;
+  const show = (site: Site) => (e: React.SyntheticEvent<HTMLElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    onHover({ label: shortName(site), left: r.left, top: r.top, width: r.width, height: r.height });
+  };
+  const hide = () => onHover(null);
   return (
-    <nav className={`shortcuts ${drop}`} aria-label="Shortcuts">
-      {sites.slice(0, fit).map((s) => (
-        <a key={s.url} className="shortcut" href={s.url} title={s.title}>
+    <nav className={`shortcuts ${drop}`} aria-label="Shortcuts" style={{ left, top }}>
+      {shown.map((site) => (
+        <a key={site.url} className="shortcut" href={site.url} aria-label={shortName(site)} title={site.title} onMouseEnter={show(site)} onMouseLeave={hide} onFocus={show(site)} onBlur={hide}>
           <span className="board">
-            <img src={faviconFor(s.url)} alt="" />
-            <span className="label">{s.title}</span>
+            <img src={faviconFor(site.url)} alt="" />
           </span>
           <span className="post" />
         </a>
@@ -343,48 +358,59 @@ function ConceptSign({ hover }: { hover: HoverSign | null }) {
   const ref = useRef<HTMLDivElement>(null);
   const [left, setLeft] = useState(0);
   const [top, setTop] = useState(0);
-  const [isBelow, setIsBelow] = useState(false);
+  const [where, setWhere] = useState<"above" | "below" | "beside">("above");
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el || !hover) return;
     const w = el.offsetWidth;
     const h = el.offsetHeight;
-    let x = Math.round(hover.left + hover.width / 2 - w / 2);
-    // Things under the search plank get their sign below them; nothing sits on the plank or in the
-    // rabbit's corner.
-    const plank = document.querySelector(".search .board")?.getBoundingClientRect();
-    const below = !!plank && hover.top + hover.height > plank.top - 30;
-    const maxX = below ? window.innerWidth - 300 - w - 6 : window.innerWidth - w - 6;
-    if (plank && !below && hover.left + hover.width / 2 < plank.left) x = Math.min(x, Math.round(plank.left) - w - 6);
-    setLeft(Math.max(6, Math.min(maxX, x)));
-    setTop(below ? Math.round(hover.top + hover.height) + 3 : Math.max(6, Math.round(hover.top) - h - 3));
-    setIsBelow(below);
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const m = 6;
+    // Other signs, the plank, the hint, the clock and the rabbit's corner: a sign may not land on any of them.
+    const avoid = Array.from(document.querySelectorAll<HTMLElement>(".shortcut, .search .board, .hud-sign, .hint, .clockwrap"))
+      .map((n) => n.getBoundingClientRect())
+      .filter((r) => r.width > 0 && r.height > 0 && !(Math.abs(r.left - hover.left) < 1 && Math.abs(r.top - hover.top) < 1));
+    avoid.push(petBody() ?? new DOMRect(vw - 330, vh - 330, 330, 330));
+    const cx = hover.left + hover.width / 2;
+    const clampY = (y: number): number => Math.max(m, Math.min(vh - m - h, y));
+    // Beside the thing: centred on it, then flush with its top, then with its bottom edge.
+    const besideYs = [clampY(hover.top + hover.height / 2 - h / 2), clampY(hover.top), clampY(hover.top + hover.height - h)];
+    const spots: { x: number; y: number; where: "above" | "below" | "beside" }[] = [
+      { x: cx - w / 2, y: hover.top - h - 3, where: "above" },
+      { x: cx - w / 2, y: hover.top + hover.height + 3, where: "below" },
+      ...besideYs.map((y) => ({ x: hover.left + hover.width + 6, y, where: "beside" as const })),
+      ...besideYs.map((y) => ({ x: hover.left - w - 6, y, where: "beside" as const })),
+    ];
+    const clear = (x: number, y: number): boolean =>
+      x >= m && y >= m && x + w <= vw - m && y + h <= vh - m && !avoid.some((r) => x < r.right && r.left < x + w && y < r.bottom && r.top < y + h);
+    const pick = spots.find((sp) => clear(sp.x, sp.y)) ?? { ...spots[0], x: Math.max(m, Math.min(vw - w - m, spots[0].x)), y: Math.max(m, Math.min(vh - h - m, spots[0].y)) };
+    setLeft(Math.round(pick.x));
+    setTop(Math.round(pick.y));
+    setWhere(pick.where);
   }, [hover]);
   if (!hover) return null;
   return (
-    <div ref={ref} className={`concept-sign${hover.pinned ? " pinned" : ""}${isBelow ? " below" : ""}`} style={{ left, top }} role="tooltip">
+    <div ref={ref} className={`concept-sign${hover.pinned ? " pinned" : ""} ${where}`} style={{ left, top }} role="tooltip">
       <span className="board">{hover.label}</span>
       <span className="post" />
     </div>
   );
 }
 
-function Hud({ taught, sound, onSound, hidden, weather }: { taught: number; sound: boolean; onSound: () => void; hidden: boolean; weather: string }) {
+/** Two quiet controls in the corner: the site signposts and the sound. */
+function Hud({ sound, onSound, hidden, sitesOpen, onSites }: { sound: boolean; onSound: () => void; hidden: boolean; sitesOpen: boolean; onSites: () => void }) {
   return (
     <nav className={`hud${hidden ? " hidden" : ""}`} aria-label="Meadow">
       <div className="hud-sign">
-        <span className="board">{taught === 1 ? "1 thing taught" : `${taught} things taught`}</span>
-        <span className="post" />
-      </div>
-      <div className="hud-sign">
-        <span className="board">{weather}</span>
-        <span className="post" />
+        <button type="button" className="board sites" onClick={onSites} aria-pressed={sitesOpen} aria-label={sitesOpen ? "Hide your sites" : "Show your sites"}>
+          Sites
+        </button>
       </div>
       <div className="hud-sign">
         <button type="button" className="board speaker" onClick={onSound} aria-pressed={sound} aria-label={sound ? "Sound on" : "Sound off"} title={sound ? "Sound on" : "Sound off"}>
           <img src={sound ? "scene/speaker_on.png" : "scene/speaker_off.png"} alt="" width={33} height={27} />
         </button>
-        <span className="post" />
       </div>
     </nav>
   );
@@ -396,8 +422,35 @@ function NewTab() {
   const [name, setName] = useState("White Rabbit");
   const [graph, setGraph] = useState<GraphSnapshot | null>(null);
   const [hover, setHover] = useState<HoverSign | null>(null);
+  const [signHover, setSignHover] = useState<HoverSign | null>(null);
+  const [ridge, setRidge] = useState<Ridge | null>(null);
+  // The meadow is the page; the site signposts come out only when asked for, and go away on a
+  // click anywhere else or Escape.
+  const [sitesOpen, setSitesOpen] = useState(false);
+  useEffect(() => {
+    if (!sitesOpen) return;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Element | null;
+      if (t?.closest?.(".shortcuts, .hud-sign .sites")) return;
+      setSitesOpen(false);
+      setSignHover(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSitesOpen(false);
+        setSignHover(null);
+      }
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("pointerdown", onDown, true);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [sitesOpen]);
+  // The welcome hint has done its job ten seconds after the boot, or at the first click or key.
+  const [hintGone, setHintGone] = useState(false);
   const [sound, setSound] = useState(soundWanted);
-  const [weather, setWeather] = useState<string>(rain && !reducedMotion ? "rain" : "clear");
   const boot = useBoot();
   const bootRef = useRef<Boot>(boot);
   bootRef.current = boot;
@@ -439,14 +492,6 @@ function NewTab() {
   useEffect(() => {
     ambience.setEnabled(sound);
   }, [sound]);
-  // The weather sign follows the scene: a shower ends, a rainbow comes.
-  useEffect(() => {
-    const t = window.setInterval(() => {
-      const w = sceneRef.current?.api.weather();
-      if (w) setWeather(w);
-    }, 1000);
-    return () => window.clearInterval(t);
-  }, []);
   const toggleSound = useCallback(() => {
     const next = !sound;
     setSound(next);
@@ -474,21 +519,34 @@ function NewTab() {
   }, [hour]);
 
   const full = boot.mode === "full" && !boot.done;
+  useEffect(() => {
+    if (!boot.done || hintGone) return;
+    const gone = () => setHintGone(true);
+    const timer = window.setTimeout(gone, 10_000);
+    document.addEventListener("pointerdown", gone, { once: true, capture: true });
+    document.addEventListener("keydown", gone, { once: true, capture: true });
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("pointerdown", gone, true);
+      document.removeEventListener("keydown", gone, true);
+    };
+  }, [boot.done, hintGone]);
   const hintTyped = full ? Math.max(0, Math.floor((boot.elapsed - 1750) / 22)) : Infinity;
-  const hintText = ` is here. Ask him anything, or teach him something new.`;
+  // An empty meadow asks to be taught; a growing one just says he is here.
+  const hintText = graph?.nodes.length ? ` is here. Ask him anything, or teach him something new.` : ` is here. Teach him something and the meadow grows.`;
   return (
     <>
-      <Scene bootRef={bootRef} sceneRef={sceneRef} onHover={setHover} />
+      <Scene bootRef={bootRef} sceneRef={sceneRef} onHover={setHover} onLayout={setRidge} />
       <main className="ui">
         <Clock now={now} hour={hour} boot={boot} />
-        <Shortcuts sites={sites} boot={boot} />
+        {sitesOpen && <Shortcuts sites={sites} boot={boot} ridge={ridge} onHover={setSignHover} />}
         <Search boot={boot} />
-        <p className={`hint px-frame${full && boot.elapsed < 1750 ? " hidden" : ""}`}>
+        <p className={`hint px-frame${full && boot.elapsed < 1750 ? " hidden" : ""}${hintGone ? " gone" : ""}`}>
           <b>{name.slice(0, hintTyped)}</b>
           {hintTyped > name.length ? hintText.slice(0, hintTyped - name.length) : ""}
         </p>
-        <ConceptSign hover={boot.done ? hover : null} />
-        <Hud taught={graph?.nodes.length ?? 0} sound={sound} onSound={toggleSound} hidden={!boot.done} weather={weather} />
+        <ConceptSign hover={boot.done ? signHover ?? hover : null} />
+        <Hud sound={sound} onSound={toggleSound} hidden={!boot.done} sitesOpen={sitesOpen} onSites={() => setSitesOpen((v) => !v)} />
         <BootLine boot={boot} />
       </main>
     </>

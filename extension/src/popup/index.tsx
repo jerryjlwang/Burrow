@@ -55,7 +55,7 @@ function Popup() {
       <p className="sub">Learning companion</p>
       <div className="status">
         <span className={`dot ${health ? (health.ok ? "ok" : "bad") : ""}`} />
-        <span>{health ? (health.ok ? `Server connected · ${health.llm}${health.deepgram ? " · voice ready" : " · no Deepgram key"}` : "Server not reachable — start it with npm run dev") : "Checking server…"}</span>
+        <span>{health ? (health.ok ? `Server connected · ${health.llm}${health.deepgram ? " · voice ready" : " · no Deepgram key"}` : "Server not reachable. Start it with npm run dev") : "Checking server…"}</span>
       </div>
       {voice && (
         <div className="status">
