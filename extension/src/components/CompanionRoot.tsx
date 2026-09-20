@@ -8,6 +8,7 @@ import { Bubble } from "./Bubble";
 import { Overlay } from "./Overlay";
 import { DebugPanel } from "./DebugPanel";
 import { pageRole, startHandoff } from "./handoff";
+import { armSounds, playCue, setSoundsEnabled } from "./sounds";
 
 /** Must match .pip-dock right/bottom/gap and .pip-panel width in styles.css. */
 const DOCK_EDGE = 18;
@@ -85,6 +86,11 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
   const quiet = !panelOpen && !bubble && characterState === "idle" && voice.mode === "off";
 
   useEffect(() => loadKidFont(), []);
+  useEffect(() => armSounds(), []);
+  useEffect(() => setSoundsEnabled(settings.ttsEnabled), [settings.ttsEnabled]);
+  const onShown = useCallback((s: string) => playCue(s), []);
+  // On the parent's laptop he arrives one size bigger: the hero moment.
+  const petScale = pageRole() === "parent" ? 4 : 3;
 
   // Grants, the jump between laptops, and the "I'm late" vignette. See docs/frontend/HANDOFF.md.
   const quietRef = useRef(quiet);
@@ -224,7 +230,7 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
           {voice.mode === "listening" && <span className="pip-mic-badge" title="Microphone is on" aria-hidden="true" />}
           {unread > 0 && !panelOpen && <span className="pip-unread" aria-hidden="true">{unread}</span>}
           <button type="button" className={`pip-char-btn${busy ? " busy" : ""}`} onClick={() => controller.togglePanel()} aria-label={label} aria-expanded={panelOpen} title={panelOpen ? "Close" : `Talk to ${settings.characterName}`}>
-            <Character state={characterState} level={level} lookAt={lookAt} attention={attention} reducedMotion={reduced} onAnchor={onAnchor} onPosition={onPosition} onController={onController} quiet={quiet} />
+            <Character state={characterState} level={level} lookAt={lookAt} attention={attention} reducedMotion={reduced} scale={petScale} onAnchor={onAnchor} onPosition={onPosition} onController={onController} quiet={quiet} onShown={onShown} />
           </button>
         </div>
       </div>

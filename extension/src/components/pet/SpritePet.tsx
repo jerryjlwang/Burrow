@@ -59,6 +59,8 @@ export interface SpritePetProps {
   onPosition?: (box: PetBox) => void;
   onAnchor?: (getCenter: () => { x: number; y: number }) => void;
   onController?: (controller: PetController | null) => void;
+  /** Called with the strip name each time a different state starts showing. */
+  onShown?: (state: string) => void;
 }
 
 interface Geometry {
@@ -141,7 +143,7 @@ function drawGap([min, max]: [number, number]): number {
   return min + Math.random() * Math.max(0, max - min);
 }
 
-export function SpritePet({ character = DEFAULT_CHARACTER, state, speaking = false, level = 0, reducedMotion = false, scale, size, quiet = false, onPosition, onAnchor, onController }: SpritePetProps) {
+export function SpritePet({ character = DEFAULT_CHARACTER, state, speaking = false, level = 0, reducedMotion = false, scale, size, quiet = false, onPosition, onAnchor, onController, onShown }: SpritePetProps) {
   const [loaded, setLoaded] = useState<LoadedCharacter | null>(null);
   const [gone, setGone] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -161,8 +163,9 @@ export function SpritePet({ character = DEFAULT_CHARACTER, state, speaking = fal
   const startHiddenRef = useRef(false);
   const playerWaiters = useRef<((p: SpritePlayer) => void)[]>([]);
   const frameRef = useRef<(p: SpritePlayer, dt: number) => void>(() => undefined);
-  const latest = useRef({ state, speaking, level, reducedMotion, quiet });
-  latest.current = { state, speaking, level, reducedMotion, quiet };
+  const latest = useRef({ state, speaking, level, reducedMotion, quiet, onShown });
+  latest.current = { state, speaking, level, reducedMotion, quiet, onShown };
+  const lastShown = useRef("");
   goneRef.current = gone;
 
   useEffect(() => {
@@ -225,6 +228,10 @@ export function SpritePet({ character = DEFAULT_CHARACTER, state, speaking = fal
       last = t;
       player.tick(dt);
       frameRef.current(player, dt);
+      if (player.current !== lastShown.current) {
+        lastShown.current = player.current;
+        latest.current.onShown?.(player.current);
+      }
       if (player.dirty) {
         player.draw(ctx, S);
         player.dirty = false;
