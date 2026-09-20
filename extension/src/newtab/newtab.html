@@ -9,15 +9,22 @@
       /* The meadow is a full window canvas at 3x behind everything; the UI is pinned to the ground line
          so the signs stay planted whatever the window height. All offsets are multiples of 3. */
       html, body { height: 100%; overflow: hidden; }
-      body { background-image: none; background-color: #78be54; }
-      canvas.scene { position: fixed; left: 0; top: 0; z-index: 0; image-rendering: pixelated; }
+      body { background-image: none; background-color: #2c1f1a; }
+      canvas.scene { position: fixed; left: 0; top: 0; z-index: 0; image-rendering: pixelated; cursor: url("scene/cursor_arrow.png") 1 1, auto; }
       .ui { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
       .ui > * { pointer-events: auto; }
+      .hidden { visibility: hidden; }
 
       .clockwrap { position: absolute; top: 7vh; left: 0; right: 0; text-align: center; pointer-events: none; }
       .clock { display: block; margin: 0 auto; image-rendering: pixelated; }
-      .greet { margin: 15px 0 0; font-size: 20px; color: var(--ink); }
+      .greet { margin: 12px 0 0; font-size: 20px; min-height: 26px; color: var(--ink); }
       body[data-tod="evening"] .greet, body[data-tod="night"] .greet { color: var(--cream); text-shadow: 3px 3px 0 var(--ink); }
+
+      /* Signs drop in during the boot: three whole pixel steps and a one frame squash. */
+      .drop-1 { transform: translateY(-60px); }
+      .drop-2 { transform: translateY(-30px); }
+      .drop-3 { transform: translateY(-9px); }
+      .squash { transform: translateY(3px); }
 
       /* Search: a painted plank on two posts, planted in the grass. */
       .search { position: absolute; left: 0; right: 0; bottom: 39px; display: flex; flex-direction: column; align-items: center; pointer-events: none; }
@@ -39,24 +46,48 @@
       .leg { width: 18px; height: 93px; background: url("scene/post.png") repeat-y; background-size: 18px 18px; image-rendering: pixelated; }
 
       /* Top sites: small signs on short posts along the hedge line. */
-      .shortcuts { position: absolute; left: 0; right: 0; bottom: 225px; display: flex; justify-content: center; gap: 12px; pointer-events: none; }
+      .shortcuts { position: absolute; left: 0; right: 0; bottom: 222px; display: flex; justify-content: center; gap: 12px; pointer-events: none; }
       .shortcut { pointer-events: auto; display: flex; flex-direction: column; align-items: center; width: 120px; text-decoration: none; color: var(--ink); }
       .shortcut:hover, .shortcut:focus-visible { transform: translateY(-3px); outline: none; }
       .shortcut .board { width: 120px; height: 78px; border: 15px solid transparent; border-image: url("scene/sign.png") 5 fill / 15px repeat; image-rendering: pixelated; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; box-shadow: var(--shadow); }
       .shortcut:hover .board, .shortcut:focus-visible .board { box-shadow: 6px 6px 0 rgba(59, 42, 35, 0.25); }
       .shortcut img { width: 24px; height: 24px; image-rendering: auto; }
       .shortcut .label { font-size: 17px; line-height: 1; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .shortcut .post { width: 18px; height: 27px; margin-top: -3px; background: url("scene/post.png") repeat-y; background-size: 18px 18px; image-rendering: pixelated; }
+      .shortcut .post, .hud-sign .post, .concept-sign .post { width: 18px; height: 60px; margin-top: -3px; background: url("scene/post.png") repeat-y; background-size: 18px 18px; image-rendering: pixelated; }
       .empty { position: absolute; left: 0; right: 0; bottom: 255px; margin: 0; text-align: center; color: var(--cream); text-shadow: 3px 3px 0 var(--ink); font-size: 17px; pointer-events: none; }
 
-      .hint { position: absolute; left: 18px; bottom: 18px; margin: 0; max-width: 330px; font-size: 17px; line-height: 1.25; }
+      /* The hint is a note pinned in the top right of the sky. */
+      .hint { position: absolute; right: 18px; top: 18px; margin: 0; width: max-content; max-width: 300px; font-size: 17px; line-height: 1.25; min-height: 51px; pointer-events: none; }
       .hint b { font-weight: 400; color: var(--teal-deep); }
-      @media (max-width: 900px) { .hint { max-width: 240px; } }
+
+      /* Bottom left: cream signs on posts for what he learned, the weather, and the speaker. */
+      .hud { position: absolute; left: 18px; bottom: 18px; display: flex; align-items: flex-end; gap: 9px; pointer-events: none; }
+      .hud-sign { display: flex; flex-direction: column; align-items: center; pointer-events: auto; }
+      .hud-sign .board { display: grid; place-items: center; min-width: 45px; height: 45px; padding: 0 3px; border: 15px solid transparent; border-image: url("ui/bubble.png") 5 fill / 15px repeat; image-rendering: pixelated; box-shadow: var(--shadow); font-size: 17px; line-height: 1; white-space: nowrap; color: var(--ink); }
+      .hud-sign .post { height: 15px; }
+      .hud-sign .speaker { cursor: pointer; padding: 0; margin: 0; width: 45px; }
+      .hud-sign .speaker img { display: block; image-rendering: pixelated; }
+      .hud-sign .speaker:active { transform: translateY(3px); }
+
+      /* Hovering a concept flower: its name on a little wooden sign. */
+      .concept-sign { position: absolute; display: flex; flex-direction: column; align-items: center; pointer-events: none; }
+      .concept-sign .board { display: block; padding: 0 3px; height: 45px; line-height: 15px; max-width: 420px; border: 15px solid transparent; border-image: url("scene/sign.png") 5 fill / 15px repeat; image-rendering: pixelated; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); box-shadow: var(--shadow); }
+      .concept-sign .post { height: 15px; }
+      .concept-sign.below { flex-direction: column-reverse; }
+      .concept-sign.below .post { margin-top: 0; margin-bottom: -3px; }
+      .concept-sign.pinned .board { white-space: normal; width: 306px; height: auto; min-height: 60px; text-align: center; line-height: 1.2; }
+
+      /* The boot line: what is being dug up, and a bar of whole blocks. */
+      .boot { position: absolute; left: 18px; bottom: 18px; pointer-events: none; color: var(--cream); font-size: 17px; }
+      .boot-line { margin: 0 0 9px; white-space: pre; }
+      .boot-line b { font-weight: 400; color: var(--gold); letter-spacing: 3px; }
+      .boot-bar { display: flex; gap: 3px; }
+      .boot-bar span { width: 9px; height: 9px; background: rgba(255, 248, 231, 0.2); }
+      .boot-bar span.on { background: var(--gold); }
     </style>
   </head>
   <body>
     <div id="root"></div>
-    <script src="fx.js"></script>
     <script src="newtab.js"></script>
   </body>
 </html>

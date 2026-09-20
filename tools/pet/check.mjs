@@ -404,13 +404,70 @@ try {
   // The new tab page: a pixel meadow at 3x behind the clock, the search sign and the shortcuts.
   // The debug panel is hidden for these shots and put back afterwards.
   await sw.evaluate(() => chrome.storage.local.set({ "pip.settings": { debugMode: false, onboarded: true, proactiveEnabled: false, voiceAutoResume: false } }));
+  await sw.evaluate(() => chrome.storage.local.remove(["burrow.graph", "burrow.arrive"]));
+  const countEnters = (p) => p.addInitScript(() => {
+    window.__enters = 0;
+    window.__plays = [];
+    window.__gotos = [];
+    window.addEventListener("burrow:enter", () => window.__enters++);
+    window.addEventListener("burrow:play", (e) => window.__plays.push(e.detail?.state));
+    window.addEventListener("burrow:goto", (e) => window.__gotos.push(e.detail));
+  });
+  const bootAt = (p, ms) => p.waitForFunction((t) => window.__meadow?.bootElapsed?.() >= t || document.querySelector("canvas.scene")?.dataset.boot === "done", ms, { timeout: 5000 }).catch(() => null);
+  const petRectOn = (p) => p.evaluate(() => {
+    const r = document.getElementById("pip-companion-host")?.shadowRoot?.querySelector(".pet-hit")?.getBoundingClientRect();
+    return r ? { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) } : null;
+  });
+
+  // The boot: the world is dug out of the earth on the first tab of a session.
+  await sw.evaluate(() => chrome.storage.session.remove("burrow.booted"));
+  const bp = await context.newPage();
+  await countEnters(bp);
+  await bp.setViewportSize({ width: 1280, height: 800 });
+  const bootT0 = Date.now();
+  await bp.goto(`chrome-extension://${extId}/newtab.html?hour=13`);
+  const sawRunning = await bp.waitForFunction(() => document.querySelector("canvas.scene")?.dataset.boot === "running", null, { timeout: 3000 }).then(() => true, () => false);
+  await bootAt(bp, 880);
+  await bp.screenshot({ path: resolve(out, "newtab-boot-1.png") });
+  await bootAt(bp, 1680);
+  await bp.screenshot({ path: resolve(out, "newtab-boot-2.png") });
+  const sawDone = await bp.waitForFunction(() => document.querySelector("canvas.scene")?.dataset.boot === "done", null, { timeout: 3500 }).then(() => true, () => false);
+  const bootTook = Date.now() - bootT0;
+  check("new tab boot runs on the first tab of a session and finishes within 3.5 s", sawRunning && sawDone && bootTook < 3500 + 1500, JSON.stringify({ sawRunning, sawDone, bootTook }));
+  await wait(400);
+  const enters1 = await bp.evaluate(() => window.__enters);
+  check("burrow:enter fires exactly once after the boot", enters1 === 1, `${enters1}`);
+  await bp.close();
+  const bp2 = await context.newPage();
+  await countEnters(bp2);
+  await bp2.setViewportSize({ width: 1280, height: 800 });
+  const t2 = Date.now();
+  await bp2.goto(`chrome-extension://${extId}/newtab.html?hour=13`);
+  const quickDone = await bp2.waitForFunction(() => document.querySelector("canvas.scene")?.dataset.boot === "done", null, { timeout: 1000 }).then(() => true, () => false);
+  check("a second new tab in the same session boots quickly", quickDone, `${Date.now() - t2} ms`);
+  await wait(300);
+  check("the quick boot also asks the rabbit in exactly once", (await bp2.evaluate(() => window.__enters)) === 1);
+  await bp2.close();
+  await sw.evaluate(() => chrome.storage.session.remove("burrow.booted"));
+  const bp3 = await context.newPage();
+  await countEnters(bp3);
+  await bp3.setViewportSize({ width: 1280, height: 800 });
+  await bp3.goto(`chrome-extension://${extId}/newtab.html?hour=13`);
+  await bootAt(bp3, 300);
+  await bp3.mouse.click(200, 300);
+  await wait(60);
+  const snapped = await bp3.evaluate(() => ({ boot: document.querySelector("canvas.scene")?.dataset.boot, enters: window.__enters, elapsed: window.__meadow?.bootElapsed?.() }));
+  check("a click during the boot snaps it to the finished world and asks the rabbit in", snapped.boot === "done" && snapped.enters === 1, JSON.stringify(snapped));
+  await bp3.close();
+
   const openNewTab = async (query = "") => {
     const p = await context.newPage();
+    await countEnters(p);
     await p.setViewportSize({ width: 1280, height: 800 });
     p.on("pageerror", (e) => consoleLines.push(`[newtab] pageerror: ${e.message}`));
     await p.goto(`chrome-extension://${extId}/newtab.html${query}`);
     await p.locator(".pet-canvas").waitFor({ timeout: 8000 }).catch(() => null);
-    await p.locator('canvas.scene[data-ready="1"]').waitFor({ timeout: 8000 }).catch(() => null);
+    await p.locator('canvas.scene[data-boot="done"]').waitFor({ timeout: 8000 }).catch(() => null);
     await p.locator("canvas.clock").waitFor({ timeout: 8000 }).catch(() => null);
     await wait(900);
     return p;
@@ -420,8 +477,10 @@ try {
     await p.screenshot({ path: resolve(out, `${name}.png`) });
     await p.close();
   }
-  // Reduced motion: the scene still draws, then holds still.
+
+  // Reduced motion: no boot, the scene draws once and holds still, but a click still changes frames.
   const rm = await context.newPage();
+  await countEnters(rm);
   await rm.emulateMedia({ reducedMotion: "reduce" });
   await rm.setViewportSize({ width: 1280, height: 800 });
   await rm.goto(`chrome-extension://${extId}/newtab.html?hour=13`);
@@ -431,7 +490,19 @@ try {
   await rm.mouse.move(60, 60);
   await wait(700);
   const still2 = await rm.locator("canvas.scene").evaluate((c) => c.toDataURL());
-  check("new tab under reduced motion draws the scene once and holds it still", still1.length > 1000 && still1 === still2, `${still1.length} bytes`);
+  check("new tab under reduced motion skips the boot, draws the scene once and holds it still", still1.length > 1000 && still1 === still2 && (await rm.evaluate(() => window.__enters)) === 1, `${still1.length} bytes`);
+  const flowerRM = await rm.evaluate(() => {
+    const c = document.querySelector("canvas.scene");
+    // Find a clickable flower through the hit list: click the first ground item rect of a flower.
+    return window.__meadow ? window.__meadow.conceptRect(0) : null;
+  });
+  await rm.mouse.click(flowerRM.x + flowerRM.width / 2, flowerRM.y + flowerRM.height / 2);
+  await wait(200);
+  const after1 = await rm.locator("canvas.scene").evaluate((c) => c.toDataURL());
+  const xy1 = await rm.evaluate(() => window.__meadow.particleXY());
+  await wait(400);
+  const xy2 = await rm.evaluate(() => window.__meadow.particleXY());
+  check("reduced motion: a click still reacts (a goto for the sprout) but particles never drift", (await rm.evaluate(() => window.__gotos.length)) >= 1 && JSON.stringify(xy1) === JSON.stringify(xy2), JSON.stringify({ changed: after1 !== still2, xy1, xy2 }));
   await rm.close();
 
   const nt = await openNewTab();
@@ -440,19 +511,98 @@ try {
   check("new tab page has the rabbit", (await nt.locator(".pet-canvas").count()) > 0);
   const scene = await nt.locator("canvas.scene").evaluate((c) => {
     const r = c.getBoundingClientRect();
-    return { w: c.width, h: c.height, cssW: r.width, cssH: r.height, rendering: getComputedStyle(c).imageRendering, ready: c.dataset.ready, tod: c.dataset.tod };
+    return { w: c.width, h: c.height, cssW: r.width, cssH: r.height, rendering: getComputedStyle(c).imageRendering, ready: c.dataset.ready, tod: c.dataset.tod, cursor: getComputedStyle(c).cursor.slice(0, 160) };
   });
   check("new tab scene canvas is a whole multiple of 3, covers the window and is pixelated", scene.w % 3 === 0 && scene.h % 3 === 0 && scene.w === scene.cssW && scene.h === scene.cssH && scene.w >= 1280 && scene.h >= 800 && scene.rendering === "pixelated" && scene.ready === "1", JSON.stringify(scene));
+  check("new tab scene wears the pixel cursor", /cursor_arrow\.png/.test(scene.cursor), scene.cursor);
   const clock = await nt.locator("canvas.clock").evaluate((c) => ({ w: c.width, h: c.height, cssW: c.getBoundingClientRect().width, rendering: getComputedStyle(c).imageRendering, label: c.getAttribute("aria-label") }));
-  check("new tab draws the pixel clock at a whole scale", clock.w > 0 && clock.h === 9 * 13 && clock.w === clock.cssW && clock.rendering === "pixelated" && /^Current time \d{1,2}:\d{2} [AP]M$/.test(clock.label ?? ""), JSON.stringify(clock));
+  check("new tab draws the pixel clock at about half size", clock.w > 0 && clock.h >= 45 && clock.h <= 60 && clock.w === clock.cssW && clock.rendering === "pixelated" && /^Current time \d{1,2}:\d{2} [AP]M$/.test(clock.label ?? ""), JSON.stringify(clock));
+  check("new tab shows the meadow HUD", (await nt.locator(".hud .hud-sign").count()) === 3 && /things taught/.test((await nt.locator(".hud").textContent()) ?? ""));
   await nt.screenshot({ path: resolve(out, "newtab.png") });
+  const pieceCount = await nt.evaluate(() => fetch("scene/manifest.json").then((r) => r.json()).then((m) => Object.keys(m.pieces).length));
+  check("scene manifest lists at least 40 hand-placed pieces", pieceCount >= 40, `${pieceCount}`);
+
+  // The card soldiers cross when asked; the Cheshire grin appears when the oak is clicked.
+  await nt.evaluate(() => window.__meadow.event("cards"));
+  const cx1 = await nt.evaluate(() => window.__meadow.cardsX());
+  await wait(700);
+  const cx2 = await nt.evaluate(() => window.__meadow.cardsX());
+  check("the card soldiers walk the hedge path when sent", cx1 !== null && cx2 !== null && cx1 !== cx2, JSON.stringify({ cx1, cx2 }));
+  const oak = await nt.evaluate(() => window.__meadow.oakRect());
+  await nt.mouse.click(oak.x + oak.width / 2, oak.y + oak.height / 2);
+  await wait(1200);
+  const grin = await nt.evaluate(() => window.__meadow.cheshireFrame());
+  check("clicking the oak brings out the Cheshire grin", grin >= 1, `frame ${grin}`);
+  await nt.mouse.move(640, 300);
+  await wait(200);
+
+  // Petting: resting the pointer on him spawns hearts and a wave.
+  const petR = await petRectOn(nt);
+  await nt.mouse.move(petR.x + petR.width / 2, petR.y + petR.height / 2);
+  await wait(850);
+  const hearts = await nt.evaluate(() => ({ particles: window.__meadow.particles(), plays: window.__plays.slice() }));
+  check("hovering the rabbit spawns hearts and asks for a wave", hearts.particles >= 3 && hearts.plays.includes("wave"), JSON.stringify(hearts));
+  await nt.screenshot({ path: resolve(out, "newtab-hearts.png") });
+  await nt.mouse.move(640, 300);
+  await wait(300);
+
+  // Feeding: drag a carrot from the patch onto him.
+  const carrotsBefore = await nt.evaluate(() => window.__meadow.carrots());
+  const cr = await nt.evaluate(() => window.__meadow.carrotRect(0));
+  await nt.mouse.move(cr.x + cr.width / 2, cr.y + cr.height / 2);
+  await nt.mouse.down();
+  for (let i = 1; i <= 10; i++) {
+    await nt.mouse.move(cr.x + ((petR.x + petR.width / 2 - cr.x) * i) / 10, cr.y + ((petR.y + petR.height / 2 - cr.y) * i) / 10);
+    await wait(25);
+    if (i === 6) await nt.screenshot({ path: resolve(out, "newtab-carrot.png") });
+  }
+  await nt.mouse.up();
+  await wait(250);
+  const fed = await nt.evaluate(() => ({ carrots: window.__meadow.carrots(), plays: window.__plays.slice() }));
+  check("dropping a carrot on the rabbit feeds him", carrotsBefore === 3 && fed.carrots === 2 && fed.plays.includes("celebrate"), JSON.stringify({ carrotsBefore, ...fed }));
+  await nt.mouse.move(640, 300);
+  await wait(200);
+
+  // The graph plants concept flowers along the front; hovering names them, clicking sends him over.
+  await sw.evaluate(() => chrome.storage.local.set({ "burrow.graph": { version: 1, updatedAt: Date.now(), edges: [], nodes: [
+    { id: "moat", label: "moat", aliases: [], state: { firstSeenAt: 1, lastSeenAt: 3, exposures: 3, dwellMs: 0, asks: 1, struggles: 0, mastery: 0.8 }, sources: [], misconceptions: [] },
+    { id: "castle-walls", label: "castle walls", aliases: [], state: { firstSeenAt: 1, lastSeenAt: 2, exposures: 1, dwellMs: 0, asks: 0, struggles: 0, mastery: 0.45 }, sources: [], misconceptions: [] },
+    { id: "siege-tower", label: "siege tower", aliases: [], state: { firstSeenAt: 1, lastSeenAt: 1, exposures: 1, dwellMs: 0, asks: 0, struggles: 2, mastery: 0.1 }, sources: [], misconceptions: [] },
+  ] } }));
+  await nt.waitForFunction(() => window.__meadow?.concepts?.() === 3, null, { timeout: 4000 }).catch(() => null);
+  const planted = await nt.evaluate(() => window.__meadow.concepts());
+  check("a three node graph plants three concept flowers", planted === 3 && /3 things taught/.test((await nt.locator(".hud").textContent()) ?? ""), `${planted}`);
+  const fr = await nt.evaluate(() => window.__meadow.conceptRect(0));
+  await nt.mouse.move(fr.x + fr.width / 2, fr.y + fr.height / 2);
+  await wait(300);
+  const signText = await nt.locator(".concept-sign").textContent().catch(() => "");
+  check("hovering a concept flower shows its sign", /moat/.test(signText ?? ""), signText ?? "");
+  await nt.screenshot({ path: resolve(out, "newtab-flowers.png") });
+  const gotosBefore = await nt.evaluate(() => window.__gotos.length);
+  await nt.mouse.click(fr.x + fr.width / 2, fr.y + fr.height / 2);
+  await wait(200);
+  const gotos = await nt.evaluate(() => window.__gotos.slice());
+  check("clicking a concept flower sends the rabbit to it", gotos.length === gotosBefore + 1 && Math.abs(gotos[gotos.length - 1].x - (fr.x + fr.width / 2)) < 12, JSON.stringify(gotos));
+  await wait(3200);
+  await sw.evaluate(() => chrome.storage.local.remove("burrow.graph"));
+
+  // Dragging the sun (or the moon at night) scrubs the hour and changes the sky.
+  const body = await nt.evaluate(() => window.__meadow.sunRect() ?? window.__meadow.moonRect());
+  const skyBefore = await nt.locator("canvas.scene").evaluate((c) => Array.from(c.getContext("2d").getImageData(30, 30, 1, 1).data));
+  await nt.mouse.move(body.x + body.width / 2, body.y + body.height / 2);
+  await nt.mouse.down();
+  for (let i = 1; i <= 10; i++) {
+    await nt.mouse.move(body.x + body.width / 2 + 30 * i, body.y + body.height / 2);
+    await wait(30);
+  }
+  await nt.mouse.up();
+  await wait(250);
+  const skyAfter = await nt.locator("canvas.scene").evaluate((c) => Array.from(c.getContext("2d").getImageData(30, 30, 1, 1).data));
+  const hourAfter = await nt.evaluate(() => window.__meadow.shownHour());
+  check("dragging the sun 300px right scrubs the hour and changes the sky", JSON.stringify(skyBefore) !== JSON.stringify(skyAfter), JSON.stringify({ skyBefore, skyAfter, hourAfter }));
 
   // Focusing the search brings the rabbit over; each typed character pops.
-  const petRect = () => nt.evaluate(() => {
-    const r = document.getElementById("pip-companion-host")?.shadowRoot?.querySelector(".pet-hit")?.getBoundingClientRect();
-    return r ? { x: Math.round(r.x), y: Math.round(r.y) } : null;
-  });
-  const r0 = await petRect();
+  const r0 = await petRectOn(nt);
   const popsBefore = Number(await nt.locator("form.search").getAttribute("data-pops"));
   await nt.locator("form.search input").click();
   await nt.keyboard.type("moat", { delay: 60 });
@@ -470,9 +620,9 @@ try {
       return !!r && !!start && (Math.abs(Math.round(r.x) - start.x) >= 3 || Math.abs(Math.round(r.y) - start.y) >= 3);
     }, r0, { timeout: 3000 })
     .then(() => true, () => false);
-  check("focusing the search brings the rabbit to the sign", moved, JSON.stringify({ r0, now: await petRect() }));
+  check("focusing the search brings the rabbit to the sign", moved, JSON.stringify({ r0, now: await petRectOn(nt) }));
   await wait(2600);
-  const r1 = await petRect();
+  const r1 = await petRectOn(nt);
   const board = await nt.locator("form.search .board").boundingBox();
   check("the rabbit stands beside the sign, not on it", r1 && board && (r1.x >= board.x + board.width || r1.x + 93 <= board.x), JSON.stringify({ r1, board }));
   await nt.screenshot({ path: resolve(out, "newtab-listening.png") });

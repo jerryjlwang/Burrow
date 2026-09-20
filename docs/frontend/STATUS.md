@@ -39,9 +39,12 @@ Updated: 2026-09-19
 - New tab meadow: `tools/sprites/scene_px.py` writes one atlas per time of day plus the pixel clock digits and sign planks to `extension/public/scene/`; `extension/src/newtab/scene.ts` composes sky bands, sun or moon and stars, drifting clouds, mirrored hills, hedge, ground, a path to the burrow mound with a door, window and chimney smoke, fences, signposts, bushes, swaying tufts, flowers, mushrooms, birds and butterflies by day, fireflies at night, rain on one load in six, and whole-pixel parallax. `clock.ts` draws the time from 5 x 7 pixel digits. The search sits on a plank: typing pops letters with a blip, focus calls the rabbit over and he listens, Enter dispatches `burrow:leave`. Checked with `tools/pet/check.mjs` at four hours of the day.
 - Parent map: `extension/src/parent/graph-view.ts` draws the concept graph as pixel rooms and tunnels laid out by `d3-force`, with hover tooltips, drag, click to the room card, cobwebs on forgotten rooms and blinking red dots on shaky ones.
 
+- Meadow round two: 86 hand-placed pieces over five parallax layers. Boot sequence on the first new tab of a session (dark earth and a typed "BURROW" line with a block bar, sky dissolving in band by band, sun rising, hills sliding up, fences and signs dropping in, grass sprouting, clock digits one by one, then `burrow:enter` pops the rabbit out of his hole; quick version afterwards; any click skips; reduced motion skips). Pet him for hearts and a wave, feed him carrots that regrow, drag the sun or moon to scrub the hour, click reactions on flowers, mushrooms, clouds, birds, grass, chimney, door, pond, flamingo, oak (Cheshire grin), tea party, roses (paint one red), giant mushroom and caterpillar, card soldiers (salute), sheep, windmill and the arrow sign. Timed life: ducks, fish, patrols, the grin, balloon, cloud shadow, gusts, bees, showers and a rainbow. Concept flowers from `burrow.graph` with signs. Pixel cursors, WebAudio ambience with a speaker sign, a HUD. Clock at half size. `tools/pet/check.mjs`: 86 of 86.
+- Extension icons are the rabbit's face, hand-placed (`tools/sprites/icons_px.py`). Onboarding: he pops out of his hole and waves.
+
 ## In progress
 
-- Meadow interactivity round (subagent, new tab lane): clock at half size, pet the rabbit for hearts and a wave, feed him carrots from a patch, drag the sun to scrub the hour, click reactions on flowers, mushrooms, clouds, birds, grass, chimney and door, concept flowers grown from `burrow.graph` with signs, a pixel cursor, WebAudio wind, birds and crickets with a speaker toggle, and a small HUD.
+- Nothing.
 
 ## Blocked
 

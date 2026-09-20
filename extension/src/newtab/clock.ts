@@ -7,6 +7,13 @@ export interface Digits {
   glyphs: Record<string, { x: number; w: number }>;
 }
 
+export interface Reveal {
+  /** How many characters of the text to draw (spaces count). */
+  count: number;
+  /** The newest one is still 3px low, rising into place. */
+  lift: boolean;
+}
+
 const SPACE = 3;
 
 export function loadDigits(): Promise<Digits> {
@@ -23,9 +30,9 @@ export function loadDigits(): Promise<Digits> {
     );
 }
 
-/** Whole scale for the big digits: about 90px tall on a 1280 wide window, smaller on narrow ones. */
+/** Whole scale for the digits: 6 on a 1280 wide window (a 54px canvas, 42px of ink), 4 to 7 elsewhere. */
 export function clockScale(width = window.innerWidth): number {
-  return Math.max(5, Math.min(13, Math.floor(width / 98)));
+  return Math.max(4, Math.min(7, Math.floor(width / 190)));
 }
 
 /** "7:05 AM" style text for the clock, with the hour possibly forced for screenshots. */
@@ -42,14 +49,14 @@ function measure(text: string, d: Digits): number {
   return w;
 }
 
-export function drawClock(canvas: HTMLCanvasElement, text: string, scale: number, d: Digits): void {
+export function drawClock(canvas: HTMLCanvasElement, text: string, scale: number, d: Digits, reveal?: Reveal): void {
   const [time, suffix = ""] = text.split(" ");
   const small = Math.max(3, Math.round(scale * 0.55));
   const bigW = measure(time, d) * scale;
   const smallW = suffix ? measure(suffix, d) * small : 0;
   const gap = suffix ? SPACE * scale : 0;
   const width = bigW + gap + smallW;
-  const height = d.height * scale;
+  const height = d.height * scale + 3;
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;
     canvas.height = height;
@@ -59,20 +66,26 @@ export function drawClock(canvas: HTMLCanvasElement, text: string, scale: number
   const ctx = canvas.getContext("2d")!;
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, width, height);
+  const limit = reveal ? reveal.count : Infinity;
   let x = 0;
+  let drawn = 0;
   const run = (s: string, sc: number, baseline: number) => {
     for (const ch of s) {
+      if (drawn >= limit) return;
+      drawn++;
       if (ch === " ") {
         x += SPACE * sc;
         continue;
       }
       const g = d.glyphs[ch];
       if (!g) continue;
-      ctx.drawImage(d.img, g.x, 0, g.w, d.height, x, baseline - d.height * sc, g.w * sc, d.height * sc);
+      const lift = reveal?.lift && drawn === limit ? 3 : 0;
+      ctx.drawImage(d.img, g.x, 0, g.w, d.height, x, baseline - d.height * sc + lift, g.w * sc, d.height * sc);
       x += g.w * sc;
     }
   };
-  run(time, scale, height);
+  run(time, scale, height - 3);
   x += gap;
-  run(suffix, small, height);
+  drawn++;
+  run(suffix, small, height - 3);
 }
