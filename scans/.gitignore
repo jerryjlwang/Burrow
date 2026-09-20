@@ -1,0 +1,5 @@
+# Photos of sketches live here while the scanner is being tuned. They are somebody's drawing and
+# they are big, so the folder ships empty and keeps whatever is dropped into it out of the repo.
+*
+!.gitignore
+!README.md
