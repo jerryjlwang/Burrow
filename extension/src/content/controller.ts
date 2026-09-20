@@ -60,7 +60,11 @@ export class CompanionController {
       onProbableEndOfTurn: (text) => {
         if (!this.pendingConfirmation && !this.pendingOffer && !isStopCommand(text) && isExtensionContextValid()) this.loop.speculate(text);
       },
-      onTurnResumed: () => this.loop.dropSpeculation(),
+      // Only while it is actually playing: a paused video says nothing the mic could pick up.
+      ambientSpeech: () => {
+        const v = this.video.context();
+        return v && !v.paused && v.hasTranscript ? v.heard : null;
+      },
       onSpeechStart: () => this.handleSpeechStart(),
     });
     this.loop = new AgentLoop({
@@ -155,6 +159,11 @@ export class CompanionController {
         const context = this.video.context();
         return context ? { context, frame: () => this.video.watcher.frame() } : null;
       },
+      videoInView: () => {
+        const r = this.video.watcher.rect;
+        return !!r && r.bottom > 80 && r.top < window.innerHeight - 80;
+      },
+      returnToVideo: () => this.video.watcher.element?.scrollIntoView({ behavior: "smooth", block: "center" }),
     });
     this.video = new VideoCompanion({
       session: this.session,
