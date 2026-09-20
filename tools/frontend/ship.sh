@@ -20,9 +20,9 @@ done
 say "typecheck"; npx tsc -p tsconfig.json --noEmit
 say "unit tests"; npx vitest run --reporter=dot 2>&1 | tail -3
 say "build"; node extension/build.mjs
-say "pet suite"; node tools/pet/check.mjs > /tmp/burrow-pet-full.txt 2>&1 || true; grep -E "checks passed|^FAIL" /tmp/burrow-pet-full.txt | tee /tmp/burrow-pet.txt || tail -20 /tmp/burrow-pet-full.txt
-grep -qE "^[0-9]+/[0-9]+ checks passed" /tmp/burrow-pet.txt && [ "$(sed -nE 's#^([0-9]+)/([0-9]+) checks passed#\1 \2#p' /tmp/burrow-pet.txt | awk '$1==$2')" != "" ] || { echo "pet suite not green"; exit 1; }
-say "smoke test"; E2E_PORT=8790 node e2e/smoke.mjs > /tmp/burrow-e2e-full.txt 2>&1 || true; grep -E "checks passed|^FAIL" /tmp/burrow-e2e-full.txt | tee /tmp/burrow-e2e.txt || tail -20 /tmp/burrow-e2e-full.txt
-[ "$(sed -nE 's#^([0-9]+)/([0-9]+) checks passed#\1 \2#p' /tmp/burrow-e2e.txt | awk '$1==$2')" != "" ] || { echo "smoke test not green"; exit 1; }
+say "pet suite"; node tools/pet/check.mjs > /tmp/burrow-pet-full.txt 2>&1 || true; grep -aE "checks passed|^FAIL" /tmp/burrow-pet-full.txt | tee /tmp/burrow-pet.txt || tail -20 /tmp/burrow-pet-full.txt
+grep -qaE "^[[:space:]]*[0-9]+/[0-9]+ checks passed" /tmp/burrow-pet.txt && [ "$(sed -nE 's#^[[:space:]]*([0-9]+)/([0-9]+) checks passed#\1 \2#p' /tmp/burrow-pet.txt | awk '$1==$2')" != "" ] || { echo "pet suite not green"; exit 1; }
+say "smoke test"; E2E_PORT=8790 node e2e/smoke.mjs > /tmp/burrow-e2e-full.txt 2>&1 || true; grep -aE "checks passed|^FAIL" /tmp/burrow-e2e-full.txt | tee /tmp/burrow-e2e.txt || tail -20 /tmp/burrow-e2e-full.txt
+[ "$(sed -nE 's#^[[:space:]]*([0-9]+)/([0-9]+) checks passed#\1 \2#p' /tmp/burrow-e2e.txt | awk '$1==$2')" != "" ] || { echo "smoke test not green"; exit 1; }
 if [ "${1:-}" = "--no-push" ]; then say "green (not pushed)"; exit 0; fi
 say "push"; git push origin HEAD
