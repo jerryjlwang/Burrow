@@ -10,3 +10,7 @@ coverage/
 __pycache__/
 tools/pet/shots/
 .claude/
+
+# fake camera feed for tools/pet/become/check.mjs (55 MB, made by make-inputs.py)
+tools/pet/become/robot-cat.y4m
+tools/pet/become/shots/

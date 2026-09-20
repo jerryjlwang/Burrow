@@ -79,10 +79,64 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 
 const cache = new Map<string, Promise<LoadedCharacter>>();
 
+/** Names of characters that are not folders under public/characters: "custom:<id>" ones made from a photo. */
+export const CUSTOM_PREFIX = "custom:";
+/** chrome.storage.local key holding the one custom character (the maker page writes it). */
+export const CUSTOM_KEY = "burrow.customCharacter";
+
+/** A character made from a photo, as stored: strips are PNG data URLs keyed by state. */
+export interface StoredCharacter {
+  id: string;
+  label: string;
+  manifest: CharacterManifest;
+  strips: Record<string, string>;
+}
+
+export function isCustomCharacter(name: string): boolean {
+  return name.startsWith(CUSTOM_PREFIX);
+}
+
+/** Decodes a manifest and its strips (URLs or data URLs) into a loaded character. */
+export async function assembleCharacter(name: string, manifest: CharacterManifest, strips: Record<string, string>): Promise<LoadedCharacter> {
+  if (!manifest.states || !manifest.states.idle) throw new Error(`Manifest for ${name} has no idle state`);
+  const entries = await Promise.all(
+    Object.entries(manifest.states).map(async ([state, def]) => {
+      const src = strips[state];
+      if (!src) throw new Error(`Character ${name} has no strip for ${state} (${def.file})`);
+      return [state, await loadImage(src)] as const;
+    }),
+  );
+  const images: Record<string, HTMLImageElement> = {};
+  for (const [state, img] of entries) images[state] = img;
+  return { name, manifest, images };
+}
+
+/** Hands the cache a character built in memory (the maker's preview) so `loadCharacter(name)` returns it. */
+export function registerCharacter(name: string, character: LoadedCharacter): void {
+  cache.set(name, Promise.resolve(character));
+}
+
+async function loadCustom(name: string): Promise<LoadedCharacter> {
+  const id = name.slice(CUSTOM_PREFIX.length);
+  const raw = await chrome.storage.local.get(CUSTOM_KEY);
+  const stored = raw?.[CUSTOM_KEY] as StoredCharacter | undefined;
+  if (!stored || stored.id !== id) throw new Error(`Custom character ${id} is not in storage`);
+  return assembleCharacter(name, stored.manifest, stored.strips);
+}
+
 /** Fetches a character's manifest and every strip it lists. Cached per character name. */
 export function loadCharacter(name: string = DEFAULT_CHARACTER): Promise<LoadedCharacter> {
   const hit = cache.get(name);
   if (hit) return hit;
+  if (isCustomCharacter(name)) {
+    // A custom character that is gone from storage falls back to the rabbit rather than an empty corner.
+    const p = loadCustom(name).catch((e) => {
+      console.warn(`[pet] ${String(e)}; using ${DEFAULT_CHARACTER}`);
+      return loadCharacter(DEFAULT_CHARACTER);
+    });
+    cache.set(name, p);
+    return p;
+  }
   const p = (async () => {
     const base = `characters/${name}/`;
     const res = await fetch(assetUrl(`${base}manifest.json`));

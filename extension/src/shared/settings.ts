@@ -6,6 +6,8 @@ export interface Settings {
   onboarded: boolean;
   micGranted: boolean;
   characterName: string;
+  /** Folder under public/characters, or "custom:<id>" for a character made from a photo (see components/pet/custom.ts). */
+  character: string;
   /** Hostnames where the companion stays hidden. */
   hiddenOnHosts: string[];
   /** Start listening automatically when a page loads (only after the user enabled voice once). */
@@ -28,6 +30,7 @@ export const DEFAULT_SETTINGS: Settings = {
   onboarded: false,
   micGranted: false,
   characterName: "White Rabbit",
+  character: "rabbit",
   hiddenOnHosts: [],
   voiceAutoResume: true,
   reducedMotion: "auto",

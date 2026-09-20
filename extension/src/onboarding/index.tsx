@@ -12,6 +12,7 @@ function Onboarding() {
   const [mic, setMic] = useState<MicState>("idle");
   const [name, setName] = useState("White Rabbit");
   const [serverUrl, setServerUrl] = useState("http://localhost:8787");
+  const [character, setCharacter] = useState<string | undefined>(undefined);
   // He pops out of his hole once, when the art loads, then waves hello. The player re-hands its
   // controller on every render, so this must not be a fresh closure that dives him again at each step.
   const arrived = useRef(false);
@@ -25,6 +26,7 @@ function Onboarding() {
     void getSettings().then((s) => {
       setName(s.characterName);
       setServerUrl(s.serverUrl);
+      setCharacter(s.character);
       if (s.micGranted) setMic("granted");
     });
   }, []);
@@ -55,7 +57,7 @@ function Onboarding() {
       </div>
       <div className="char">
         <div className="pip-root" style={{ position: "static", pointerEvents: "auto" }}>
-          <Character state={step === 3 ? "celebrating" : step === 1 ? "listening" : "idle"} level={0} lookAt={null} attention={0} reducedMotion={false} size={110} startHidden onController={onPet} />
+          <Character state={step === 3 ? "celebrating" : step === 1 ? "listening" : "idle"} level={0} lookAt={null} attention={0} reducedMotion={false} size={110} startHidden onController={onPet} character={character} />
         </div>
       </div>
       {step === 0 && (

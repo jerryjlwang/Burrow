@@ -48,3 +48,9 @@ Transitions, reached only through `enter` and `exit`: `to_listening`, `from_list
 Idle variants, reached only through `idle.variants`: `idle_tap`, `idle_watch`, `idle_flick`. They list `blink` and `mouth` overlays so speech keeps working while one plays.
 
 Other characters reuse these names. The player must not assume the list is fixed. The generator's `verify()` checks that every transition and variant ends on the frame it hands off to, and that no frame's rim is clipped by the cell edge.
+
+## Characters made from a photo
+
+`become.html` (popup: "Become a character") takes a picture with the laptop camera, or a photo file, and builds a whole character from it in the page with no server: `components/pet/pixelize.ts` cuts the background (flood fill from the edges within a colour tolerance of the border colour, then the largest blob only), snaps the colours to a median-cut palette, shrinks by majority vote so pupils and outlines survive, and adds the ink outline and cream rim. One base sprite then becomes every state above through whole-pixel moves (breath, squash, lean, lift, flip, a hole in rows 50 to 55, and a thought bubble, `?`, `!` and `z` glyphs), in the same 64 x 58 cell with the feet on row 53, so the player, hops, throws, wander and hole trips all work unchanged. There are no blink or mouth overlays, so speech is idle with the voice.
+
+The result is stored once in `chrome.storage.local` under `burrow.customCharacter` (`id`, `label`, `manifest`, PNG data URL per state, about 80 KB) and chosen with the `character` setting as `custom:<id>`; `loadCharacter` reads it from there and falls back to the rabbit if it is missing. "Back to the rabbit" sets `character` to `rabbit`. Check: `python tools/pet/become/make-inputs.py` once, then `node extension/build.mjs && node tools/pet/become/check.mjs` (fake camera, 14 checks, screenshots in `tools/pet/become/shots`).

@@ -110,6 +110,9 @@ function Popup() {
             <button className="link" onClick={() => openTab(chrome.runtime.getURL("parent.html"))}>
               Parent view
             </button>
+            <button className="link" onClick={() => openTab(chrome.runtime.getURL("become.html"))}>
+              Become a character
+            </button>
             <button className="link" title="Alt+Shift+D" onClick={toggleTablet}>
               {tablet?.watching ? "Stop watching" : "Watch the tablet"}
             </button>
