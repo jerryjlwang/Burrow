@@ -202,10 +202,12 @@ export interface LearnerProfile {
   /** Recent path suggestions (kind:concept), so the same one isn't re-offered across tabs and days. */
   suggested: Array<{ key: string; at: number }>;
   plans: LearningPlan[];
+  /** Graded results pages already counted (url + what was missed), so a reload or revisit isn't a second set of wrong answers. */
+  graded: Array<{ key: string; at: number }>;
 }
 
 export function emptyProfile(): LearnerProfile {
-  return { offers: {}, solves: { unaided: 0, hinted: 0 }, resources: [], suggested: [], plans: [] };
+  return { offers: {}, solves: { unaided: 0, hinted: 0 }, resources: [], suggested: [], plans: [], graded: [] };
 }
 
 export interface GraphSnapshot {
@@ -235,6 +237,9 @@ export const MASTERY = {
   selfCorrectionGain: 0.25,
 } as const;
 
+/** The same results page showing the same misses inside this window is a reload, not a retake. */
+export const REGRADE_WINDOW_MS = 24 * 3_600_000;
+
 export const RECALL = {
   /** Time away from a concept before the next first attempt counts as a retrieval opportunity. */
   gapMs: 6 * 3_600_000,
@@ -251,6 +256,7 @@ const CAP = {
   resources: 40,
   suggested: 30,
   /** Separate budgets, so a week of homework problems can't evict the plans the learner asked for. */
+  graded: 50,
   topicPlans: 12,
   problemPlans: 40,
   planHistory: 30,
@@ -351,6 +357,12 @@ function parseProfile(v: unknown): LearnerProfile {
     for (const x of v.suggested) {
       const at = isObj(x) ? finiteNum(x.at) : null;
       if (isObj(x) && at !== null && typeof x.key === "string") p.suggested.push({ key: x.key, at });
+    }
+  }
+  if (Array.isArray(v.graded)) {
+    for (const x of v.graded) {
+      const at = isObj(x) ? finiteNum(x.at) : null;
+      if (isObj(x) && at !== null && typeof x.key === "string") p.graded.push({ key: x.key, at });
     }
   }
   if (Array.isArray(v.plans)) for (const raw of v.plans) {
@@ -632,6 +644,19 @@ export class KnowledgeGraph {
       if (key) this.learner.suggested = [...this.learner.suggested.filter((x) => x.key !== key), { key, at: now }].slice(-CAP.suggested);
     } else if (outcome === "accepted") stats.accepted += 1;
     else if (outcome === "declined") stats.declined += 1;
+  }
+
+  /**
+   * Claim a graded results page. True the first time (count its misses); false when the same page
+   * with the same misses was already counted recently. A retake with different misses, or the same
+   * result a day later, counts again.
+   */
+  claimGradedPage(url: string, missed: string[], now: number): boolean {
+    const key = `${url.split("#")[0]}|${missed.map(slugify).sort().join(",")}`;
+    const seen = this.learner.graded.find((g) => g.key === key);
+    if (seen && now - seen.at < REGRADE_WINDOW_MS) return false;
+    this.learner.graded = [...this.learner.graded.filter((g) => g.key !== key), { key, at: now }].slice(-CAP.graded);
+    return true;
   }
 
   /** When this path suggestion (kind:concept) was last offered, or 0. */

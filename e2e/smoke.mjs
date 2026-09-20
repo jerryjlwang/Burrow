@@ -233,7 +233,15 @@ try {
       const graded = await ap.locator("#feedback.success.show").waitFor({ timeout: 8000 }).then(() => true).catch(() => false);
       check("'press enter' submits the answer after consent (press_enter)", graded, graded ? await ap.locator("#feedback").textContent() : "(no submit)");
     }
+    // Graded feedback is observed immediately, not after the watcher's 300ms debounce, so an unload
+    // soon after (a quiz auto-advancing, a tab closed on "Correct!") doesn't lose the attempt. 200ms
+    // is well inside the old debounce; a page killed in the same instant is still a coin flip.
+    await new Promise((r) => setTimeout(r, 200));
     await ap.close();
+    await new Promise((r) => setTimeout(r, 2000)); // debounced graph save
+    const flushed = sw ? await sw.evaluate(async () => (await chrome.storage.local.get("pip.graph"))["pip.graph"]?.profile?.plans ?? []) : [];
+    const solvedNow = flushed.find((p) => p.kind === "problem" && /3x \+ 5 = 20/.test(p.key));
+    check("an answer graded 200ms before the tab closes reaches memory (live regions skip the 300ms debounce)", !!solvedNow?.solvedAt, JSON.stringify(solvedNow ? solvedNow.history.map((e) => e.type) : null));
   }
 
   // Password field must be redacted / marked sensitive in the page model.
@@ -418,6 +426,8 @@ try {
     check("'draw it out' puts a worked example on the chalkboard (sketch)", /2x \+ 4 = 10/.test(boardText) && /x = 3/.test(boardText), boardText || "(no board)");
     check("the board teaches with different numbers, never this problem's answer", !/x\s*=\s*5\b/.test(boardText), boardText);
     await wp.screenshot({ path: resolve(shots, "18-sketch-board.png") });
+    await wp.locator(".pip-board button[aria-label='Close the board']").click({ timeout: 5000 }).catch(() => null);
+    check("the chalkboard closes when its ✕ is clicked", (await wp.locator(".pip-board").count()) === 0);
 
     // Freeform strokes: a diagram request draws actual shapes (SVG) with HTML labels, not just text.
     const strokeState = async () => ({

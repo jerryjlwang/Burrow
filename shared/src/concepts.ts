@@ -199,6 +199,7 @@ export function applyExtraction(graph: KnowledgeGraph, extraction: ConceptExtrac
       source: { url: ctx.url, title: ctx.title, at: now, kind: "query" },
     });
   }
-  for (const label of extraction.missed ?? []) graph.recordAttempt(label, now, { correct: false });
+  const missed = extraction.missed ?? [];
+  if (missed.length && graph.claimGradedPage(ctx.url, missed, now)) for (const label of missed) graph.recordAttempt(label, now, { correct: false });
   return { concepts: extraction.concepts.length, edges: extraction.edges.length, misconceptions: extraction.misconceptions.length };
 }

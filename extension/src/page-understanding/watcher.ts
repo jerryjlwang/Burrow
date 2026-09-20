@@ -8,14 +8,19 @@ export interface PageWatcherOptions {
   urlPollMs?: number;
 }
 
+/** Where pages announce outcomes: graded feedback, validation errors, status messages. */
+const LIVE_REGION = '[role="alert"], [role="status"], [aria-live="polite"], [aria-live="assertive"]';
+
 /**
  * Coalesces DOM mutations, SPA navigations and load events into a debounced "page changed" signal.
- * Never fires more than once per debounce window; guarantees a trailing call.
+ * Guarantees a trailing call. Fires at most once per debounce window, plus at most one immediate
+ * delivery per window when a live region changes (see {@link PageWatcher.schedule}).
  */
 export class PageWatcher {
   private observer: MutationObserver | null = null;
   private timer: number | null = null;
   private firstPendingAt = 0;
+  private lastUrgentAt = 0;
   private pendingReason: ChangeReason | null = null;
   private lastUrl = location.href;
   private urlTimer: number | null = null;
@@ -35,16 +40,20 @@ export class PageWatcher {
     if (this.observer) return;
     this.observer = new MutationObserver((records) => {
       let relevant = false;
+      let announcement = false;
       for (const r of records) {
         const t = r.target as Node;
         if ((t as Element).id === HOST_ID || (t.parentElement && t.parentElement.closest(`#${HOST_ID}`))) continue;
         relevant = true;
-        break;
+        if ((t.nodeType === Node.ELEMENT_NODE ? (t as Element) : t.parentElement)?.closest(LIVE_REGION)) {
+          announcement = true;
+          break;
+        }
       }
       if (!relevant) return;
       this.lastMutationAt = Date.now();
       this.mutationCount++;
-      this.schedule("mutation");
+      this.schedule("mutation", announcement);
     });
     this.observer.observe(document.documentElement, {
       subtree: true,
@@ -98,14 +107,36 @@ export class PageWatcher {
     }
   }
 
-  private schedule(reason: ChangeReason): void {
+  /**
+   * Deliver a pending change right now instead of after the debounce. For `pagehide`: feedback
+   * that appears just before an unload (a quiz that auto-advances, a tab closed on "Correct!")
+   * would otherwise never be observed, and the attempt it graded would be lost from memory.
+   */
+  flush(): void {
+    if (!this.timer) return;
+    window.clearTimeout(this.timer);
+    this.timer = null;
+    const r = this.pendingReason ?? "mutation";
+    this.pendingReason = null;
+    this.onChange(r);
+  }
+
+  /**
+   * `urgent` skips the debounce: a live region changing is the page announcing something (graded
+   * feedback, a validation error), and pages often unload right after — a quiz auto-advancing, a
+   * tab closed on "Correct!". At most one urgent delivery per debounce window, so a chatty live
+   * region can't turn into an extraction storm.
+   */
+  private schedule(reason: ChangeReason, urgent = false): void {
     const now = Date.now();
+    if (urgent && now - this.lastUrgentAt < this.opts.debounceMs) urgent = false;
+    if (urgent) this.lastUrgentAt = now;
     if (!this.pendingReason) this.firstPendingAt = now;
     // URL changes outrank mutations for the reason label.
     if (reason === "url" || reason === "load" || !this.pendingReason) this.pendingReason = reason;
     if (this.timer) window.clearTimeout(this.timer);
     const waited = now - this.firstPendingAt;
-    const delay = Math.max(0, Math.min(this.opts.debounceMs, this.opts.maxWaitMs - waited));
+    const delay = urgent ? 0 : Math.max(0, Math.min(this.opts.debounceMs, this.opts.maxWaitMs - waited));
     this.timer = window.setTimeout(() => {
       this.timer = null;
       const r = this.pendingReason ?? "mutation";
