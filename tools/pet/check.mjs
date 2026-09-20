@@ -152,7 +152,8 @@ try {
 
     // Clicks in the transparent margin of the canvas must reach the page.
     const before = await page.evaluate(() => window.__clicks);
-    await page.mouse.click(canvas.x + 20, hit.y + hit.height / 2);
+    // Top corner of the cell, well away from the talk button that sits beside his body.
+    await page.mouse.click(canvas.x + 8, canvas.y + 8);
     await wait(200);
     const after = await page.evaluate(() => window.__clicks);
     const panelAfterMargin = await page.locator(".pip-panel").count();

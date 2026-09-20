@@ -49,6 +49,83 @@
       ],
       "slice": 4
     },
+    "board": {
+      "file": "board.png",
+      "size": [
+        20,
+        23
+      ],
+      "slice": [
+        6,
+        6,
+        9,
+        6
+      ],
+      "note": "slice is top, right, bottom, left. The bottom slice holds the chalk tray."
+    },
+    "scroll": {
+      "file": "scroll.png",
+      "size": [
+        14,
+        14
+      ],
+      "slice": 5,
+      "note": "The notes he carries. Rods top and bottom; grow the height to unroll it."
+    },
+    "chalk": {
+      "file": "chalk.png",
+      "size": [
+        9,
+        4
+      ],
+      "slice": 0,
+      "note": "A stub of chalk for the board's tray."
+    },
+    "dirt": {
+      "file": "dirt.png",
+      "size": [
+        12,
+        12
+      ],
+      "slice": 0,
+      "note": "Repeating earth for the tunnel, 100% of the cells kept (4 x 4 Bayer)."
+    },
+    "dirt_75": {
+      "file": "dirt_75.png",
+      "size": [
+        12,
+        12
+      ],
+      "slice": 0,
+      "note": "Repeating earth for the tunnel, 75% of the cells kept (4 x 4 Bayer)."
+    },
+    "dirt_50": {
+      "file": "dirt_50.png",
+      "size": [
+        12,
+        12
+      ],
+      "slice": 0,
+      "note": "Repeating earth for the tunnel, 50% of the cells kept (4 x 4 Bayer)."
+    },
+    "dirt_25": {
+      "file": "dirt_25.png",
+      "size": [
+        12,
+        12
+      ],
+      "slice": 0,
+      "note": "Repeating earth for the tunnel, 25% of the cells kept (4 x 4 Bayer)."
+    },
+    "scroll_rolled": {
+      "file": "scroll_rolled.png",
+      "size": [
+        22,
+        11
+      ],
+      "slice": 0,
+      "note": "Two 11 x 11 frames of the rolled notes: flat, then on end."
+    },
     "ear": {
       "file": "ear.png",
       "size": [

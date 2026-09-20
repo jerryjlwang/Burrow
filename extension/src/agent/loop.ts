@@ -17,6 +17,7 @@ import { store } from "../content/store";
 import { sendToBackground, BgUnavailableError, type PendingLoop } from "../shared/messages";
 import { log } from "../shared/logger";
 import type { Session } from "./session";
+import { Speculator, speculationKey } from "./speculation";
 import type { SignalTracker } from "../proactive/signals";
 
 const logger = log("agent");
@@ -101,6 +102,14 @@ export class AgentLoop {
   private pendingLookup: string | null = null;
   private pendingPlan: string | null = null;
   private pendingReadout: string | null = null;
+  private speculator = new Speculator<AgentOutput>();
+  /** The decide request whose spoken sentence may be voiced the moment it arrives. */
+  private activeRequestId: string | null = null;
+  /** Sentences that arrived for a request that isn't (yet) the active one — a head start still unclaimed. */
+  private earlySays = new Map<string, string>();
+  /** What has already been voiced ahead of its decision, so say() shows it without speaking it twice. */
+  private spokenEarly: string | null = null;
+  private requestSeq = 0;
   /** Last look_up's results, kept to title the resource that gets opened from them. */
   private lastLookup: string | null = null;
   runCount = 0;
@@ -122,6 +131,7 @@ export class AgentLoop {
       this.abort.abort();
       this.abort = null;
     }
+    this.activeRequestId = null;
     store.setState({ busy: false });
   }
 
@@ -160,54 +170,39 @@ export class AgentLoop {
           const byName = this.lastReferencedElementName ? page.elements.find((e) => e.name === this.lastReferencedElementName) : undefined;
           this.lastReferencedElementId = byName?.id ?? null;
         }
-        const video = this.deps.getVideo?.() ?? null;
-        const frame = video && firstStep && !this.pendingScreenshot && taskType !== "navigation" && taskType !== "administrative" ? video.frame() : null;
-        const input: AgentInput = {
-          utterance,
-          goal,
-          conversation: session.recentTurns(10),
-          page,
-          history: history.slice(-6),
-          signals: this.deps.signals.snapshot(Date.now()),
-          student: session.student,
-          pendingOffer,
-          lastReferencedElementId: this.lastReferencedElementId,
-          // On a video the rabbit already has eyes: the frame rides along with the first step, so there is no "let me look" round trip.
-          // An explicit observe:screenshot stays a viewport capture — its pixels are click coordinates, a video frame's are not.
-          screenshot: this.pendingScreenshot ?? frame,
-          screenshotIsVideoFrame: !this.pendingScreenshot && !!frame,
-          video: video?.context ?? null,
-          board: this.deps.getBoard?.() ?? null,
-          lookupResults: this.pendingLookup,
-          planResults: this.pendingPlan,
-          readout: this.pendingReadout,
-          path,
-          ...this.deps.getPlan?.(),
-          learner,
-          step,
-          maxSteps: maxStep,
-          resumedAfterNavigation: !!opts.resume && step === (opts.resume?.step ?? 0),
-        };
+        const input = this.buildInput({ utterance, goal, conversation: session.recentTurns(10), page, history, pendingOffer, path, learner, step, maxStep, withFrame: firstStep && taskType !== "navigation" && taskType !== "administrative", resumed: !!opts.resume && step === (opts.resume?.step ?? 0) });
+        // A plain spoken request may already be half-answered: the decision started when speech
+        // recognition first thought the student was done (see speculate()).
+        const head = firstStep && !opts.resume && !opts.goal && !pendingOffer && !path ? this.speculator.take(speculationKey(utterance, page.url)) : null;
         firstStep = false;
         this.pendingScreenshot = null;
         this.pendingLookup = null;
         this.pendingPlan = null;
         this.pendingReadout = null;
 
-        // Latency mask: a student-initiated turn whose first decision runs long gets a short
-        // spoken filler. The latest-wins speech queue drops it again if the real reply beats it.
+        const requestId = head?.tag || this.newRequestId();
+        this.listenFor(requestId);
+        // Latency mask: if nothing has been voiced by then — no streamed sentence, no speculation
+        // hit — a short filler line fills the silence. Latest-wins speech keeps the order sane.
         let fillerTimer: number | null = null;
         if (step === (opts.resume?.step ?? 0) && !opts.resume && (opts.source === "voice" || opts.source === "text") && store.getState().settings.ttsEnabled) {
           fillerTimer = window.setTimeout(() => {
-            if (!signal.aborted) void this.deps.speak(pickFiller(video ? THINK_FILLERS : [...THINK_FILLERS, ...LOOK_FILLERS]));
+            if (!signal.aborted && this.spokenEarly === null) void this.deps.speak(pickFiller(this.deps.getVideo?.() ? THINK_FILLERS : [...THINK_FILLERS, ...LOOK_FILLERS]));
           }, FILLER_DELAY_MS);
         }
-        let output: AgentOutput;
+        // A head start that failed isn't worth keeping; ask properly.
+        let output: AgentOutput | null = null;
         try {
-          output = await this.decide(input, signal);
+          output = head ? await head.promise.catch(() => null) : null;
+          if (output && !output.degraded) logger.info("speculation hit", { headStartMs: head!.headStartMs });
+          else {
+            if (head) this.listenFor(this.newRequestId());
+            output = await this.decide(input, signal, this.activeRequestId!);
+          }
         } finally {
           if (fillerTimer !== null) window.clearTimeout(fillerTimer);
         }
+        this.activeRequestId = null;
         check();
         // This page lived long enough to get a decision: the handoff is consumed.
         if (opts.resume && step === opts.resume.step) await session.setPendingLoop(null);
@@ -399,7 +394,9 @@ export class AgentLoop {
 
   private say(text: string, detail?: string): void {
     this.deps.session.addTurn({ role: "companion", text, at: Date.now(), detail });
-    void this.deps.speak(text);
+    const alreadyVoiced = this.spokenEarly === text;
+    this.spokenEarly = null;
+    if (!alreadyVoiced) void this.deps.speak(text);
   }
 
   private async askConfirmation(message: string, signal: AbortSignal): Promise<boolean> {
@@ -422,10 +419,108 @@ export class AgentLoop {
     return result;
   }
 
-  private async decide(input: AgentInput, signal: AbortSignal): Promise<AgentOutput> {
+  private buildInput(a: { utterance: string; goal: string; conversation: AgentInput["conversation"]; page: PageSummary; history: ActionRecord[]; pendingOffer: PendingOffer | null; path: PathContext | null; learner: string | null; step: number; maxStep: number; withFrame: boolean; resumed: boolean }): AgentInput {
+    const video = this.deps.getVideo?.() ?? null;
+    const frame = video && a.withFrame && !this.pendingScreenshot ? video.frame() : null;
+    return {
+      utterance: a.utterance,
+      goal: a.goal,
+      conversation: a.conversation,
+      page: a.page,
+      history: a.history.slice(-6),
+      signals: this.deps.signals.snapshot(Date.now()),
+      student: this.deps.session.student,
+      pendingOffer: a.pendingOffer,
+      lastReferencedElementId: this.lastReferencedElementId,
+      // On a video the rabbit already has eyes: the frame rides along with the first step, so there is no "let me look" round trip.
+      // An explicit observe:screenshot stays a viewport capture — its pixels are click coordinates, a video frame's are not.
+      screenshot: this.pendingScreenshot ?? frame,
+      screenshotIsVideoFrame: !this.pendingScreenshot && !!frame,
+      video: video?.context ?? null,
+      board: this.deps.getBoard?.() ?? null,
+      lookupResults: this.pendingLookup,
+      planResults: this.pendingPlan,
+      readout: this.pendingReadout,
+      path: a.path,
+      ...this.deps.getPlan?.(),
+      learner: a.learner,
+      step: a.step,
+      maxSteps: a.maxStep,
+      resumedAfterNavigation: a.resumed,
+    };
+  }
+
+  /**
+   * Start deciding on what the student has *probably* just said, while speech recognition is
+   * still making sure they've finished. run() claims the result if the final words match;
+   * otherwise it is discarded unseen. This only computes — it never speaks, acts or records.
+   */
+  speculate(utterance: string): void {
+    if (this.running || !utterance.trim()) return;
+    const { session } = this.deps;
+    const page = this.deps.observe();
+    const taskType = classifyTask(utterance, page);
+    const input = this.buildInput({
+      utterance,
+      goal: utterance,
+      // run() sees the conversation with this turn already added; match it.
+      conversation: [...session.recentTurns(9), { role: "user", text: utterance, at: Date.now() }],
+      page,
+      history: [],
+      pendingOffer: null,
+      path: null,
+      learner: formatDiagnostics(diagnose(session.graph, Date.now())),
+      step: 0,
+      maxStep: MAX_STEPS,
+      withFrame: taskType !== "navigation" && taskType !== "administrative",
+      resumed: false,
+    });
+    logger.debug("speculating", { utterance });
+    const requestId = this.newRequestId();
+    this.speculator.start(speculationKey(utterance, page.url), () => this.decide(input, new AbortController().signal, requestId), requestId);
+  }
+
+  /** The student kept talking: whatever was guessed is about the wrong sentence. */
+  dropSpeculation(): void {
+    this.speculator.drop();
+  }
+
+  private newRequestId(): string {
+    return `d${Date.now().toString(36)}-${++this.requestSeq}`;
+  }
+
+  /** From now on this request's sentence is voiced on arrival — or right away if it already came. */
+  private listenFor(requestId: string): void {
+    this.activeRequestId = requestId;
+    this.spokenEarly = null;
+    const waiting = this.earlySays.get(requestId);
+    this.earlySays.clear();
+    if (waiting) this.speakEarly(waiting);
+  }
+
+  /**
+   * The server streamed a talk-only decision's sentence ahead of the decision. Voice it now if it
+   * belongs to the request the loop is waiting on; a head start's sentence waits until the final
+   * transcript confirms the student really said that. The turn itself is added by say() when the
+   * full decision lands (that's where an explanation's panel text comes from).
+   */
+  handleEarlySay(requestId: string, say: string): void {
+    if (requestId === this.activeRequestId) this.speakEarly(say);
+    else if (this.speculator.pending) this.earlySays.set(requestId, say);
+  }
+
+  private speakEarly(say: string): void {
+    if (this.spokenEarly !== null) return;
+    this.spokenEarly = say;
+    logger.info("speaking ahead of the decision", { say: say.slice(0, 60) });
+    store.setState({ status: "" });
+    void this.deps.speak(say);
+  }
+
+  private async decide(input: AgentInput, signal: AbortSignal, requestId?: string): Promise<AgentOutput> {
     const started = Date.now();
     try {
-      const out = await sendToBackground({ type: "agent.decide", input }, 40_000);
+      const out = await sendToBackground({ type: "agent.decide", input, requestId }, 40_000);
       if (signal.aborted) throw new Cancelled();
       if (out.provider === "error") throw new BrainDown(out.decision.reason || "provider error");
       const v = validateDecision(out.decision);

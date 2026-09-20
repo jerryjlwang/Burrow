@@ -71,3 +71,14 @@ Status: heads-up, 2026-09-20. Micah asked for the tablet watcher end to end, so 
 - `extension/manifest.json`: the `system.display` permission and the `open-tablet` command (Alt+Shift+D).
 
 The judge is one Gemini call per check and returns text only; the rabbit speaks through Deepgram as before. `INK_DEBUG_DIR` on the server dumps judged frames for tuning.
+
+Also in `content/controller.ts`, one line you will want to keep: the runtime message listener now answers only the broadcast types it handles. It used to answer every message with `{ok: true}`, and on the extension's own pages (new tab, parent) that reply beat the background's, so with a meadow tab open the popup, chat, voice start and the graph all got a bare `{ok: true}`. Verdicts from the tablet judge go to the board tab now (the rabbit stands there while watching), see `background/tablet.ts`.
+
+One line changed in `e2e/smoke.mjs` (2026-09-20): the chalkboard close check now waits up to 2.5 s for `.pip-board` to detach, because Krishiv's framed board sinks for 330 ms before it unmounts. Jerry's newest overlay code (video regions, outlined strokes) lives in `components/SketchOverlay.tsx` after the split; `Board.tsx` is the framed chalkboard for unanchored sketches, and its label text now carries `pip-board-label` for the stroke check.
+
+## 9. Two window events for the rabbit's action set pieces
+
+Status: heads-up, 2026-09-20. Two backend-lane files gained one announcement each, documented in `docs/frontend/ACTION_FX.md`; please keep them when you refactor.
+
+- `extension/src/actions/executor.ts`: `announceAction` dispatches `burrow:act` at the top of `executeAction` and waits for an optional `detail.hold` at most 900 ms. Nothing else about an action changed.
+- `extension/src/page-understanding/video.ts`: `announceVideo` dispatches `burrow:video` from `pause()` and `play()` (by us) and from the seeked, pause and play handlers (by them).

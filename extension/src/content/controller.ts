@@ -57,6 +57,11 @@ export class CompanionController {
     this.watcher = new PageWatcher((reason) => this.handlePageChange(reason));
     this.voice = new VoiceController({
       onFinalTranscript: (text) => void this.handleUserText(text, "voice"),
+      // A pending yes/no or a stop command is answered locally, so there is nothing to get ahead on.
+      onProbableEndOfTurn: (text) => {
+        if (!this.pendingConfirmation && !this.pendingOffer && !isStopCommand(text) && isExtensionContextValid()) this.loop.speculate(text);
+      },
+      onTurnResumed: () => this.loop.dropSpeculation(),
       onSpeechStart: () => this.handleSpeechStart(),
     });
     this.loop = new AgentLoop({
@@ -216,8 +221,13 @@ export class CompanionController {
     void this.voice.refreshStatus();
     void this.checkServer();
 
+    // Only the background's broadcasts are ours to answer. This same controller runs on the
+    // extension's own pages (new tab, parent), where chrome.runtime.onMessage also receives every
+    // request other contexts send to the background; answering those would beat the background's
+    // reply and hand the caller a bare {ok: true}.
+    const BROADCASTS = new Set<string>(["voice.state", "voice.transcript", "voice.level", "tts.state", "tts.level", "command", "ask.selection", "settings.changed", "ink.judgement"]);
     chrome.runtime.onMessage.addListener((msg: ContentBroadcast, _sender, sendResponse) => {
-      if (!msg || typeof msg !== "object" || !("type" in msg)) return;
+      if (!msg || typeof msg !== "object" || !("type" in msg) || !BROADCASTS.has(msg.type)) return;
       if (this.voice.handleBroadcast(msg)) {
         sendResponse?.({ ok: true });
         return;
@@ -233,6 +243,9 @@ export class CompanionController {
           break;
         case "settings.changed":
           this.applySettings(msg.settings);
+          break;
+        case "agent.say":
+          this.loop.handleEarlySay(msg.requestId, msg.say);
           break;
         case "ink.judgement":
           this.engine.onInkJudgement(msg.judgement);

@@ -74,6 +74,10 @@ export async function attachSttSession(client: WebSocket, cfg: Config): Promise<
           encoding: "linear16",
           sample_rate: 16000,
           eot_threshold: 0.7,
+          // Flux also reports when the turn has PROBABLY ended (EagerEndOfTurn), a beat before it is
+          // sure, and TurnResumed if it was wrong. The client starts the model's decision on the
+          // early signal so the thinking overlaps the wait instead of following it.
+          ...(cfg.sttEagerEotThreshold > 0 ? { eager_eot_threshold: cfg.sttEagerEotThreshold } : {}),
           eot_timeout_ms: 5000,
           reconnectAttempts: 0,
         });
