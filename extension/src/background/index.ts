@@ -185,6 +185,8 @@ async function handle(msg: BgRequest, sender: chrome.runtime.MessageSender): Pro
       return (await postJson("/api/agent/decide", msg.input, 40_000));
     case "agent.intervene":
       return (await postJson("/api/agent/intervene", msg.input, 15_000));
+    case "extract":
+      return (await postJson("/api/extract", msg.input, 20_000));
     case "tts.speak": {
       if (!settings.ttsEnabled) return { ok: false, error: "tts disabled" };
       ttsOwnerTab = tabId;

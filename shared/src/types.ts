@@ -119,6 +119,8 @@ export interface PendingOffer {
   message: string;
   elementId: number | null;
   at: number;
+  /** Pre-composed loop goal for when the offer is accepted (e.g. misconception nudges). */
+  goal?: string | null;
 }
 
 export interface AgentInput {

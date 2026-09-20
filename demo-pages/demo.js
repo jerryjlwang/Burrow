@@ -88,6 +88,26 @@
     });
   }
 
+  // ---- Seasons reading (seasons.html) ----
+  var saveNotes = document.getElementById("save-notes");
+  if (saveNotes) {
+    var notes = document.getElementById("notes");
+    var nf = document.getElementById("notes-feedback");
+    saveNotes.addEventListener("click", function () {
+      var t = String(notes.value || "").toLowerCase();
+      if (/tilt|axis|axial|angle|hemisphere|australia|opposite season/.test(t)) {
+        nf.className = "feedback success show";
+        nf.textContent = "Correct! It's the tilt of Earth's axis — that's why the hemispheres have opposite seasons. Nice thinking.";
+      } else if (/clos|near|distance/.test(t) && /sun/.test(t)) {
+        nf.className = "feedback error show";
+        nf.textContent = "Not quite — test that idea against the Australia clue above.";
+      } else {
+        nf.className = "feedback error show";
+        nf.textContent = "Not quite — what could make the two hemispheres differ at the same time?";
+      }
+    });
+  }
+
   // ---- Sign in (signin.html) ----
   var signin = document.getElementById("signin");
   if (signin) {

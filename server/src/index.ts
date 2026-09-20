@@ -4,16 +4,19 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { loadConfig } from "./config";
 import { AgentService } from "./api/agent";
+import { ExtractService } from "./api/extract";
 import { attachSttSession } from "./voice/stt";
 import { attachTtsSession } from "./voice/tts";
 import { serveStatic } from "./util/static";
 import { log } from "./util/logger";
 import type { AgentInput, InterventionInput } from "@shared/types";
+import type { ExtractionInput } from "@shared/concepts";
 
 const logger = log("server");
 const here = dirname(fileURLToPath(import.meta.url));
 const cfg = loadConfig();
 const agent = new AgentService(cfg);
+const extract = new ExtractService(cfg);
 const demoRoot = resolve(here, "../../demo-pages");
 const VERSION = "0.1.0";
 
@@ -76,6 +79,15 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       json(res, 200, await agent.intervene({ ...input, demoMode: cfg.demoMode }));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/extract") {
+      const input = (await readJson(req)) as ExtractionInput;
+      if (!input || typeof input.url !== "string" || typeof input.title !== "string") {
+        json(res, 400, { error: "invalid input" });
+        return;
+      }
+      json(res, 200, await extract.extract(input));
       return;
     }
     if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/demo")) {

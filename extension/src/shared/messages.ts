@@ -1,4 +1,5 @@
 import type { AgentInput, AgentOutput, InterventionInput, InterventionOutput, ConversationTurn, StudentSessionState, ActionRecord, PendingOffer } from "@shared/types";
+import type { ConceptExtraction, ExtractionInput } from "@shared/concepts";
 import type { Settings } from "./settings";
 
 export interface VoiceState {
@@ -66,6 +67,7 @@ export type BgRequest =
   | { type: "open.onboarding" }
   | { type: "open.demo" }
   | { type: "offscreen.event"; event: OffscreenEvent }
+  | { type: "extract"; input: ExtractionInput }
   | { type: "ping" };
 
 export interface ServerHealth {
@@ -95,6 +97,7 @@ export type BgResponseMap = {
   "open.onboarding": { ok: boolean };
   "open.demo": { ok: boolean };
   "offscreen.event": { ok: boolean };
+  extract: ConceptExtraction;
   ping: { ok: boolean; at: number };
 };
 
