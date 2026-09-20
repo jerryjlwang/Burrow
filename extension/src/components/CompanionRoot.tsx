@@ -102,15 +102,43 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
       }
     });
   }, []);
+  // The new tab page draws its world first and then says "burrow:enter"; he stays in the hole until then
+  // (or 3.5 s at most, so a broken page never hides him).
+  const bootPage = useRef(/\/newtab\.html$/.test(location.pathname));
+  const enterWaiters = useRef<(() => void)[]>([]);
+  const entered = useRef(false);
+  useEffect(() => {
+    if (!bootPage.current) return;
+    const go = () => {
+      if (entered.current) return;
+      entered.current = true;
+      const w = enterWaiters.current;
+      enterWaiters.current = [];
+      for (const f of w) f();
+    };
+    window.addEventListener("burrow:enter", go);
+    const fallback = window.setTimeout(go, 3500);
+    return () => {
+      window.removeEventListener("burrow:enter", go);
+      window.clearTimeout(fallback);
+    };
+  }, []);
   const onControllerWithArrival = useCallback(
     (c: PetController | null) => {
       onController(c);
+      if (!c) return;
       const a = arrivalRef.current;
-      if (!c || !a) return;
-      arrivalRef.current = null;
-      void c.jumpIn(new Promise((r) => setTimeout(r, 500))).then(() => {
-        controller.showBubble({ id: `arrive-${a.at}`, text: a.line ?? "Here we are!", kind: "info", expiresAt: Date.now() + 6000 });
-      });
+      if (a) {
+        arrivalRef.current = null;
+        void c.jumpIn(new Promise((r) => setTimeout(r, 500))).then(() => {
+          controller.showBubble({ id: `arrive-${a.at}`, text: a.line ?? "Here we are!", kind: "info", expiresAt: Date.now() + 6000 });
+        });
+        return;
+      }
+      if (bootPage.current) {
+        const ready = entered.current ? Promise.resolve() : new Promise<void>((r) => enterWaiters.current.push(r));
+        void c.jumpIn(ready);
+      }
     },
     [onController, controller],
   );
@@ -284,7 +312,7 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
           {voice.mode === "listening" && <span className="pip-mic-badge" title="Microphone is on" aria-hidden="true" />}
           {unread > 0 && !panelOpen && <span className="pip-unread" aria-hidden="true">{unread}</span>}
           <button type="button" className={`pip-char-btn${busy ? " busy" : ""}`} onClick={() => controller.togglePanel()} aria-label={label} aria-expanded={panelOpen} title={panelOpen ? "Close" : `Talk to ${settings.characterName}`}>
-            <Character state={characterState} level={level} lookAt={lookAt} attention={attention} reducedMotion={reduced} scale={petScale} onAnchor={onAnchor} onPosition={onPosition} onController={onControllerWithArrival} quiet={quiet} onShown={onShown} startHidden={!!arrival} />
+            <Character state={characterState} level={level} lookAt={lookAt} attention={attention} reducedMotion={reduced} scale={petScale} onAnchor={onAnchor} onPosition={onPosition} onController={onControllerWithArrival} quiet={quiet} onShown={onShown} startHidden={!!arrival || bootPage.current} />
           </button>
         </div>
       </div>
