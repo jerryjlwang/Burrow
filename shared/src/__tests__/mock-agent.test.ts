@@ -28,6 +28,34 @@ function input(utterance: string, extra: Partial<AgentInput> = {}): AgentInput {
   return { utterance, goal: utterance, conversation: [], page, history: [], signals: emptySignals(), student: emptyStudentState(), pendingOffer: null, lastReferencedElementId: null, step: 0, maxSteps: 6, ...extra };
 }
 
+describe("mock agent: the visible surface", () => {
+  it("hovers, double-clicks and right-clicks a named element", () => {
+    for (const [said, action] of [["hover over the dashboard", "hover"], ["Double-click the dashboard", "double_click"], ["right click on Dashboard", "right_click"]] as const) {
+      const dec = decideMock(input(said));
+      expect(dec.action, said).toBe(action);
+      expect(dec.elementId, said).toBe(1);
+      expect(validateDecision(dec).ok, said).toBe(true);
+    }
+  });
+  it("drags one named element onto another", () => {
+    const dec = decideMock(input("drag the dashboard to sign in"));
+    expect(dec).toMatchObject({ action: "drag", elementId: 1, toElementId: 2 });
+    expect(validateDecision(dec).ok).toBe(true);
+  });
+  it("aims at spoken coordinates", () => {
+    expect(decideMock(input("click at 300, 200"))).toMatchObject({ action: "click", x: 300, y: 200, elementId: null });
+    const drag = decideMock(input("drag from 100, 400 to 380, 400"));
+    expect(drag).toMatchObject({ action: "drag", x: 100, y: 400, toX: 380, toY: 400 });
+    expect(validateDecision(drag).ok).toBe(true);
+  });
+  it("presses a named key rather than hunting for a button called that", () => {
+    expect(decideMock(input("press escape"))).toMatchObject({ action: "press_key", text: "escape" });
+    const arrow = decideMock(input("hit the arrow down"));
+    expect(arrow).toMatchObject({ action: "press_key", text: "down" });
+    expect(validateDecision(arrow).ok).toBe(true);
+  });
+});
+
 describe("mock agent", () => {
   it("points at the element the student asks for", () => {
     const d = decideMock(input("Where is the sign in button?"));

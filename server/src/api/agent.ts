@@ -1,5 +1,5 @@
 import { validateDecision, validateIntervention } from "@shared/validate";
-import type { AgentDecision } from "@shared/actions";
+import { DECISION_DEFAULTS, type AgentDecision } from "@shared/actions";
 import type { AgentInput, AgentOutput, InterventionInput, InterventionOutput } from "@shared/types";
 import { detectProblem, hintFor } from "@shared/hints";
 import { finalAnswersFor, leakedAnswer } from "@shared/ladder";
@@ -69,7 +69,7 @@ export class AgentService {
     const v = validateDecision(raw);
     const decision = v.ok
       ? v.decision
-      : { action: "speak" as const, say: "I'm having trouble thinking right now. Try me again in a moment.", elementId: null, text: null, url: null, direction: null, amount: null, value: null, quote: null, line: null, tabId: null, pendingAction: null, taskType: "chat" as const, reason: "fallback", done: true };
+      : { ...DECISION_DEFAULTS, action: "speak" as const, say: "I'm having trouble thinking right now. Try me again in a moment.", taskType: "chat" as const, reason: "fallback", done: true };
     logger.info("decide", { provider: "mock", action: decision.action, elementId: decision.elementId, ms: Date.now() - started, utterance: input.utterance.slice(0, 80) });
     return { decision, provider: "mock", degraded: false, latencyMs: Date.now() - started, taskType: decision.taskType };
   }
@@ -81,9 +81,8 @@ export class AgentService {
    */
   private honestFailure(started: number, reason: string): AgentOutput {
     const decision = {
+      ...DECISION_DEFAULTS,
       action: "finish" as const,
-      say: null, elementId: null, text: null, url: null, direction: null, amount: null, value: null,
-      quote: null, line: null, tabId: null, pendingAction: null,
       taskType: "chat" as const, reason, done: true,
     };
     return { decision, provider: "error", degraded: true, latencyMs: Date.now() - started, taskType: "chat" };

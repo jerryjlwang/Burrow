@@ -207,8 +207,10 @@ export function extractPage(doc: Document, opts: ExtractOptions): PageSummary {
   const win = doc.defaultView ?? window;
   const vw = opts.viewport?.width ?? win.innerWidth;
   const vh = opts.viewport?.height ?? win.innerHeight;
-  const maxElements = opts.maxElements ?? 120;
-  const maxTextChars = opts.maxTextChars ?? 2500;
+  const maxElements = opts.maxElements ?? 400;
+  // Not a budget: the model gets the whole page. This only keeps a pathological page (a
+  // megabyte of log output) inside the model's context window instead of failing the request.
+  const maxTextChars = opts.maxTextChars ?? 120_000;
   const skipLayout = !!opts.skipLayout;
   const host = doc.getElementById(HOST_ID);
 
@@ -310,7 +312,7 @@ export function extractPage(doc: Document, opts: ExtractOptions): PageSummary {
       }
       direct = collapse(direct);
       if (direct.length > 1 && !["OPTION", "BUTTON", "A", "LABEL", "TEXTAREA"].includes(tag)) {
-        textBlocks.push({ text: direct.slice(0, 400), inViewport, y: rect.y });
+        textBlocks.push({ text: direct, inViewport, y: rect.y });
       }
     }
 

@@ -11,6 +11,7 @@ import { executeAction, type ExecutorDeps } from "../actions/executor";
 import { MAX_REGION_CHARS, quoteRegion, regionText } from "../actions/inspect";
 import { classifyTask, isForbidden, requiresConfirmation } from "../actions/policy";
 import { HOST_ID } from "../page-understanding/extract";
+import { registeredIdAt } from "../actions/surface";
 import { store } from "../content/store";
 import { sendToBackground, BgUnavailableError, type PendingLoop } from "../shared/messages";
 import { log } from "../shared/logger";
@@ -171,7 +172,9 @@ export class AgentLoop {
         store.setState({ debug: { ...store.getState().debug, lastDecision: decision, provider: output.provider, degraded: output.degraded, latencyMs: output.latencyMs } });
         logger.info("decision", { step, action: decision.action, elementId: decision.elementId, say: decision.say, provider: output.provider, latencyMs: output.latencyMs });
 
-        const element = decision.elementId != null ? page.elements.find((e) => e.id === decision.elementId) ?? null : null;
+        // A point is judged by what it lands on, so coordinates can't route around the policy gates.
+        const targetId = decision.elementId ?? (decision.x != null && decision.y != null ? registeredIdAt(this.deps.executor.registry, { x: decision.x, y: decision.y }) : null);
+        const element = targetId != null ? page.elements.find((e) => e.id === targetId) ?? null : null;
         if (element) {
           this.lastReferencedElementId = element.id;
           this.lastReferencedElementName = element.name;
@@ -279,7 +282,7 @@ export class AgentLoop {
         // --- Execute + verify ---
         // Persist resume state BEFORE actions that may unload the page (a click on a link
         // navigates faster than we could save afterwards). Cleared again if nothing navigated.
-        const mayNavigate = decision.action === "click" || decision.action === "navigate" || decision.action === "go_back";
+        const mayNavigate = decision.action === "click" || decision.action === "double_click" || decision.action === "press_key" || decision.action === "navigate" || decision.action === "go_back";
         if (mayNavigate) {
           await session.setPendingLoop({ utterance, goal, history: [...history.slice(-5), { step, decision, result: { ok: true, message: "action dispatched; page navigated" }, at: Date.now() }], step: step + 1, at: Date.now(), pendingOffer: null, lastReferencedElementName: this.lastReferencedElementName, path });
         }
@@ -297,6 +300,8 @@ export class AgentLoop {
           break;
         }
         if (mayNavigate) await session.setPendingLoop(null);
+        // Aiming by eye needs eyes: after acting on a raw point, show the model what happened.
+        if ((decision.x != null || decision.toX != null) && !decision.done) this.pendingScreenshot = await this.captureScreenshot();
         if (!result.ok && !result.elementFound) {
           // Element vanished: re-observe on the next iteration (the model sees the failure in history).
           continue;
@@ -422,7 +427,7 @@ export class AgentLoop {
 
   private async captureScreenshot(): Promise<string | null> {
     try {
-      const r = await sendToBackground({ type: "screenshot" }, 5000);
+      const r = await sendToBackground({ type: "screenshot", viewport: { width: window.innerWidth, height: window.innerHeight } }, 5000);
       return r.ok ? r.dataUrl ?? null : null;
     } catch {
       return null;

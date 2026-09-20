@@ -3,6 +3,7 @@ import { getSettings, setSettings, DEFAULT_SETTINGS } from "../shared/settings";
 import { emptyStudentState } from "@shared/types";
 import type { GraphSnapshot } from "@shared/graph";
 import { GraphHost } from "./graph-host";
+import { fitToViewport, runInput } from "./trusted-input";
 import { log } from "../shared/logger";
 
 const logger = log("bg");
@@ -306,12 +307,15 @@ async function handle(msg: BgRequest, sender: chrome.runtime.MessageSender): Pro
       return { ok: true };
     case "screenshot": {
       try {
-        const dataUrl = await chrome.tabs.captureVisibleTab(sender.tab?.windowId ?? chrome.windows.WINDOW_ID_CURRENT, { format: "jpeg", quality: 55 });
-        return { ok: true, dataUrl };
+        const dataUrl = await chrome.tabs.captureVisibleTab(sender.tab?.windowId ?? chrome.windows.WINDOW_ID_CURRENT, { format: "jpeg", quality: 70 });
+        return { ok: true, dataUrl: msg.viewport ? await fitToViewport(dataUrl, msg.viewport) : dataUrl };
       } catch (e) {
         return { ok: false, error: String(e) };
       }
     }
+    case "input":
+      if (tabId == null) return { ok: false, error: "no tab" };
+      return runInput(tabId, msg.ops);
     case "open.onboarding":
       await chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html") });
       return { ok: true };

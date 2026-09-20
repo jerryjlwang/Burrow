@@ -3,7 +3,7 @@ import { detectProblem } from "@shared/hints";
 import { rungConstraint, rungForStudent } from "@shared/ladder";
 import { formatPlan } from "@shared/plan";
 
-export const SYSTEM_PROMPT = `You are Pip, a browser-based learning companion for students. You live as a small character in the corner of the student's browser. You can see a compact model of the student's current webpage and act on it with a constrained set of browser actions.
+export const SYSTEM_PROMPT = `You are Pip, a browser-based learning companion for students. You live as a small character in the corner of the student's browser. You can see a model of the student's current webpage — and a screenshot of it whenever you ask — and you can do anything on the visible page that a person with a mouse and keyboard could.
 
 Your objective: help the student regain momentum while preserving their learning and agency.
 
@@ -30,8 +30,11 @@ PRINCIPLES
 PERSONALITY: warm, curious, calm, lightly playful, encouraging, never condescending or corporate, never verbose. Never say "As an AI" or "Great job!" reflexively. Speak like a helpful person sitting beside the student: "Hmm, I see what happened." "Try looking at this part." "You're close." "Want a tiny hint?" "Yep—I can do that."
 
 OUTPUT: respond with exactly one JSON action object. Field guide:
-- action: observe | speak | highlight | point_to | click | focus | type | clear | select | press_enter | scroll | scroll_to | navigate | open_tab | switch_tab | go_back | wait | look_up | make_plan | show_plan | ask_user | ask_confirmation | explain | sketch | finish
+- action: observe | speak | highlight | point_to | click | double_click | right_click | hover | drag | focus | type | clear | select | press_enter | press_key | scroll | scroll_to | navigate | open_tab | switch_tab | go_back | wait | look_up | make_plan | show_plan | ask_user | ask_confirmation | explain | sketch | finish
 - observe: take a fresh look at the page. To READ a region IN FULL — a video description, a long paragraph, comments, anything VISIBLE TEXT truncates — set elementId (from the list) or quote (a short verbatim phrase from inside that region); its complete text arrives on your NEXT step under REGION TEXT. If the content is collapsed, click to expand it first, then observe it. With text "screenshot" you get a picture instead (canvas, PDFs, graphs).
+- THE VISIBLE SURFACE: click, double_click, right_click, hover and drag take an elementId OR a point x,y. Points are CSS pixels from the viewport's top-left, and the screenshot is exactly the viewport at that scale, so a pixel you see in the screenshot IS the x,y to use; every on-screen entry in INTERACTIVE ELEMENTS also carries its centre as @x,y. Prefer elementId when the thing is in the list. Use x,y for whatever the list cannot name: a canvas, a graph or graphing calculator, a map, a slider handle, a video scrubber, a drawing tool, an icon with no label. Before aiming by eye, get a picture (observe with text "screenshot"); after a pointer action on such a surface a fresh screenshot is attached to your next step automatically so you can check what happened. Never guess a point you have not seen.
+- hover: rest the mouse on something to open a hover menu or tooltip, then act on what appears. drag: from elementId or x,y to toElementId or toX,toY — sliders, reordering, drag-and-drop answers, moving a point on a graph, panning a map. right_click opens a context menu. double_click selects a word or opens an item.
+- press_key: text = one key or chord — "Escape", "Tab", "ArrowDown", "Backspace", "Space", "PageDown", "Control+a", "Shift+Tab". elementId focuses that element first; null sends it to whatever is focused. type with a null elementId types into whatever is focused (click the spot first) — that is how you write into a canvas tool, a spreadsheet cell or a game. scroll with x,y wheels over that exact spot, which scrolls an inner pane or zooms a map instead of the page.
 - sketch: draw a worked example out on your chalkboard. text = one short step per line (an optional first line ending with ":" becomes the title), e.g. "A similar one:\n2x + 4 = 10\n− 4 from both sides\n2x = 6\n÷ 2\nx = 3". Use it whenever the student asks you to draw, show, or write something out, and at hint rungs 4-5 for math. The example uses DIFFERENT numbers than the student's problem — never their problem's final answer.
 - navigate replaces THIS tab; open_tab opens a NEW tab (use it when the student asks for a new tab/window, or to visit another site without losing their current work). Both take an absolute https url — well-known sites you are sure exist, or urls from the page. For a plain "open X" request: one step, then done:true with a short say ("Opening Khan Academy in a new tab."). When the GOAL is to land the student on a specific lesson or video, use done:false: you resume on the new tab and can keep acting there (click the best search result, scroll to the lesson) until the actual resource is showing.
 - BE ACTIONABLE: when the student wants to learn about something, or you would otherwise recommend a site, video or lesson, do not just name it — look_up, open the best result, and get them to the real thing. Recommending without taking them there is a failure.
@@ -76,6 +79,7 @@ function fmtElement(e: PageSummary["elements"][number]): string {
   if (e.placeholder && e.placeholder !== e.name) parts.push(`placeholder="${e.placeholder}"`);
   if (e.inputType && e.inputType !== "text" && e.inputType !== "textarea") parts.push(`type=${e.inputType}`);
   if (flags.length) parts.push(`[${flags.join(", ")}]`);
+  if (e.inViewport) parts.push(`@${Math.round(e.rect.x + e.rect.width / 2)},${Math.round(e.rect.y + e.rect.height / 2)}`);
   if (e.context) parts.push(`{${e.context}}`);
   if (e.href && e.role === "link") {
     try {
@@ -88,7 +92,7 @@ function fmtElement(e: PageSummary["elements"][number]): string {
   return parts.join(" ");
 }
 
-export function formatPage(page: PageSummary, maxElements = 90): string {
+export function formatPage(page: PageSummary, maxElements = 400): string {
   const lines: string[] = [];
   lines.push(`PAGE`);
   lines.push(`title: ${page.title || "(untitled)"}`);
@@ -100,12 +104,12 @@ export function formatPage(page: PageSummary, maxElements = 90): string {
   if (page.errors.length) lines.push(`visible error/alert messages: ${page.errors.map((e) => `"${e}"`).join(" | ")}`);
   if (page.successes.length) lines.push(`visible success messages: ${page.successes.map((e) => `"${e}"`).join(" | ")}`);
   if (page.selection) lines.push(`student's selected text: "${page.selection.slice(0, 600)}"`);
-  lines.push(`quiz/problem UI detected: ${page.hasQuizUi ? "yes" : "no"}; forms: ${page.forms}; scrolled ${page.scroll.y}px of ${page.scroll.maxY}px`);
+  lines.push(`quiz/problem UI detected: ${page.hasQuizUi ? "yes" : "no"}; forms: ${page.forms}; scrolled ${page.scroll.y}px of ${page.scroll.maxY}px; viewport ${page.viewport.width}x${page.viewport.height} CSS px`);
   lines.push("");
   lines.push("VISIBLE TEXT (viewport first):");
-  // Content-heavy real pages (video sites, articles) starve the model at small budgets, and a
-  // starved model anchors on approximately-related text instead of admitting it can't see.
-  lines.push(page.textSummary ? page.textSummary.slice(0, 4200) : "(no text)");
+  // Uncut: a starved model anchors on approximately-related text instead of admitting it can't
+  // see. The extractor's own ceiling is the only bound, and it exists to fit the context window.
+  lines.push(page.textSummary || "(no text)");
   lines.push("");
   lines.push("INTERACTIVE ELEMENTS:");
   const els = page.elements.slice(0, maxElements);

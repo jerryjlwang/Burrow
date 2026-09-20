@@ -3,6 +3,7 @@ import { isStopCommand, truncate } from "@shared/text";
 import { HeuristicConceptExtractor, pageToExtractionInput, type ConceptExtraction, type ExtractionInput } from "@shared/concepts";
 import { slugify } from "@shared/graph";
 import { parsePlan, topicPlanKey } from "@shared/plan";
+import { parseSketch } from "@shared/sketch";
 import { planStepSuggestion } from "@shared/path";
 import type { PlanRoute } from "./store";
 import { classifyTask } from "../actions/policy";
@@ -85,12 +86,17 @@ export class CompanionController {
           return parsePlan(r.plan, { key: topicPlanKey(topic), source: "llm" });
         },
         showPlan: () => this.showPlan(),
+        input: async (ops) => {
+          try {
+            return await sendToBackground({ type: "input", ops }, 8000);
+          } catch (e) {
+            return { ok: false, error: String(e) };
+          }
+        },
         sketch: (spec) => {
-          const [first, ...rest] = spec.split("\n").map((l) => l.trim()).filter(Boolean);
-          const titled = first !== undefined && first.endsWith(":") && rest.length > 0;
-          const lines = (titled ? rest : [first ?? "", ...rest]).filter(Boolean).slice(0, 10);
-          if (!lines.length) return;
-          store.setState({ board: { id: `${Date.now()}`, title: titled ? first.slice(0, -1) : undefined, lines }, planView: null });
+          const sk = parseSketch(spec);
+          if (!sk.items.length) return;
+          store.setState({ board: { id: `${Date.now()}`, title: sk.title, items: sk.items }, planView: null });
         },
         goBack: async () => {
           try {

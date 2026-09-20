@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Surface lab</title>
+<style>
+  body { margin: 0; font: 16px system-ui, sans-serif; }
+  .box { position: absolute; box-sizing: border-box; border: 2px solid #335; border-radius: 6px; padding: 8px; background: #eef; }
+  #menu { left: 40px; top: 40px; width: 160px; }
+  #menu .items { display: none; margin-top: 8px; }
+  #menu:hover .items { display: block; }
+  #card { left: 260px; top: 40px; width: 160px; user-select: none; }
+  #chip { left: 40px; top: 200px; width: 120px; background: #9cf; cursor: grab; }
+  #bin { left: 320px; top: 180px; width: 200px; height: 90px; background: #efe; }
+  #track { left: 40px; top: 380px; width: 400px; height: 24px; padding: 0; background: #ddd; }
+  #knob { position: absolute; left: 0; top: -4px; width: 28px; height: 28px; border-radius: 50%; background: #c33; touch-action: none; }
+  #pad { position: absolute; left: 600px; top: 40px; border: 2px solid #335; }
+</style>
+</head>
+<body>
+<h1 style="position:absolute;left:40px;top:300px;margin:0;font-size:18px">Surface lab</h1>
+<div id="menu" class="box" role="button" tabindex="0" aria-label="Tools menu">Tools menu<div class="items"><a href="#ruler" id="ruler">Ruler</a></div></div>
+<div id="card" class="box" role="button" tabindex="0" aria-label="Word card">Word card</div>
+<div id="chip" class="box" role="button" tabindex="0" draggable="true" aria-label="Blue chip">Blue chip</div>
+<div id="bin" class="box" role="button" tabindex="0" aria-label="Answer box">Answer box</div>
+<div id="track" class="box" aria-hidden="true"><div id="knob"></div></div>
+<canvas id="pad" width="400" height="300"></canvas>
+<script>
+  // Every entry records isTrusted, so a test can tell real input from dispatched events.
+  window.__log = [];
+  const log = (name, e, extra = {}) => window.__log.push({ name, trusted: e.isTrusted, ...extra });
+  const $ = (id) => document.getElementById(id);
+  $("card").addEventListener("dblclick", (e) => log("dblclick", e));
+  $("card").addEventListener("contextmenu", (e) => { e.preventDefault(); log("contextmenu", e); });
+  $("chip").addEventListener("dragstart", (e) => { e.dataTransfer.setData("text/plain", "chip"); log("dragstart", e); });
+  $("bin").addEventListener("dragover", (e) => e.preventDefault());
+  $("bin").addEventListener("drop", (e) => { e.preventDefault(); log("drop", e, { data: e.dataTransfer.getData("text/plain") }); $("bin").textContent = "Answer box: chip"; });
+  document.addEventListener("keydown", (e) => log("keydown", e, { key: e.key }));
+  $("pad").addEventListener("click", (e) => log("canvas-click", e, { x: Math.round(e.offsetX), y: Math.round(e.offsetY) }));
+  let dragging = false;
+  $("knob").addEventListener("pointerdown", (e) => { dragging = true; log("knob-down", e); });
+  window.addEventListener("pointermove", (e) => { if (dragging) $("knob").style.left = `${Math.max(0, Math.min(372, e.clientX - 40 - 14))}px`; });
+  window.addEventListener("pointerup", (e) => { if (dragging) { dragging = false; log("knob-up", e, { left: parseInt($("knob").style.left, 10) }); } });
+</script>
+</body>
+</html>
