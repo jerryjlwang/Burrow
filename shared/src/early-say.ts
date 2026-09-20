@@ -30,8 +30,23 @@ export function earlySayFrom(partialJson: string): { action: string; say: string
   }
 }
 
+/**
+ * Pointing at something and saying the hint ("Right here — what did that move do?") is the most
+ * common tutoring turn, and it isn't talk-only: it is only valid once it names its target. The
+ * target is the third key, so the wait is a few tokens rather than the whole object. With a
+ * non-negative elementId these actions are valid, ungated by policy, and change nothing on the page.
+ */
+export const EARLY_SAY_POINTING: ReadonlySet<string> = new Set(["point_to", "highlight", "scroll_to"]);
+
+const TARGET_RE = /^\s*\{\s*"action"\s*:\s*"[a-z_]+"\s*,\s*"say"\s*:\s*(?:null|"(?:[^"\\]|\\.)*")\s*,\s*"elementId"\s*:\s*(null|-?\d+)\s*[,}]/;
+
 /** The sentence to speak now, if this partial decision qualifies; null otherwise (including "not yet"). */
 export function speakableEarly(partialJson: string): string | null {
   const head = earlySayFrom(partialJson);
-  return head && head.say && EARLY_SAY_ACTIONS.has(head.action) ? head.say.trim().slice(0, 400) : null;
+  if (!head || !head.say) return null;
+  const say = head.say.trim().slice(0, 400);
+  if (EARLY_SAY_ACTIONS.has(head.action)) return say;
+  if (!EARLY_SAY_POINTING.has(head.action)) return null;
+  const target = TARGET_RE.exec(partialJson);
+  return target && target[1] !== "null" && Number(target[1]) >= 0 ? say : null;
 }
