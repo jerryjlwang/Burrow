@@ -17,9 +17,10 @@ Updated: 2026-09-19
 
 - Task 4, motion: `celebrate` is now crouch, launch, peak, fall, land squash, recover, settle (8 frames, 10 fps) with the ears lagging the body and the pocket watch lagging and swinging on a re-linked chain. `wave` runs through the half-folded ear and settles on idle frame 0. The idle breath has the ears lag the head by a frame. Three idle variants, `idle_tap` (foot lifts twice), `idle_watch` (lifts the watch, glances at it, lets it drop) and `idle_flick` (left ear flicks twice), are listed in `idle.variants` with weights. The hop tops out at three pixels because the ears have only three rows of room, and the verifier now flags any frame whose rim would be clipped. Checked at 6x to 12x on light and dark.
 
+- Task 5, audit: `tools/sprites/audit.py` checks every frame for a complete cream rim, left right symmetry outside the watch, chain and glyphs, feet ending on row 53 when grounded, hole pixels only in rows 50 to 55, two pixel thick outlines, stray pixels, and blink and mouth overlays covering the eyes and mouth on every frame that lists them. It found one real problem, the swung watch doubling the jacket outline in the celebrate recover frame, which now swings two pixels clear. Zero findings across 103 frames, plus an eyeball pass of the full cast at 4x on light and dark.
+
 ## In progress
 
-- Task 5, pixel alignment audit of every frame.
 - Task 6, the on-page player, is being built in parallel in `extension/src/components/pet`.
 
 ## Blocked
@@ -28,12 +29,12 @@ Updated: 2026-09-19
 
 ## Next three tasks
 
-1. Task 5: pixel alignment audit of every frame.
-2. Task 6: integrate and check the on-page player on light and dark pages.
-3. Task 7: kid UI, then parent UI, after sign-off on the rabbit.
+1. Task 6: integrate and check the on-page player on light and dark pages.
+2. Micah signs off on the rabbit.
+3. Task 7: kid UI, then parent UI.
 
 ## Notes
 
-- `python tools/sprites/contact_sheet.py --states idle,thinking --scale 8 --out sheet.png` renders any states at any scale on light and dark. Nothing in it writes to the shipped strips.
+- `python tools/sprites/contact_sheet.py --states idle,thinking --frames 0,2 --scale 8 --out sheet.png` renders any states at any scale on light and dark. `python tools/sprites/audit.py` runs the pixel rules. Neither writes to the shipped strips.
 - Typecheck, build and unit tests pass on the `frontend` branch as of this update.
 - The onboarding page still renders the old CSS/SVG mascot. It switches to the rabbit once the sprite player exists.

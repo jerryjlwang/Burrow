@@ -21,6 +21,7 @@ Original design from public domain book details: white fur, checked jacket, wais
 - `rabbit_overlay_blink.png`: half, closed, half.
 - `rabbit_px.py`: the source of truth. Edit a run, run it, every strip regenerates. Strips whose pixels did not change are left alone so git stays quiet.
 - `contact_sheet.py`: renders states at any scale on a light and a dark background. Look at the result before calling art done.
+- `audit.py`: checks every frame against the pixel rules (rim, symmetry, feet row, hole rows, outline thickness, stray pixels, overlay coverage). Run it before committing art.
 - `editor_data.py`: refreshes `tools/sprite-editor.html` with the current strips. Run it after `rabbit_px.py` whenever a state or the cell changes.
 
 ## Commands
@@ -29,6 +30,7 @@ pip install pillow
 python tools/sprites/rabbit_px.py
 python tools/sprites/contact_sheet.py --states idle,thinking --scale 8 --out sheet.png
 python tools/sprites/editor_data.py
+python tools/sprites/audit.py
 ```
 
 ## States

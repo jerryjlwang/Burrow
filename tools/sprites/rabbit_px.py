@@ -483,7 +483,7 @@ def build():
           moved(happy(ear_dy=1), 0, -3),                       # peak, watch catches up
           moved(happy(ear_dy=-1, watch_dy=-1), 0, -1),         # fall: ears and watch trail above
           squash(happy(ear_dy=-1, watch_dy=1), 2),             # land: squash, watch swings down
-          bob(happy(watch_dx=1)),                              # recover: watch swings out
+          bob(happy(watch_dx=2)),                              # recover: watch swings clear of the jacket
           a]                                                   # settle on idle frame 0
     for i, g in enumerate(ce):
         if 2 <= i <= 5:
