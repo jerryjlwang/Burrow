@@ -1,6 +1,58 @@
-import { useStore } from "../content/store";
+import type { RefObject } from "react";
+import { store, useStore, type CharacterState } from "../content/store";
+import type { PetController } from "./pet";
 
-export function DebugPanel() {
+const STATES: { label: string; state: CharacterState; level?: number }[] = [
+  { label: "idle", state: "idle" },
+  { label: "listening", state: "listening" },
+  { label: "thinking", state: "thinking" },
+  { label: "speaking loud", state: "speaking", level: 0.9 },
+  { label: "speaking soft", state: "speaking", level: 0.3 },
+  { label: "celebrating", state: "celebrating" },
+  { label: "confused", state: "confused" },
+  { label: "sleeping", state: "sleeping" },
+  { label: "error", state: "error" },
+  { label: "pointing", state: "pointing" },
+];
+
+/** Buttons that drive the pet without voice or a server. Only the pet ref reaches the sprite player. */
+function PetControls({ pet }: { pet?: RefObject<PetController | null> }) {
+  const attention = useStore((s) => s.attention);
+  const reduced = useStore((s) => s.reducedMotion);
+  const setChar = (state: CharacterState, level?: number) => store.setState({ characterState: state, ...(level !== undefined ? { audioLevel: level } : {}) });
+  const hop = () => {
+    const c = pet?.current;
+    const r = c?.getBodyRect();
+    if (!c || !r) return;
+    const onRight = r.left + r.width / 2 > window.innerWidth / 2;
+    void c.moveTo(onRight ? 160 : window.innerWidth - 160, window.innerHeight - 150);
+  };
+  const jumpIn = () => void pet?.current?.jumpIn(new Promise((r) => setTimeout(r, 1500)));
+  return (
+    <details open>
+      <summary>Pet</summary>
+      <div className="pip-debug-pet">
+        {STATES.map((s) => (
+          <button key={s.label} type="button" onClick={() => setChar(s.state, s.level)}>{s.label}</button>
+        ))}
+      </div>
+      <div className="pip-debug-pet">
+        {([0, 1, 2] as const).map((a) => (
+          <button key={a} type="button" className={attention === a ? "on" : ""} onClick={() => store.setState({ attention: a })}>attention {a}</button>
+        ))}
+        <button type="button" className={reduced ? "on" : ""} onClick={() => store.setState({ reducedMotion: !reduced })}>reduced motion</button>
+      </div>
+      <div className="pip-debug-pet">
+        <button type="button" onClick={hop}>hop across</button>
+        <button type="button" onClick={() => void pet?.current?.jumpOut()}>jump out</button>
+        <button type="button" onClick={jumpIn}>jump in (1.5 s)</button>
+        <button type="button" onClick={() => pet?.current?.play("wave")}>wave</button>
+      </div>
+    </details>
+  );
+}
+
+export function DebugPanel({ pet }: { pet?: RefObject<PetController | null> }) {
   const page = useStore((s) => s.page);
   const debug = useStore((s) => s.debug);
   const signals = useStore((s) => s.signals);
@@ -22,6 +74,7 @@ export function DebugPanel() {
         <span>proactive</span><b>L{debug.proactiveLevel} · s={signals.strength.toFixed(2)} · {signals.summary.join("; ") || "quiet"}</b>
         <span>page</span><b>{page ? `${page.elements.length} elements (${page.truncatedElements} dropped) · ${page.errors.length} errors · quiz=${page.hasQuizUi ? "y" : "n"}${page.isPdf ? " · pdf" : ""}` : "—"}</b>
       </div>
+      <PetControls pet={pet} />
       <details>
         <summary>Elements</summary>
         <ol className="pip-debug-els">
