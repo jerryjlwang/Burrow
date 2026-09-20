@@ -481,7 +481,7 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
 
   /* ---------- the sky: a dithered gradient, painted once per hour bucket and size ---------- */
 
-  // The six band colors are pure at SKY_STOPS and every row between two stops is a mix of those two
+  // The six band colors are pure at SKY_STOPS and every row between two stops is the exact blend of those two
   // colors laid through the 4 x 4 Bayer matrix at the row's fraction: 17 levels from one band to the
   // next instead of one edge, still only band colors on the pixels. The lowest color runs on down
   // behind the hills as the glow. The picture is kept in an offscreen canvas and blitted each frame.
@@ -500,23 +500,29 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
       sky.height = bottom;
     }
     const stops = SKY_STOPS.map((f) => Math.round(L.horizon * f));
-    // One little endian ABGR word per band color.
-    const words = SKY_STOPS.map((_, i) => {
-      const [r, g, b] = skyRGB(`K${i + 1}`, bucket);
-      return ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
-    });
+    const cols = SKY_STOPS.map((_, i) => skyRGB(`K${i + 1}`, bucket));
     const im = skyCtx.createImageData(L.sw, bottom);
     const px = new Uint32Array(im.data.buffer);
     let seg = 0;
     for (let y = 0; y < bottom; y++) {
       while (seg < stops.length - 2 && y >= stops[seg + 1]) seg++;
       const f = y <= stops[seg] ? 0 : y >= stops[seg + 1] ? 1 : (y - stops[seg]) / (stops[seg + 1] - stops[seg]);
-      const level = Math.round(f * 16);
-      const upper = words[seg];
-      const lower = words[seg + 1];
+      const a = cols[seg];
+      const b = cols[seg + 1];
+      // The row's exact color between the two band colors, then ordered dithering of the rounding
+      // error alone: one value either side, never a mix of two band colors, so there is no grain.
+      const r = a[0] + (b[0] - a[0]) * f;
+      const g = a[1] + (b[1] - a[1]) * f;
+      const bl = a[2] + (b[2] - a[2]) * f;
       const row = BAYER[y & 3];
       const o = y * L.sw;
-      for (let x = 0; x < L.sw; x++) px[o + x] = row[x & 3] < level ? lower : upper;
+      for (let x = 0; x < L.sw; x++) {
+        const d = row[x & 3] / 16 - 0.46875;
+        const rr = r + d < 0 ? 0 : r + d > 255 ? 255 : Math.round(r + d);
+        const gg = g + d < 0 ? 0 : g + d > 255 ? 255 : Math.round(g + d);
+        const bb = bl + d < 0 ? 0 : bl + d > 255 ? 255 : Math.round(bl + d);
+        px[o + x] = ((255 << 24) | (bb << 16) | (gg << 8) | rr) >>> 0;
+      }
     }
     skyCtx.putImageData(im, 0, 0);
   };
