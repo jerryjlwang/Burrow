@@ -61,3 +61,30 @@ symmetric, which colours, and the one feature that must survive. It never return
   frame; a per limb wave needs rigging the scanner cannot infer.
 - Thin legs and fingers still drop out. The fix is to dilate strokes before pooling, not to lower the
   bar, which floods the silhouette.
+
+## What a real sketch taught us
+
+A pen drawing of Pikachu on dotted notebook paper, shot on a phone, broke four things that the
+synthetic test never would have:
+
+- **HEIC.** Pillow cannot read the iPhone's default format at all. `open_any` now tries pillow-heif,
+  then falls back to `sips` on macOS. On Windows, `pip install pillow-heif` is the answer.
+- **Dotted paper.** Every printed dot read as ink. An opening (erode then dilate) drops anything
+  thinner than the pen and leaves the strokes whole.
+- **A speck at the edge of the photo.** One mark outside the drawing stretched the bounding box, and
+  the sprite shrank to a blob in the corner of the cell. Only blobs that are large, or that sit
+  inside the drawing's own box, are kept: that keeps eyes and a mouth, which are small and separate.
+- **Line art is mostly paper.** A pen drawing has no fills, so it shrank to a hollow outline. The
+  body is now flood filled from the middle outwards, not from a corner: a hand drawn outline always
+  has a break, and a corner flood pours through it and fills nothing. A leak outward is visible
+  (the fill reaches the edge of the picture), so the strokes are sealed harder and it tries again,
+  and if nothing holds the body is left unfilled rather than flooding the page.
+
+One more thing a flat threshold got wrong: the stroke detector finds *edges*, which is right for a
+thin face line drawn over a large dark fill, and wrong for pen on paper, where it hollows a thick
+line into two thin ones that fall apart when shrunk. Line art uses the ink mask itself.
+
+With the model in the loop the whole run is about 13 seconds, nearly all of it the one vision call,
+and it names the character itself ("Pikachu face") and gives the colours. Without it, `--line-art
+--body "#f7d02c"` does the same in under a second, which is the safer thing to have bound to a key
+on the day.
