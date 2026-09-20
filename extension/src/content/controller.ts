@@ -5,6 +5,7 @@ import { slugify } from "@shared/graph";
 import { parsePlan, topicPlanKey } from "@shared/plan";
 import { describeSketch, eraseFromSketch, parseSketch } from "@shared/sketch";
 import { validateInkJudgement } from "@shared/ink";
+import { isVideoQuestion, pickRelated, videoQuery } from "@shared/related";
 import { planStepSuggestion } from "@shared/path";
 import type { PlanRoute } from "./store";
 import { classifyTask } from "../actions/policy";
@@ -61,7 +62,11 @@ export class CompanionController {
       onProbableEndOfTurn: (text) => {
         if (!this.pendingConfirmation && !this.pendingOffer && !isStopCommand(text) && isExtensionContextValid()) this.loop.speculate(text);
       },
-      onTurnResumed: () => this.loop.dropSpeculation(),
+      // Only while it is actually playing: a paused video says nothing the mic could pick up.
+      ambientSpeech: () => {
+        const v = this.video.context();
+        return v && !v.paused && v.hasTranscript ? v.heard : null;
+      },
       onSpeechStart: () => this.handleSpeechStart(),
     });
     this.loop = new AgentLoop({
@@ -156,6 +161,11 @@ export class CompanionController {
         const context = this.video.context();
         return context ? { context, frame: () => this.video.watcher.frame() } : null;
       },
+      videoInView: () => {
+        const r = this.video.watcher.rect;
+        return !!r && r.bottom > 80 && r.top < window.innerHeight - 80;
+      },
+      returnToVideo: () => this.video.watcher.element?.scrollIntoView({ behavior: "smooth", block: "center" }),
     });
     this.video = new VideoCompanion({
       session: this.session,
@@ -475,6 +485,51 @@ export class CompanionController {
     this.session.addTurn({ role: "user", text, at: Date.now() });
     void this.noteQuestion(text);
     await this.loop.run(text, { source });
+    void this.maybeRecommendVideo(text);
+  }
+
+  /** A question asked about a video already answered — track the URL so each video recommends at most once. */
+  private recommendedVideoFor = new Set<string>();
+
+  /**
+   * After answering a question about a video, offer ONE related video as a small banner. The
+   * lookup runs server-side; no result, no banner — a recommendation nobody asked for owes no error.
+   */
+  private async maybeRecommendVideo(question: string): Promise<void> {
+    if (this.disposed || !store.getState().settings.proactiveEnabled) return;
+    if (!this.video.context() || !isVideoQuestion(question)) return;
+    const href = location.href;
+    if (this.recommendedVideoFor.has(href)) return;
+    this.recommendedVideoFor.add(href);
+    try {
+      const r = await sendToBackground({ type: "lookup", query: videoQuery(document.title), prefer: "video" }, 15_000);
+      const pick = pickRelated(r.results, href);
+      if (!pick || this.disposed) return;
+      const id = `video-reco-${Date.now()}`;
+      const settle = () => {
+        this.bubbles.clear((b) => b.id === id);
+        store.setState((s) => (s.attention === 1 ? { attention: 0 } : {}));
+      };
+      store.setState({ attention: 1 });
+      this.showBubble({
+        id,
+        text: `If it helps, I found another video on this: “${truncate(pick.title, 70)}”`,
+        // kind "offer" (with onAction) is the one banner shape that renders beside an open panel too.
+        kind: "offer",
+        actions: [
+          { label: "Watch", value: "open", primary: true },
+          { label: "No thanks", value: "dismiss" },
+        ],
+        onAction: (v) => {
+          if (v === "open" || v === "accept") void sendToBackground({ type: "nav.open", url: pick.url }, 3000).catch(() => window.open(pick.url, "_blank", "noopener"));
+          settle();
+        },
+        expiresAt: Date.now() + 25_000,
+      });
+      window.setTimeout(settle, 25_000);
+    } catch {
+      /* quiet */
+    }
   }
 
   private handleSpeechStart(): void {

@@ -137,6 +137,12 @@ try {
   const analysed = serverLog.join("").split("\n").filter((l) => l.includes("analyzed"));
   check("the video was analysed once, from the page's own captions, across both loads", analysed.length === 1 && /"transcript":"page"/.test(analysed[0]), `${analysed.length} analyses`);
 
+  // ---- 4b. The answered question earns ONE related-video banner with a working link ----
+  const reco = await until(async () => { const b = await bubble(page); return b && /another video/i.test(b.text) ? b : null; }, 12_000);
+  check("a question about the video earns a related-video banner", !!reco && reco.buttons.includes("Watch"), reco ? `"${reco.text}" [${reco.buttons.join(" | ")}]` : "no banner");
+  if (reco) await page.locator(".pip-bubble .pip-btn", { hasText: "No thanks" }).click().catch(() => null);
+  await until(async () => (await bubble(page)) === null, 4000);
+
   // ---- 5. A drawing on a video page goes INTO the picture's empty space, solid and legible ----
   await page.evaluate(() => document.getElementById("lesson").pause());
   await page.locator(".pip-input").fill("can you draw a right triangle?");
