@@ -36,11 +36,12 @@ Updated: 2026-09-19
 - Typewriter speech with voice blips in the bubble, VT323 for numerals, chiptune cues, escorted searches (he dives before a page leaves and pops out on the next one through `burrow.arrive`), page events `burrow:goto`, `burrow:play` and `burrow:leave` so the extension's own pages can direct him.
 - `extension/src/fx/index.ts` (built as `fx.js`, included by the pages): a WebGL overlay with `ogl` that draws 3 px scanlines and a faint animated dither over the page, and a Bayer dither dissolve on load and on `burrow:leave`. Sits under the companion so the rabbit stays crisp.
 
+- New tab meadow: `tools/sprites/scene_px.py` writes one atlas per time of day plus the pixel clock digits and sign planks to `extension/public/scene/`; `extension/src/newtab/scene.ts` composes sky bands, sun or moon and stars, drifting clouds, mirrored hills, hedge, ground, a path to the burrow mound with a door, window and chimney smoke, fences, signposts, bushes, swaying tufts, flowers, mushrooms, birds and butterflies by day, fireflies at night, rain on one load in six, and whole-pixel parallax. `clock.ts` draws the time from 5 x 7 pixel digits. The search sits on a plank: typing pops letters with a blip, focus calls the rabbit over and he listens, Enter dispatches `burrow:leave`. Checked with `tools/pet/check.mjs` at four hours of the day.
+- Parent map: `extension/src/parent/graph-view.ts` draws the concept graph as pixel rooms and tunnels laid out by `d3-force`, with hover tooltips, drag, click to the room card, cobwebs on forgotten rooms and blinking red dots on shaky ones.
+
 ## In progress
 
-- The new tab meadow scene (hand-placed layers, time of day, clouds, grass, shrubs, fireflies, pixel clock, signpost search that calls the rabbit over), by a subagent in `extension/src/newtab` and `tools/sprites/scene_px.py`.
-- The live knowledge graph on the parent page with `d3-force`, by a subagent in `extension/src/parent`.
-- After both land: include `fx.js` on the new tab and parent pages, run every check, merge main, push.
+- Nothing.
 
 ## Blocked
 

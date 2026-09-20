@@ -24,3 +24,8 @@ Plain, warm, short. The rabbit is a learning buddy, not a best friend. He says "
 ## Parent UI (later)
 
 Calm and precise: system font, cream and brown, tables not bubbles. Cards for each capability the rabbit can be granted, what the kid taught, and where they are shaky. Lives on the extension's own page, not on the kid's web page.
+
+## New tab page
+
+The kid's start page is the meadow above the burrow: hand-placed pixel layers from `tools/sprites/scene_px.py`, composed at source resolution and drawn at 3x by `extension/src/newtab/scene.ts`. The light follows the time of day (morning, day, evening, night, with `?hour=N` to force it), clouds drift, grass sways, fireflies blink at night, and the mouse moves the layers in whole pixels. The clock is pixel digits from `scene/digits.png`. The search lives on a wooden sign: typing pops letters with a blip, focusing calls the rabbit over to listen, and Enter makes him dive down his hole before the page leaves, then pop out on the results page. The `fx.js` overlay adds scanlines and the dither dissolve.
+

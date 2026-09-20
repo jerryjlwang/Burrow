@@ -6,27 +6,57 @@
     <title>New Tab</title>
     <link rel="stylesheet" href="burrow.css" />
     <style>
-      main { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 24px 150px; gap: 30px; }
-      .clock { font-family: var(--font-digits); font-size: 108px; line-height: 0.9; margin: 0; text-align: center; letter-spacing: 0.02em; }
-      .greet { margin: 9px 0 0; color: var(--muted); font-size: 20px; text-align: center; }
-      form.search { width: min(660px, 100%); }
-      .search-box { display: flex; align-items: center; gap: 12px; width: 100%; border: 15px solid transparent; border-image: url("ui/bubble.png") 5 fill / 15px repeat; image-rendering: pixelated; box-shadow: var(--shadow); }
-      .search-box:focus-within { box-shadow: 0 0 0 3px var(--gold); }
-      .search-box input { flex: 1; min-width: 0; border: 0; background: transparent; font-size: 20px; outline: none; }
-      .search-box svg { color: var(--muted); flex-shrink: 0; }
-      .shortcuts { display: grid; grid-template-columns: repeat(auto-fit, 96px); justify-content: center; gap: 12px; width: min(820px, 100%); }
-      .shortcut { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 6px 3px 9px; text-decoration: none; color: var(--ink); font-size: 15px; }
-      .shortcut .icon { width: 54px; height: 54px; display: grid; place-items: center; border: 12px solid transparent; border-image: url("ui/button_quiet.png") 4 fill / 12px repeat; image-rendering: pixelated; box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.2); }
-      .shortcut:hover .icon { border-image-source: url("ui/button.png"); }
+      /* The meadow is a full window canvas at 3x behind everything; the UI is pinned to the ground line
+         so the signs stay planted whatever the window height. All offsets are multiples of 3. */
+      html, body { height: 100%; overflow: hidden; }
+      body { background-image: none; background-color: #78be54; }
+      canvas.scene { position: fixed; left: 0; top: 0; z-index: 0; image-rendering: pixelated; }
+      .ui { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
+      .ui > * { pointer-events: auto; }
+
+      .clockwrap { position: absolute; top: 7vh; left: 0; right: 0; text-align: center; pointer-events: none; }
+      .clock { display: block; margin: 0 auto; image-rendering: pixelated; }
+      .greet { margin: 15px 0 0; font-size: 20px; color: var(--ink); }
+      body[data-tod="evening"] .greet, body[data-tod="night"] .greet { color: var(--cream); text-shadow: 3px 3px 0 var(--ink); }
+
+      /* Search: a painted plank on two posts, planted in the grass. */
+      .search { position: absolute; left: 0; right: 0; bottom: 39px; display: flex; flex-direction: column; align-items: center; pointer-events: none; }
+      .search .board { pointer-events: auto; position: relative; width: min(630px, calc(100% - 48px)); height: 72px; border: 15px solid transparent; border-image: url("scene/sign.png") 5 fill / 15px repeat; image-rendering: pixelated; box-shadow: var(--shadow); cursor: text; }
+      .search .board:focus-within { box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.25), 0 0 0 3px var(--gold); }
+      .search input { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; margin: 0; padding: 0 9px; background: transparent; color: transparent; caret-color: transparent; font-size: 20px; outline: none; }
+      .search input::placeholder { color: transparent; }
+      .search input::selection { background: rgba(47, 143, 131, 0.35); }
+      .mirror { position: absolute; inset: 0; display: flex; align-items: center; padding: 0 9px; font-size: 20px; line-height: 1; white-space: pre; overflow: hidden; color: var(--ink); }
+      .mirror.tail { direction: rtl; }
+      .mirror .inner { direction: ltr; unicode-bidi: isolate; display: inline-block; }
+      .mirror .ph { color: var(--muted); }
+      .mirror .pop { display: inline-block; font-weight: 400; animation: pop 120ms steps(1, end); }
+      @keyframes pop { 0% { transform: translateY(-6px); } 50% { transform: translateY(-3px); } 100% { transform: translateY(0); } }
+      .caret { display: none; width: 3px; height: 21px; background: var(--ink); margin-left: 2px; vertical-align: -3px; }
+      .board:focus-within .caret { display: inline-block; animation: blink 1s steps(1, end) infinite; }
+      @keyframes blink { 50% { opacity: 0; } }
+      .legs { display: flex; justify-content: space-between; width: min(630px, calc(100% - 48px)); padding: 0 96px; margin-top: -3px; }
+      .leg { width: 18px; height: 93px; background: url("scene/post.png") repeat-y; background-size: 18px 18px; image-rendering: pixelated; }
+
+      /* Top sites: small signs on short posts along the hedge line. */
+      .shortcuts { position: absolute; left: 0; right: 0; bottom: 225px; display: flex; justify-content: center; gap: 12px; pointer-events: none; }
+      .shortcut { pointer-events: auto; display: flex; flex-direction: column; align-items: center; width: 120px; text-decoration: none; color: var(--ink); }
+      .shortcut:hover, .shortcut:focus-visible { transform: translateY(-3px); outline: none; }
+      .shortcut .board { width: 120px; height: 78px; border: 15px solid transparent; border-image: url("scene/sign.png") 5 fill / 15px repeat; image-rendering: pixelated; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; box-shadow: var(--shadow); }
+      .shortcut:hover .board, .shortcut:focus-visible .board { box-shadow: 6px 6px 0 rgba(59, 42, 35, 0.25); }
       .shortcut img { width: 24px; height: 24px; image-rendering: auto; }
-      .shortcut span:last-child { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .hint { color: var(--muted); font-size: 17px; margin: 0; text-align: center; }
-      .hint b { color: var(--ink); font-weight: 400; }
-      .empty { color: var(--muted); font-size: 15px; }
+      .shortcut .label { font-size: 17px; line-height: 1; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .shortcut .post { width: 18px; height: 27px; margin-top: -3px; background: url("scene/post.png") repeat-y; background-size: 18px 18px; image-rendering: pixelated; }
+      .empty { position: absolute; left: 0; right: 0; bottom: 255px; margin: 0; text-align: center; color: var(--cream); text-shadow: 3px 3px 0 var(--ink); font-size: 17px; pointer-events: none; }
+
+      .hint { position: absolute; left: 18px; bottom: 18px; margin: 0; max-width: 330px; font-size: 17px; line-height: 1.25; }
+      .hint b { font-weight: 400; color: var(--teal-deep); }
+      @media (max-width: 900px) { .hint { max-width: 240px; } }
     </style>
   </head>
   <body>
     <div id="root"></div>
+    <script src="fx.js"></script>
     <script src="newtab.js"></script>
   </body>
 </html>

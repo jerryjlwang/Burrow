@@ -401,17 +401,93 @@ try {
   await ob.screenshot({ path: resolve(out, "onboarding.png") });
   await ob.close();
 
-  // The extension's own pages wear the same frames and font.
-  const nt = await context.newPage();
-  await nt.setViewportSize({ width: 1280, height: 800 });
-  await nt.goto(`chrome-extension://${extId}/newtab.html`);
-  await nt.locator(".pet-canvas").waitFor({ timeout: 8000 }).catch(() => null);
-  await wait(800);
+  // The new tab page: a pixel meadow at 3x behind the clock, the search sign and the shortcuts.
+  // The debug panel is hidden for these shots and put back afterwards.
+  await sw.evaluate(() => chrome.storage.local.set({ "pip.settings": { debugMode: false, onboarded: true, proactiveEnabled: false, voiceAutoResume: false } }));
+  const openNewTab = async (query = "") => {
+    const p = await context.newPage();
+    await p.setViewportSize({ width: 1280, height: 800 });
+    p.on("pageerror", (e) => consoleLines.push(`[newtab] pageerror: ${e.message}`));
+    await p.goto(`chrome-extension://${extId}/newtab.html${query}`);
+    await p.locator(".pet-canvas").waitFor({ timeout: 8000 }).catch(() => null);
+    await p.locator('canvas.scene[data-ready="1"]').waitFor({ timeout: 8000 }).catch(() => null);
+    await p.locator("canvas.clock").waitFor({ timeout: 8000 }).catch(() => null);
+    await wait(900);
+    return p;
+  };
+  for (const [hour, name] of [[7, "newtab-morning"], [13, "newtab-day"], [19, "newtab-evening"], [23, "newtab-night"]]) {
+    const p = await openNewTab(`?hour=${hour}`);
+    await p.screenshot({ path: resolve(out, `${name}.png`) });
+    await p.close();
+  }
+  // Reduced motion: the scene still draws, then holds still.
+  const rm = await context.newPage();
+  await rm.emulateMedia({ reducedMotion: "reduce" });
+  await rm.setViewportSize({ width: 1280, height: 800 });
+  await rm.goto(`chrome-extension://${extId}/newtab.html?hour=13`);
+  await rm.locator('canvas.scene[data-ready="1"]').waitFor({ timeout: 8000 }).catch(() => null);
+  await wait(600);
+  const still1 = await rm.locator("canvas.scene").evaluate((c) => c.toDataURL());
+  await rm.mouse.move(60, 60);
+  await wait(700);
+  const still2 = await rm.locator("canvas.scene").evaluate((c) => c.toDataURL());
+  check("new tab under reduced motion draws the scene once and holds it still", still1.length > 1000 && still1 === still2, `${still1.length} bytes`);
+  await rm.close();
+
+  const nt = await openNewTab();
   const ntFont = await nt.evaluate(() => document.fonts.check('17px "Burrow Pixel"'));
   check("new tab page loads the Burrow font", ntFont);
   check("new tab page has the rabbit", (await nt.locator(".pet-canvas").count()) > 0);
+  const scene = await nt.locator("canvas.scene").evaluate((c) => {
+    const r = c.getBoundingClientRect();
+    return { w: c.width, h: c.height, cssW: r.width, cssH: r.height, rendering: getComputedStyle(c).imageRendering, ready: c.dataset.ready, tod: c.dataset.tod };
+  });
+  check("new tab scene canvas is a whole multiple of 3, covers the window and is pixelated", scene.w % 3 === 0 && scene.h % 3 === 0 && scene.w === scene.cssW && scene.h === scene.cssH && scene.w >= 1280 && scene.h >= 800 && scene.rendering === "pixelated" && scene.ready === "1", JSON.stringify(scene));
+  const clock = await nt.locator("canvas.clock").evaluate((c) => ({ w: c.width, h: c.height, cssW: c.getBoundingClientRect().width, rendering: getComputedStyle(c).imageRendering, label: c.getAttribute("aria-label") }));
+  check("new tab draws the pixel clock at a whole scale", clock.w > 0 && clock.h === 9 * 13 && clock.w === clock.cssW && clock.rendering === "pixelated" && /^Current time \d{1,2}:\d{2} [AP]M$/.test(clock.label ?? ""), JSON.stringify(clock));
   await nt.screenshot({ path: resolve(out, "newtab.png") });
+
+  // Focusing the search brings the rabbit over; each typed character pops.
+  const petRect = () => nt.evaluate(() => {
+    const r = document.getElementById("pip-companion-host")?.shadowRoot?.querySelector(".pet-hit")?.getBoundingClientRect();
+    return r ? { x: Math.round(r.x), y: Math.round(r.y) } : null;
+  });
+  const r0 = await petRect();
+  const popsBefore = Number(await nt.locator("form.search").getAttribute("data-pops"));
+  await nt.locator("form.search input").click();
+  await nt.keyboard.type("moat", { delay: 60 });
+  await wait(150);
+  const popsAfter = Number(await nt.locator("form.search").getAttribute("data-pops"));
+  const mirror = await nt.locator("form.search .mirror").textContent();
+  check("typing into the search pops each character", popsAfter === popsBefore + 4 && (mirror ?? "").includes("moat"), JSON.stringify({ popsBefore, popsAfter, mirror }));
+  const frameA = await nt.locator("canvas.scene").evaluate((c) => c.toDataURL());
+  await wait(1200);
+  const frameB = await nt.locator("canvas.scene").evaluate((c) => c.toDataURL());
+  check("new tab scene animates when motion is allowed", frameA !== frameB);
+  const moved = await nt
+    .waitForFunction((start) => {
+      const r = document.getElementById("pip-companion-host")?.shadowRoot?.querySelector(".pet-hit")?.getBoundingClientRect();
+      return !!r && !!start && (Math.abs(Math.round(r.x) - start.x) >= 3 || Math.abs(Math.round(r.y) - start.y) >= 3);
+    }, r0, { timeout: 3000 })
+    .then(() => true, () => false);
+  check("focusing the search brings the rabbit to the sign", moved, JSON.stringify({ r0, now: await petRect() }));
+  await wait(2600);
+  const r1 = await petRect();
+  const board = await nt.locator("form.search .board").boundingBox();
+  check("the rabbit stands beside the sign, not on it", r1 && board && (r1.x >= board.x + board.width || r1.x + 93 <= board.x), JSON.stringify({ r1, board }));
+  await nt.screenshot({ path: resolve(out, "newtab-listening.png") });
+
+  // Enter hands the search to the rabbit through burrow:leave: he dives, the arrival is recorded, then the
+  // page navigates. The navigation is held open by the route so the page stays put for the check.
+  await nt.route("https://www.google.com/**", () => undefined);
+  await nt.keyboard.press("Enter");
+  await wait(2800);
+  const arrive = await sw.evaluate(() => chrome.storage.local.get("burrow.arrive"));
+  const rec = arrive?.["burrow.arrive"];
+  check("Enter escorts the search through burrow:leave", !!rec && /google\.com\/search\?q=moat/.test(rec.url ?? "") && rec.line === "Here's what I found.", JSON.stringify(arrive));
+  await sw.evaluate(() => chrome.storage.local.remove("burrow.arrive"));
   await nt.close();
+  await sw.evaluate(() => chrome.storage.local.set({ "pip.settings": { debugMode: true, onboarded: true, proactiveEnabled: false, voiceAutoResume: false } }));
   const pp = await context.newPage();
   await pp.setViewportSize({ width: 360, height: 520 });
   await pp.goto(`chrome-extension://${extId}/popup.html`);

@@ -24,6 +24,7 @@ Original design from public domain book details: white fur, checked jacket, wais
 - `audit.py`: checks every frame against the pixel rules (rim, symmetry, feet row, hole rows, outline thickness, stray pixels, overlay coverage). Run it before committing art.
 - `editor_data.py`: refreshes `tools/sprite-editor.html` with the current strips. Run it after `rabbit_px.py` whenever a state or the cell changes.
 - `ui_px.py`: hand-placed 9-slice frames for the speech bubble and buttons in the same palette, written to `extension/public/ui/`. `--preview out.png` composes samples at 3x.
+- `scene_px.py`: the new tab meadow (sky, hills, hedge, grass, shrubs, flowers, the burrow mound, clouds, birds, fireflies, the pixel clock digits, the sign planks) as one atlas per time of day plus `manifest.json`, written to `extension/public/scene/`. `--sheet out.png` renders every piece at 4x.
 
 ## Commands
 ```
