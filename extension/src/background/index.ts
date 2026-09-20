@@ -352,6 +352,8 @@ async function handle(msg: BgRequest, sender: chrome.runtime.MessageSender): Pro
       return (await postJson("/api/lookup", { query: msg.query, prefer: msg.prefer }, 15_000));
     case "steps.plan":
       return (await postJson("/api/steps/plan", msg.request, 25_000));
+    case "video.chapter":
+      return (await postJson("/api/video/chapter", msg.request, 12_000));
     case "video.analyze":
       return (await postJson("/api/video/analyze", msg.request, 90_000));
     case "steps.judge":

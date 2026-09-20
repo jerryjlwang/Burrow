@@ -77,3 +77,22 @@ describe("VideoService", () => {
     expect((await svc.analyze({ url: "https://youtu.be/abcdef12345" })).transcript).toBe("service");
   });
 });
+
+describe("pickChapter", () => {
+  const chapters = [
+    { t: 0, stamp: "0:00", title: "What a two-step equation is", line: "0:00 What a two-step equation is" },
+    { t: 24, stamp: "0:24", title: "The sign mistake, and how to catch it", line: "0:24 The sign mistake, and how to catch it" },
+  ];
+  const llm = (complete: () => Promise<unknown>) => ({ complete: vi.fn(complete) }) as unknown as OpenAIProvider;
+
+  it("takes the model's choice, and refuses an index that is not in the list", async () => {
+    expect(await new VideoService(llm(async () => ({ index: 1 })), "").pickChapter({ request: "where does it go wrong", chapters })).toEqual({ index: 1, by: "llm" });
+    expect(await new VideoService(llm(async () => ({ index: 7 })), "").pickChapter({ request: "where does it go wrong", chapters })).toEqual({ index: null, by: "llm" });
+  });
+
+  it("matches on words when there is no model or the call fails, so the path never stalls", async () => {
+    const asked = { request: "find the chapter about the sign mistake", chapters };
+    expect(await new VideoService(null, "").pickChapter(asked)).toEqual({ index: 1, by: "lexical" });
+    expect(await new VideoService(llm(async () => Promise.reject(new Error("timed out"))), "").pickChapter(asked)).toEqual({ index: 1, by: "lexical" });
+  });
+});

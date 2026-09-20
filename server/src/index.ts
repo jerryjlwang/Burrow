@@ -10,7 +10,7 @@ import { InkService } from "./api/ink";
 import { CharacterService, type PaintInput } from "./api/character";
 import { NotebookService, type NotebookReadInput } from "./api/notebook";
 import { StepService, type JudgeRequest, type PlanRequest } from "./api/steps";
-import { VideoService, type VideoAnalyzeRequest } from "./api/video";
+import { VideoService, type ChapterPickRequest, type VideoAnalyzeRequest } from "./api/video";
 import { OpenAIProvider } from "./agent/openai";
 import { attachSttSession } from "./voice/stt";
 import { attachTtsSession } from "./voice/tts";
@@ -157,6 +157,16 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       json(res, 200, await steps.judge(body));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/video/chapter") {
+      const body = (await readJson(req)) as ChapterPickRequest;
+      const valid = body && typeof body.request === "string" && body.request.trim() && body.request.length <= 500 && Array.isArray(body.chapters) && body.chapters.length >= 2 && body.chapters.length <= 200 && body.chapters.every((c) => c && typeof c.title === "string" && typeof c.stamp === "string" && Number.isFinite(c.t));
+      if (!valid) {
+        json(res, 400, { error: "invalid input" });
+        return;
+      }
+      json(res, 200, await video.pickChapter(body));
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/video/analyze") {

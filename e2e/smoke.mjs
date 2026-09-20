@@ -633,6 +633,31 @@ try {
       await new Promise((r) => setTimeout(r, 300));
     }
     check("the page returns to the video once the pointer is done", left && back);
+
+    // The chapter path is fixed: down to the chapter list, ring the chapter that fits, set the video to it, back up.
+    await vp.evaluate(() => { const v = document.getElementById("lesson"); v.pause(); v.currentTime = 2; });
+    await vp.locator(".pip-input").fill("look at the chapter list and find where he explains the sign mistake");
+    await vp.locator(".pip-send").click();
+    let wentDown = false;
+    let ringed = "";
+    for (const t0 = Date.now(); Date.now() - t0 < 8000 && !(wentDown && ringed); ) {
+      wentDown = wentDown || !(await playerOnScreen());
+      ringed = ringed || (await vp.evaluate(() => {
+        const hl = document.getElementById("pip-companion-host")?.shadowRoot?.querySelector(".pip-hl")?.getBoundingClientRect();
+        if (!hl) return "";
+        const hit = [...document.querySelectorAll("#chapters a")].find((a) => { const r = a.getBoundingClientRect(); return Math.abs(r.top - hl.top) < 14 && Math.abs(r.left - hl.left) < 40; });
+        return hit?.textContent ?? "";
+      }));
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    check("a chapter request goes down to the chapter list and rings the chapter that fits", wentDown && /sign mistake/i.test(ringed), JSON.stringify({ wentDown, ringed }));
+    let landed = null;
+    for (const t0 = Date.now(); Date.now() - t0 < 10000 && !landed; ) {
+      const t = await vp.evaluate(() => document.getElementById("lesson").currentTime);
+      if (Math.abs(t - 24) < 1.5 && (await playerOnScreen())) landed = t;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    check("then sets the video to that chapter and comes back up to the player", landed !== null, JSON.stringify({ t: await vp.evaluate(() => document.getElementById("lesson").currentTime), onScreen: await playerOnScreen() }));
     await vp.close();
   }
 

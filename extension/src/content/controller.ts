@@ -8,6 +8,8 @@ import { validateInkJudgement } from "@shared/ink";
 import { pageRole } from "../components/handoff";
 import { markInkAt } from "../components/InkCoach";
 import { isVideoQuestion, pickRelated, relatedQuery } from "@shared/related";
+import { isChapterRequest, pickChapterLexical } from "@shared/chapters";
+import { chapterTarget, openDescription, readChapters } from "../page-understanding/chapters";
 import { planStepSuggestion } from "@shared/path";
 import type { PlanRoute } from "./store";
 import { classifyTask } from "../actions/policy";
@@ -30,6 +32,8 @@ import { sendToBackground, isExtensionContextValid, type ContentBroadcast, type 
 import { log, onLog, setDebugLogging } from "../shared/logger";
 
 const logger = log("ui");
+/** How long the chosen chapter stays ringed in the list before the page goes back up to the player: just long enough to see which one it was. */
+const CHAPTER_SHOWN_MS = 1200;
 
 /** Composes page understanding, actions, the agent loop, voice and proactivity for one tab. */
 export class CompanionController {
@@ -522,10 +526,59 @@ export class CompanionController {
     this.overlay.clear();
     this.session.addTurn({ role: "user", text, at: Date.now() });
     void this.noteQuestion(text);
+    if (this.video.watcher.active && isChapterRequest(text) && (await this.goToChapter(text))) return;
     // On the board, words that follow a tablet nudge are about it: the lines and the private diagnosis ride along.
     const inkGoal = this.engine.inkFollowUpGoal();
     await this.loop.run(text, { source, goal: inkGoal ?? undefined });
     void this.maybeRecommendVideo(text);
+  }
+
+  /**
+   * The chapter path, fixed rather than left to the model to improvise: open the description, go
+   * down to the chapter list, choose the chapter that covers what they asked for, set the video to
+   * its time, show them the chapter in the list, and come back up to the player. Only the choosing is a
+   * model call. Returns false, having said nothing, when there is no chapter list or no chapter
+   * fits — the ordinary agent loop then takes the request.
+   */
+  private async goToChapter(request: string): Promise<boolean> {
+    this.loop.cancel();
+    store.setState({ busy: true, characterState: "thinking", status: "Checking the chapters…" });
+    try {
+      await openDescription();
+      const chapters = readChapters();
+      if (chapters.length < 2) return false;
+      // Two of their own words in a chapter's title is a plain match: no need to wait on the model for it.
+      const plain = pickChapterLexical(request, chapters, 2);
+      const picking = plain !== null
+        ? Promise.resolve({ index: plain, by: "lexical" as const })
+        : sendToBackground({ type: "video.chapter", request: { request, title: document.title, chapters } }, 12_000).catch((e) => {
+            logger.warn("chapter pick unavailable", { error: String(e) });
+            return null;
+          });
+      // Down to the list while the choice is being made, so the wait is spent somewhere useful.
+      chapterTarget(chapters[0]).el.scrollIntoView({ behavior: "smooth", block: "center" });
+      const pick = await picking;
+      const index = pick?.index ?? null;
+      logger.info("chapter path", { chapters: chapters.length, index, by: pick?.by ?? "no answer" });
+      if (index === null || this.disposed) return false;
+      const chapter = chapters[index];
+      const { el, locator } = chapterTarget(chapter);
+      store.setState({ characterState: "acting", status: "" });
+      // The video moves the moment the chapter is known; the ring is only there to show which one it was.
+      this.video.control("seek", String(chapter.t));
+      await this.overlay.pointAt(this.registry.idFor(el), { locator, durationMs: CHAPTER_SHOWN_MS + 1500 });
+      this.reply(`"${truncate(chapter.title, 80)}" is at ${chapter.stamp}. You're there now.`);
+      await new Promise((r) => setTimeout(r, CHAPTER_SHOWN_MS));
+      if (this.disposed) return true;
+      this.overlay.clear();
+      this.video.watcher.element?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return true;
+    } catch (e) {
+      logger.warn("chapter path failed; handing over to the agent", { error: String(e) });
+      return false;
+    } finally {
+      store.setState((s) => ({ busy: false, status: "", characterState: s.voice.ttsPlaying ? "speaking" : this.voice.listening ? "listening" : "idle" }));
+    }
   }
 
   /** A question asked about a video already answered — track the URL so each video recommends at most once. */

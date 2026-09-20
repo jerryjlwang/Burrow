@@ -1,3 +1,4 @@
+import { pickChapterLexical, type Chapter } from "@shared/chapters";
 import { RAISE_KINDS, heuristicNotes, parseWatchNote, stampedTranscript, type TranscriptSegment, type WatchNote } from "@shared/video";
 import type { OpenAIProvider } from "../agent/openai";
 import { log } from "../util/logger";
@@ -109,6 +110,15 @@ export async function fetchServiceTranscript(videoId: string, apiKey: string, fe
   return sanitize(body.content.map((c) => ({ text: c.text, start: (c.offset ?? NaN) / 1000, end: ((c.offset ?? NaN) + (c.duration ?? 0)) / 1000 })));
 }
 
+export interface ChapterPickRequest {
+  request: string;
+  title?: string;
+  chapters: Chapter[];
+}
+
+const CHAPTER_PROMPT = `A student watching a video asked to be taken to a part of it. You are given the video's chapter list. Reply with the index of the ONE chapter where what they asked for is covered. Judge by meaning, not shared words. If they did not ask for any particular part (they only want to see the list), or no chapter plausibly covers it, reply with null.`;
+const CHAPTER_SCHEMA = { type: "object", properties: { index: { type: ["integer", "null"] } }, required: ["index"], additionalProperties: false };
+
 export class VideoService {
   private cache = new Map<string, Promise<VideoAnalysis>>();
 
@@ -158,6 +168,26 @@ export class VideoService {
     if (notesBy !== "llm") notes = heuristicNotes(segments, Date.now());
     logger.info("analyzed", { key, transcript, notesBy, segments: segments.length, notes: notes.length, raises: notes.filter((n) => n.raise).length, ms: Date.now() - started });
     return { key, segments, notes, transcript, notesBy };
+  }
+
+  /**
+   * Which chapter the student is asking for, by index; null when none fits (or they named none).
+   * The model reads meaning ("where he shows the mistake" → "The sign error"); word overlap stands
+   * in when there is no model or the call fails, so the chapter path never stalls on it.
+   */
+  async pickChapter(req: ChapterPickRequest): Promise<{ index: number | null; by: "llm" | "lexical" }> {
+    if (this.llm) {
+      try {
+        const user = `VIDEO: ${req.title || "(untitled)"}\nTHE STUDENT ASKED: "${req.request}"\n\nCHAPTERS:\n${req.chapters.map((c, i) => `${i}. [${c.stamp}] ${c.title}`).join("\n")}`;
+        const raw = await this.llm.complete<{ index: number | null }>(CHAPTER_PROMPT, [{ type: "text", text: user }], "chapter_pick", CHAPTER_SCHEMA, 600, "low");
+        const index = Number.isInteger(raw.index) && raw.index! >= 0 && raw.index! < req.chapters.length ? raw.index : null;
+        logger.info("chapter picked", { index, of: req.chapters.length });
+        return { index, by: "llm" };
+      } catch (e) {
+        logger.warn("chapter pick failed; matching on words", { error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+    return { index: pickChapterLexical(req.request, req.chapters), by: "lexical" };
   }
 
   private async read(segments: TranscriptSegment[], title: string): Promise<WatchNote[]> {
