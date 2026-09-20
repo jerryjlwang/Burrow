@@ -14,6 +14,8 @@ export interface Config {
   llmEffort: "none" | "minimal" | "low" | "medium" | "high";
   ttsModel: string;
   ttsSpeed: number;
+  /** 1 = the voice as Deepgram made it; 1.15 is about two and a half semitones up. Played faster by the browser, spoken slower by Deepgram, so the pace stays the same. */
+  ttsPitch: number;
   ttsExpressivity: number;
   sttModel: string;
   /** Flux eager end-of-turn confidence (0.3–0.9, at most the end-of-turn threshold of 0.7); 0 turns speculation off. */
@@ -51,6 +53,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     llmEffort: effortRaw === "medium" || effortRaw === "high" || effortRaw === "minimal" || effortRaw === "none" ? effortRaw : "low",
     ttsModel: env.DEEPGRAM_TTS_MODEL || "flux-rufus-en",
     ttsSpeed: num(env.DEEPGRAM_TTS_SPEED, 1),
+    ttsPitch: Math.min(1.5, Math.max(0.75, num(env.DEEPGRAM_TTS_PITCH, 1))),
     ttsExpressivity: num(env.DEEPGRAM_TTS_EXPRESSIVITY, 0),
     sttModel: env.DEEPGRAM_STT_MODEL || "flux-general-en",
     sttEagerEotThreshold: Math.min(0.7, Math.max(0, num(env.DEEPGRAM_EAGER_EOT, 0.4))),

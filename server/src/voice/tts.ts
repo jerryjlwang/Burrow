@@ -6,7 +6,12 @@ import { log } from "../util/logger";
 const logger = log("voice:tts");
 const SAMPLE_RATE = 24000;
 
-type Outgoing = { type: "start" | "done" | "cancelled" | "error"; id: string; message?: string };
+/** The browser plays the voice `ttsPitch` times faster to raise it, so it is spoken that much slower to keep the pace. Deepgram takes speed in steps of 0.05. */
+function spokenSpeed(cfg: Config): number {
+  return Math.round((cfg.ttsSpeed / cfg.ttsPitch) * 20) / 20;
+}
+
+type Outgoing = { type: "start" | "done" | "cancelled" | "error"; id: string; message?: string; pitch?: number };
 
 function sendJson(ws: WebSocket, msg: Outgoing): void {
   if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
@@ -105,7 +110,7 @@ export function attachTtsSession(client: WebSocket, cfg: Config): void {
           model: cfg.ttsModel,
           encoding: "linear16",
           sample_rate: String(SAMPLE_RATE),
-          speed: cfg.ttsSpeed,
+          speed: spokenSpeed(cfg),
           expressivity: cfg.ttsExpressivity,
           reconnectAttempts: 0,
         });
@@ -164,7 +169,7 @@ export function attachTtsSession(client: WebSocket, cfg: Config): void {
         conn.connect();
         await withTimeout(conn.waitForOpen(), 6000, "deepgram tts connect");
         upstream = conn;
-        logger.info("tts upstream open", { model: cfg.ttsModel, speed: cfg.ttsSpeed, expressivity: cfg.ttsExpressivity });
+        logger.info("tts upstream open", { model: cfg.ttsModel, speed: cfg.ttsSpeed, pitch: cfg.ttsPitch, expressivity: cfg.ttsExpressivity });
         return conn;
       } catch (e) {
         logger.error("tts upstream failed", { error: e instanceof Error ? e.message : String(e) });
@@ -185,12 +190,12 @@ export function attachTtsSession(client: WebSocket, cfg: Config): void {
       encoding: "linear16",
       sample_rate: SAMPLE_RATE,
       container: "none",
-      speed: cfg.ttsSpeed,
+      speed: spokenSpeed(cfg),
       expressivity: cfg.ttsExpressivity,
     });
     const bytes = Buffer.from(await res.arrayBuffer());
     if (current?.id !== id) return;
-    sendJson(client, { type: "start", id });
+    sendJson(client, { type: "start", id, pitch: cfg.ttsPitch });
     const chunk = SAMPLE_RATE * 2 * 0.25; // 250ms chunks
     for (let off = 0; off < bytes.length; off += chunk) {
       if (current?.id !== id || client.readyState !== client.OPEN) return;
@@ -233,7 +238,7 @@ export function attachTtsSession(client: WebSocket, cfg: Config): void {
         if (current?.id !== id) return;
         if (conn) {
           try {
-            sendJson(client, { type: "start", id });
+            sendJson(client, { type: "start", id, pitch: cfg.ttsPitch });
             conn.sendSpeak({ type: "Speak", text });
             conn.sendFlush({ type: "Flush" });
             logger.info("speak", { id, chars: text.length });

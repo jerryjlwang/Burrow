@@ -13,8 +13,6 @@ export interface VoiceCallbacks {
   /** Words being played on the page right now (a video's narration), so the mic hearing them isn't taken for the student. */
   ambientSpeech?: () => string | null;
   onSpeechStart?: () => void;
-  /** His last queued line has finished playing: the floor is the student's. */
-  onSpoken?: () => void;
 }
 
 /**
@@ -202,7 +200,6 @@ export class VoiceController {
       audioLevel: 0,
       voice: { ...s.voice, ttsPlaying: false },
     }));
-    if (state === "ended" && this.speeches.size === 0 && this.nextUp.length === 0) this.callbacks.onSpoken?.();
     entry.resolve();
   }
 
