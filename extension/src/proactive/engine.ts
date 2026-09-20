@@ -3,6 +3,7 @@ import { validateIntervention } from "@shared/validate";
 import type { InterventionDecision } from "@shared/actions";
 import type { Misconception } from "@shared/graph";
 import type { InkJudgement } from "@shared/ink";
+import type { InkMeta, InkStageDetail } from "../shared/messages";
 import { composeMisconceptionNudge } from "@shared/nudge";
 import { suggestNext, suggestionKey, type PathKind } from "@shared/path";
 import { findAnswerInput } from "@shared/mock-agent";
@@ -19,12 +20,37 @@ import type { OverlayController } from "../actions/overlay";
 import type { ElementRegistry } from "../page-understanding/registry";
 import type { PageWatcher } from "../page-understanding/watcher";
 import { HOST_ID } from "../page-understanding/extract";
+import { pageRole } from "../components/handoff";
 
 const logger = log("proactive");
 /** Ink verdicts below this confidence only earn a glance; at or above it the rabbit speaks. */
 const INK_SPEAK_CONFIDENCE = 0.6;
 /** The same tablet issue is not nudged twice inside this window. */
 const INK_COOLDOWN_MS = 25_000;
+/** The board coach gets this long to hop to the ink and draw before the voice starts anyway. */
+const INK_STAGE_TIMEOUT_MS = 4000;
+
+/**
+ * The goal for the conversation that follows a tablet nudge or note: the model stands on the
+ * drawing board, so it gets the ink as the judge read it, the diagnosis as a private fact, and
+ * the rule that keeps it Socratic. Speech only: the page under him is a drawing app.
+ */
+export function inkGoal(j: InkJudgement, meta: InkMeta, mode: "nudge" | "note"): string {
+  const task = meta.task.title ? `"${meta.task.title.slice(0, 80)}"` : "a problem";
+  const lines = j.lines.length ? j.lines.map((l, i) => `${i + 1}. "${l}"`).join(" ") : "(nothing readable yet)";
+  const wrong =
+    j.status === "off" && j.line
+      ? `Line ${j.line} is wrong: ${j.issue || "a slip in that step"}. That diagnosis is PRIVATE: never say it, and never say the corrected line, the missing number or the final answer, even if they ask straight out.`
+      : "Nothing is wrong so far; they are stuck on what comes next.";
+  const did = mode === "note" ? `You just wrote a note on your chalkboard (${j.note.map((n) => `"${n}"`).join(", ")}) and said "${j.nudge}".` : `You just said "${j.nudge}" and circled the part to look at.`;
+  return [
+    `The student is solving ${task} on their laptop and writing the steps by hand on a tablet, where you are standing beside their ink.`,
+    `Their lines so far, top to bottom: ${lines}.`,
+    wrong,
+    did,
+    `They want help. Be Socratic: ONE short question or ONE small observation per turn that helps them re-check that step themselves, then stop and wait for them. Speak only (action "speak", done true): this is a drawing app, so do not click, type, point, highlight or scroll here. If they are still stuck after two turns, sketch a similar example with different numbers.`,
+  ].join(" ");
+}
 /** Feedback that grades an answer as right — "Draft saved" and "Signed in" are successes but not attempts. */
 const CORRECT_RE = /\b(correct|that'?s right|you got it|well done)\b/i;
 /** Path kinds offered in a quiet moment rather than in response to something the student just did. */
@@ -95,6 +121,9 @@ export class ProactiveEngine {
   private inkCooldownUntil = 0;
   private inkOff = false;
   private inkSolved: string | null = null;
+  /** The stall note already on the board for this snapshot of the work, and whether the coach is mid-hop. */
+  private inkNoteKey: string | null = null;
+  private inkStaging = false;
   /** What the on-screen offer is, so its outcome lands in the learner profile. */
   private activeOffer: { kind: string; key?: string } | null = null;
   /** Concepts answered wrong in this page-session (id → misses): what a finished quiz needs reconciled. */
@@ -118,7 +147,18 @@ export class ProactiveEngine {
     this.deps = deps;
   }
 
+  /**
+   * On the drawing board the page is a canvas app: the only proactive thing there is the tablet
+   * coach (onInkJudgement), never the page's own signals, concepts, paths or step judge. Those
+   * would offer "keyboard shortcuts" from excalidraw's menus and their buttons would hold his
+   * arrival line in the bubble queue.
+   */
+  private get pageQuiet(): boolean {
+    return pageRole() === "board";
+  }
+
   start(): void {
+    if (this.pageQuiet) return;
     const onPointerDown = (e: PointerEvent) => this.handlePointerDown(e);
     document.addEventListener("pointerdown", onPointerDown, true);
     const onKey = (e: KeyboardEvent) => {
@@ -425,7 +465,7 @@ export class ProactiveEngine {
   onMisconception(m: Misconception): void {
     const s = store.getState();
     const now = Date.now();
-    if (!s.settings.proactiveEnabled) return;
+    if (!s.settings.proactiveEnabled || this.pageQuiet) return;
     if (this.nudgedMisconceptions.has(m.id)) return;
     if (now < this.deps.session.proactiveCooldownUntil) return;
     if (this.offerActive || this.deps.isBusy() || (s.panelOpen && s.busy)) return;
@@ -469,6 +509,7 @@ export class ProactiveEngine {
    * one suggestion that's worth an interruption — an unseen prerequisite of what they're reading.
    */
   onConceptsExtracted(conceptIds: string[], missedIds: string[] = []): void {
+    if (this.pageQuiet) return;
     this.currentConceptIds = conceptIds;
     for (const id of missedIds) this.sessionMisses.set(id, (this.sessionMisses.get(id) ?? 0) + 1);
     // Graded results just came up with misses on them: reconciling those beats any other move.
@@ -496,7 +537,7 @@ export class ProactiveEngine {
   private offerPathSuggestion(kinds: PathKind[], opts: { ignoreCooldown: boolean }): void {
     const s = store.getState();
     const now = Date.now();
-    if (!s.settings.proactiveEnabled) return;
+    if (!s.settings.proactiveEnabled || this.pageQuiet) return;
     if (this.offerActive || this.deps.isBusy() || (s.panelOpen && s.busy)) return;
     if (!opts.ignoreCooldown && now < this.deps.session.proactiveCooldownUntil) return;
     const sessionMisses = [...this.sessionMisses].sort((a, b) => b[1] - a[1]).map(([id]) => id);
@@ -522,10 +563,57 @@ export class ProactiveEngine {
    * The same issue never repeats inside the cooldown, a shaky
    * verdict only earns a glance, and a solved page earns one celebration.
    */
-  onInkJudgement(j: InkJudgement): void {
+  onInkJudgement(j: InkJudgement, meta: InkMeta = { reason: "ink", rung: 1, task: { title: "", url: "" } }): void {
+    void this.handleInk(j, meta);
+  }
+
+  /**
+   * Hands a stage (the hop to the ink, the circle, the note on the board) to the page's coach
+   * through a cancelable `burrow:ink` event and waits for it to be in place, so the voice lands
+   * on the picture. A page with no coach (the kid's laptop page) proceeds at once.
+   */
+  private stage(detail: Omit<InkStageDetail, "done">): Promise<void> {
+    return new Promise((resolve) => {
+      let settled = false;
+      let timer = 0;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        resolve();
+      };
+      timer = window.setTimeout(done, INK_STAGE_TIMEOUT_MS);
+      const claimed = !window.dispatchEvent(new CustomEvent<InkStageDetail>("burrow:ink", { cancelable: true, detail: { ...detail, done } }));
+      if (!claimed) done();
+    });
+  }
+
+  private async handleInk(j: InkJudgement, meta: InkMeta): Promise<void> {
     const s = store.getState();
     const now = Date.now();
     if (!s.settings.proactiveEnabled) return;
+    // A hop and a circle are in progress; the next verdict follows soon enough.
+    if (this.inkStaging) return;
+    if (meta.reason === "stall" && j.note.length && j.nudge) {
+      // A stall note: once per snapshot of the work, and never over the kid's own conversation.
+      const key = `note:${j.lines.join("|")}`;
+      if (key === this.inkNoteKey || this.deps.isBusy()) return;
+      this.inkNoteKey = key;
+      if (this.offerActive) this.offerResolved("dismissed");
+      logger.info("ink note", { line: j.line, note: j.note, rung: meta.rung });
+      // The offer slot is his from here, so nothing ambient slips in while he hops to the empty space.
+      this.offerActive = true;
+      this.activeOffer = { kind: "ink-note", key };
+      this.inkStaging = true;
+      try {
+        await this.stage({ phase: "note", judgement: j, rung: meta.rung });
+      } finally {
+        this.inkStaging = false;
+      }
+      this.deps.onOffer({ type: "hint", message: j.nudge, elementId: null, at: now, goal: inkGoal(j, meta, "note") });
+      if (s.settings.ttsEnabled) void this.deps.speak(j.nudge);
+      return;
+    }
     if (j.status === "off" && j.nudge) {
       // One nudge per wrong line inside the cooldown: the judge rewords the issue on every check.
       const key = `line:${j.line ?? 0}`;
@@ -544,23 +632,35 @@ export class ProactiveEngine {
       this.inkKey = key;
       this.inkCooldownUntil = now + INK_COOLDOWN_MS;
       this.inkOff = true;
-      logger.info("ink nudge", { line: j.line, issue: j.issue, confidence: j.confidence });
+      logger.info("ink nudge", { line: j.line, issue: j.issue, confidence: j.confidence, rung: meta.rung });
+      // The offer slot is his from here, so nothing ambient slips in during the hop. He goes to the
+      // line and circles the part first; the words follow once the circle is drawn.
       this.offerActive = true;
       this.activeOffer = { kind: "ink", key };
+      this.inkStaging = true;
+      try {
+        await this.stage({ phase: "nudge", judgement: j, rung: meta.rung });
+      } finally {
+        this.inkStaging = false;
+      }
       store.setState({ attention: 2 });
-      this.deps.onOffer({ type: "hint", message: j.nudge, elementId: null, at: now, goal: `Help me with my work on the tablet, line ${j.line ?? "?"}: ${j.nudge}` });
+      this.deps.onOffer({ type: "hint", message: j.nudge, elementId: null, at: now, goal: inkGoal(j, meta, "nudge") });
       if (s.settings.ttsEnabled) void this.deps.speak(j.nudge);
       return;
     }
     if (j.status !== "ok") return;
     if (this.inkOff) {
+      // The line is fixed: the circle comes off.
       this.inkOff = false;
       this.inkKey = null;
+      void this.stage({ phase: "clear", judgement: j, rung: meta.rung });
     }
     if (j.solved) {
       const key = j.lines.join("|");
       if (key !== this.inkSolved && !this.deps.isBusy()) {
         this.inkSolved = key;
+        this.inkNoteKey = null;
+        void this.stage({ phase: "clear", judgement: j, rung: meta.rung });
         this.deps.onCelebrate("Nice, that's it.");
       }
     }

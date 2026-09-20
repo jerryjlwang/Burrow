@@ -6,9 +6,9 @@
  * tab, where the rabbit reacts. Nothing here reads the drawing app itself, so any page in that
  * window works, and no screen-share picker is needed.
  */
-import type { InkJudgeInput, InkJudgeOutput, InkJudgement } from "@shared/ink";
+import { MAX_RUNG, parseInkBox, type InkBox, type InkJudgeInput, type InkJudgeOutput, type InkJudgement } from "@shared/ink";
 import type { ContentBroadcast, TabletState } from "../shared/messages";
-import { changedPixels, DEFAULT_RULES, InkTrigger, toGray, type TriggerReason } from "./ink-trigger";
+import { DEFAULT_RULES, InkTrigger, maskedChangedPixels, toGray, type TriggerReason } from "./ink-trigger";
 import { log } from "../shared/logger";
 
 const logger = log("tablet");
@@ -18,6 +18,13 @@ const SAMPLE_MS = 600;
 const CONTEXT_REFRESH_MS = 20_000;
 const SMALL_W = 240;
 const STATE_KEY = "burrow.tablet";
+/** How long the pen may rest before the judge is asked whether the kid is stuck: sooner after a wrong line, never once solved. */
+const STALL_MS = 45_000;
+const STALL_AFTER_OFF_MS = 20_000;
+/** A repeat verdict on the same wrong line inside this window is the same nudge, not the next rung (mirrors the page's cooldown). */
+const NUDGE_REPEAT_MS = 20_000;
+/** Verdicts below this confidence are not spoken on the page, so they do not climb the rung either. */
+const RUNG_CONFIDENCE = 0.6;
 
 interface Deps {
   postJudge: (input: InkJudgeInput) => Promise<InkJudgeOutput>;
@@ -40,6 +47,16 @@ interface Watch {
   checks: number;
   lastVerdict: InkJudgement | null;
   lastCheckAt: number | null;
+  /** Nudges given per wrong line (keyed by the line as read), so the next nudge on it climbs a rung. */
+  nudged: Map<string, { count: number; at: number }>;
+  lastWrongLine: string | null;
+  lastReason: TriggerReason | null;
+  lastRung: number;
+  /** The board page's own UI right now, and as it was when `prev` was sampled; both are left out of the diff. */
+  mask: InkBox[];
+  prevMask: InkBox[];
+  /** Until when frame changes are ignored (the rabbit is hopping, drawing or writing). */
+  quietUntil: number;
   error?: string;
   context: { dataUrl: string | null; title: string; url: string; at: number } | null;
   busy: boolean;
@@ -74,6 +91,8 @@ export function tabletStatus(): TabletState {
     checks: watch?.checks ?? 0,
     lastCheckAt: watch?.lastCheckAt ?? null,
     lastVerdict: watch?.lastVerdict ?? null,
+    lastReason: watch?.lastReason ?? null,
+    lastRung: watch?.lastRung ?? 1,
     error: watch?.error,
   };
 }
@@ -133,9 +152,32 @@ function freshWatch(windowId: number, boardTabId: number | null, contextTabId: n
     checks: 0,
     lastVerdict: null,
     lastCheckAt: null,
+    nudged: new Map(),
+    lastWrongLine: null,
+    lastReason: null,
+    lastRung: 1,
+    mask: [],
+    prevMask: [],
+    quietUntil: 0,
     context: null,
     busy: false,
   };
+}
+
+const MAX_MASK_RECTS = 12;
+const MAX_QUIET_MS = 12_000;
+
+/**
+ * The board page reports where its own UI is, and may ask for a quiet spell while the rabbit
+ * hops, draws or writes (changes then go untracked, though the frame keeps being followed so the
+ * first diff afterwards is against the latest picture). Only the board tab may, and only while it is watched.
+ */
+export function setTabletMask(tabId: number | null, rects: unknown, quietMs?: number): boolean {
+  if (!watch || tabId == null || tabId !== watch.boardTabId) return false;
+  const list = Array.isArray(rects) ? rects.slice(0, MAX_MASK_RECTS).map(parseInkBox).filter((b): b is InkBox => !!b) : [];
+  watch.mask = list;
+  if (typeof quietMs === "number" && Number.isFinite(quietMs) && quietMs > 0) watch.quietUntil = Math.max(watch.quietUntil, Date.now() + Math.min(MAX_QUIET_MS, quietMs));
+  return true;
 }
 
 export async function openTablet(contextTab?: chrome.tabs.Tab | null, opts: { skipDisplay?: boolean } = {}): Promise<TabletState> {
@@ -288,9 +330,12 @@ async function tick(): Promise<void> {
       w.prev = gray.data;
       return;
     }
-    const changed = w.prev ? changedPixels(w.prev, gray.data) : 0;
+    // The rabbit, his bubble, his board and his rings are on this tab too; wherever they are now or were a frame ago is not the kid's ink.
+    const changed = w.prev ? maskedChangedPixels(w.prev, gray.data, gray.w, gray.h, w.prevMask.concat(w.mask)) : 0;
     w.prev = gray.data;
+    w.prevMask = w.mask;
     const now = Date.now();
+    if (now < w.quietUntil) return;
     const reason = w.trigger.push(changed, now);
     if (reason) void judge(w, dataUrl, reason, now);
   } finally {
@@ -356,11 +401,32 @@ async function refreshContext(w: Watch): Promise<Watch["context"]> {
   return w.context;
 }
 
+/** Nudge number for the line last judged wrong: one more than the nudges it has had, capped. A fresh mistake starts at one. */
+function rungFor(w: Watch): number {
+  if (!w.lastWrongLine) return 1;
+  return Math.min(MAX_RUNG, 1 + (w.nudged.get(w.lastWrongLine)?.count ?? 0));
+}
+
+/** Bookkeeping after a verdict: which line is wrong and how often it has been nudged, and how long the pen may now rest. */
+function noteVerdict(w: Watch, j: InkJudgement): void {
+  const now = Date.now();
+  if (j.status === "off" && j.confidence >= RUNG_CONFIDENCE) {
+    const key = (j.line != null && j.lines[j.line - 1]) || `#${j.line ?? 0}`;
+    const had = w.nudged.get(key);
+    if (!had || now - had.at >= NUDGE_REPEAT_MS) w.nudged.set(key, { count: (had?.count ?? 0) + 1, at: now });
+    w.lastWrongLine = key;
+  } else if (j.status === "ok") {
+    w.lastWrongLine = null;
+  }
+  if (w.trigger) w.trigger.stallMs = j.solved ? Infinity : j.status === "off" ? STALL_AFTER_OFF_MS : STALL_MS;
+}
+
 async function judge(w: Watch, frame: string, reason: TriggerReason, now: number): Promise<void> {
   if (!deps || !w.trigger) return;
   w.trigger.checkStarted(now);
   try {
     const context = await refreshContext(w);
+    const rung = rungFor(w);
     const input: InkJudgeInput = {
       frame,
       context: context?.dataUrl ?? null,
@@ -368,16 +434,23 @@ async function judge(w: Watch, frame: string, reason: TriggerReason, now: number
       contextUrl: context?.url ?? "",
       previousLines: w.previousLines,
       seq: w.seq++,
+      reason,
+      rung,
+      lastWrongLine: w.lastWrongLine,
     };
     const out = await deps.postJudge(input);
     if (watch !== w) return;
+    const j = out.judgement;
     w.checks++;
     w.lastCheckAt = Date.now();
-    w.lastVerdict = out.judgement;
-    if (out.judgement.lines.length) w.previousLines = out.judgement.lines;
-    logger.info("verdict", { reason, status: out.judgement.status, line: out.judgement.line, confidence: out.judgement.confidence, provider: out.provider, ms: out.latencyMs });
+    w.lastVerdict = j;
+    w.lastReason = reason;
+    w.lastRung = rung;
+    if (j.lines.length) w.previousLines = j.lines;
+    noteVerdict(w, j);
+    logger.info("verdict", { reason, rung, status: j.status, line: j.line, mark: !!j.mark, note: j.note.length, confidence: j.confidence, provider: out.provider, ms: out.latencyMs });
     // He stands on the board while watching, so the verdict goes there; the kid's page is the fallback.
-    await deps.sendToTab(w.boardTabId ?? w.contextTabId, { type: "ink.judgement", judgement: out.judgement, reason });
+    await deps.sendToTab(w.boardTabId ?? w.contextTabId, { type: "ink.judgement", judgement: j, reason, rung, task: { title: context?.title ?? "", url: context?.url ?? "" } });
   } catch (e) {
     w.error = `judge: ${String(e).slice(0, 100)}`;
     logger.warn("judge failed", { error: String(e) });

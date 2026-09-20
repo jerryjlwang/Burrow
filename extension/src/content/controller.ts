@@ -4,6 +4,7 @@ import { HeuristicConceptExtractor, pageToExtractionInput, type ConceptExtractio
 import { slugify } from "@shared/graph";
 import { parsePlan, topicPlanKey } from "@shared/plan";
 import { describeSketch, eraseFromSketch, parseSketch } from "@shared/sketch";
+import { validateInkJudgement } from "@shared/ink";
 import { isVideoQuestion, pickRelated, videoQuery } from "@shared/related";
 import { planStepSuggestion } from "@shared/path";
 import type { PlanRoute } from "./store";
@@ -23,7 +24,7 @@ import { VoiceController } from "../voice/controller";
 import { store, type Bubble } from "./store";
 import { BubbleQueue } from "./bubbles";
 import { getSettings, onSettingsChange, setSettings, type Settings } from "../shared/settings";
-import { sendToBackground, isExtensionContextValid, type ContentBroadcast } from "../shared/messages";
+import { sendToBackground, isExtensionContextValid, type ContentBroadcast, type InkMeta } from "../shared/messages";
 import { log, onLog, setDebugLogging } from "../shared/logger";
 
 const logger = log("ui");
@@ -220,6 +221,12 @@ export class CompanionController {
     document.addEventListener("keydown", onKeydown, true);
     // Observe whatever changed in the last debounce window before this document goes away.
     window.addEventListener("pagehide", () => this.watcher.flush());
+    // Rehearsal hook: the developer panel and the tablet e2e fire ink verdicts without a tablet.
+    window.addEventListener("burrow:judge", (e) => {
+      const d = (e as CustomEvent<{ judgement?: unknown; meta?: InkMeta }>).detail;
+      const v = validateInkJudgement(d?.judgement);
+      if (v.ok) this.engine.onInkJudgement(v.judgement, d.meta);
+    });
 
     this.session.onRecord = () => this.refreshPlanView();
     const session = await this.session.load();
@@ -257,7 +264,7 @@ export class CompanionController {
           this.loop.handleEarlySay(msg.requestId, msg.say);
           break;
         case "ink.judgement":
-          this.engine.onInkJudgement(msg.judgement);
+          this.engine.onInkJudgement(msg.judgement, { reason: msg.reason, rung: msg.rung, task: msg.task });
           break;
       }
       sendResponse?.({ ok: true });

@@ -559,3 +559,17 @@
    own section below this one: whole pixels, 3px grid, steps() timing, cream/brown/teal/gold palette. */
 .pip-actfx { position: fixed; inset: 0; pointer-events: none; overflow: visible; }
 .pip-actfx > * { position: fixed; pointer-events: none; image-rendering: pixelated; }
+
+/* The tablet coach's ring: a hand-drawn loop around the part of the ink the judge marked, cream rim under teal chalk, drawn in like a stroke. */
+.pip-inkcoach { position: fixed; inset: 0; pointer-events: none; z-index: 2147483000; }
+.pip-inkmark { position: fixed; overflow: visible; pointer-events: none; }
+.pip-inkmark path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.pip-inkmark-rim { stroke: var(--cream); stroke-width: 9; opacity: 0.95; }
+.pip-inkmark-ink { stroke: var(--teal); stroke-width: 4; }
+.pip-inkmark:not(.reduced) path { stroke-dasharray: 100; animation: pip-inkmark-draw 550ms cubic-bezier(0.3, 0.7, 0.3, 1) both; }
+.pip-inkmark:not(.reduced) .pip-inkmark-ink { animation: pip-inkmark-draw 550ms cubic-bezier(0.3, 0.7, 0.3, 1) both, pip-inkmark-breathe 1.8s ease-in-out 700ms infinite; }
+.pip-inkmark.leaving { animation: pip-inkmark-out 300ms ease-out both; }
+.pip-inkmark.reduced.leaving { animation: none; }
+@keyframes pip-inkmark-draw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+@keyframes pip-inkmark-breathe { 0%, 100% { stroke: var(--teal); } 50% { stroke: var(--gold-deep); } }
+@keyframes pip-inkmark-out { from { opacity: 1; } to { opacity: 0; } }
