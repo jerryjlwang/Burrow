@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { changedPixels, InkTrigger, toGray, type TriggerRules } from "../ink-trigger";
 
-const RULES: TriggerRules = { noise: 0.001, ink: 0.01, pauseInk: 0.003, pauseMs: 1000, minGapMs: 2000 };
+const RULES: TriggerRules = { noise: 0.001, ink: 0.01, pauseInk: 0.003, pauseMs: 1000, minGapMs: 2000, stallMs: 10_000 };
 const PIXELS = 10_000; // so 1% ink = 100 changed pixels
 
 describe("changedPixels / toGray", () => {
@@ -47,5 +47,47 @@ describe("InkTrigger", () => {
     t.checkFinished();
     expect(t.push(200, 4000)).toBeNull(); // still inside the 2 s gap
     expect(t.push(0, 5100)).toBe("ink"); // gap over, plenty of ink waiting
+  });
+
+  it("fires 'stall' once when the pen rests long enough after a check, and not on an untouched board", () => {
+    const t = new InkTrigger(PIXELS, RULES);
+    for (let i = 0; i < 40; i++) expect(t.push(0, 500 * i)).toBeNull(); // nothing ever written: never a stall
+    t.push(200, 20_000);
+    t.checkStarted(20_000);
+    t.checkFinished();
+    expect(t.push(0, 29_000)).toBeNull(); // 9 s of rest: not yet
+    expect(t.push(0, 30_100)).toBe("stall");
+    t.checkStarted(30_100);
+    t.checkFinished();
+    expect(t.push(0, 41_000)).toBeNull(); // still resting: the same stall does not fire again
+    expect(t.push(0, 90_000)).toBeNull();
+  });
+
+  it("re-arms the stall once new ink lands, and measures from the later of ink and check", () => {
+    const t = new InkTrigger(PIXELS, RULES);
+    t.push(200, 1000);
+    t.checkStarted(1000);
+    t.checkFinished();
+    expect(t.push(0, 11_100)).toBe("stall");
+    t.checkStarted(11_100);
+    t.checkFinished();
+    t.push(20, 15_000); // a small mark, below the pause threshold, still counts as ink
+    expect(t.push(0, 22_000)).toBeNull(); // 7 s since the ink
+    expect(t.push(0, 25_100)).toBe("stall"); // 10 s since the ink, later than the check
+  });
+
+  it("lets the watcher shorten the rest or turn stalls off", () => {
+    const t = new InkTrigger(PIXELS, RULES);
+    t.push(200, 1000);
+    t.checkStarted(1000);
+    t.checkFinished();
+    t.stallMs = 4000;
+    expect(t.push(0, 5100)).toBe("stall");
+    const off = new InkTrigger(PIXELS, RULES);
+    off.push(200, 1000);
+    off.checkStarted(1000);
+    off.checkFinished();
+    off.stallMs = Infinity;
+    expect(off.push(0, 100_000)).toBeNull();
   });
 });

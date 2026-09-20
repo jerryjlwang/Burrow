@@ -16,9 +16,11 @@ export interface TriggerRules {
   pauseMs: number;
   /** Never fire twice inside this window. */
   minGapMs: number;
+  /** The pen has been still this long since the last ink or check: the kid may be stuck. Infinity turns stalls off. */
+  stallMs: number;
 }
 
-export const DEFAULT_RULES: TriggerRules = { noise: 0.0006, ink: 0.004, pauseInk: 0.0012, pauseMs: 1200, minGapMs: 2500 };
+export const DEFAULT_RULES: TriggerRules = { noise: 0.0006, ink: 0.004, pauseInk: 0.0012, pauseMs: 1200, minGapMs: 2500, stallMs: 45_000 };
 
 /** Luma of an RGBA buffer, one byte per pixel. */
 export function toGray(rgba: Uint8ClampedArray | Uint8Array): Uint8Array {
@@ -38,18 +40,24 @@ export function changedPixels(prev: Uint8Array, next: Uint8Array, threshold = 24
   return changed;
 }
 
-export type TriggerReason = "ink" | "pause";
+export type TriggerReason = "ink" | "pause" | "stall";
 
 export class InkTrigger {
   private inkSinceCheck = 0;
   private lastInkAt = 0;
   private lastCheckAt = 0;
   private inFlight = false;
+  /** A stall fired and no ink has landed since: one stall per rest, however long it lasts. */
+  private stalled = false;
+  /** How long the pen may rest before a stall; the watcher shortens it after a wrong line and turns it off on solved work. */
+  stallMs: number;
 
   constructor(
     private readonly pixels: number,
     private readonly rules: TriggerRules = DEFAULT_RULES,
-  ) {}
+  ) {
+    this.stallMs = rules.stallMs;
+  }
 
   /** Feed one sample. Returns why the judge should look now, or null. */
   push(changed: number, now: number): TriggerReason | null {
@@ -57,10 +65,16 @@ export class InkTrigger {
     if (frac > this.rules.noise) {
       this.inkSinceCheck += frac;
       this.lastInkAt = now;
+      this.stalled = false;
     }
     if (this.inFlight || now - this.lastCheckAt < this.rules.minGapMs) return null;
     if (this.inkSinceCheck >= this.rules.ink) return "ink";
     if (this.inkSinceCheck >= this.rules.pauseInk && this.lastInkAt > 0 && now - this.lastInkAt >= this.rules.pauseMs) return "pause";
+    // A stall needs work on the board (at least one check) and a rest measured from whichever was later, the last ink or the last check.
+    if (!this.stalled && this.lastCheckAt > 0 && Number.isFinite(this.stallMs) && now - Math.max(this.lastInkAt, this.lastCheckAt) >= this.stallMs) {
+      this.stalled = true;
+      return "stall";
+    }
     return null;
   }
 

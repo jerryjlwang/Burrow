@@ -179,7 +179,26 @@ export type ContentBroadcast =
   | { type: "settings.changed"; settings: Settings }
   /** The spoken sentence of an in-flight decision, seconds before the decision itself returns. */
   | { type: "agent.say"; requestId: string; say: string }
-  | { type: "ink.judgement"; judgement: InkJudgement; reason: "ink" | "pause" };
+  | { type: "ink.judgement"; judgement: InkJudgement; reason: InkReason; rung: number; task: { title: string; url: string } };
+
+/** What the ink verdict came with: why the judge looked, which rung the nudge is on, and the task on the laptop. */
+export interface InkMeta {
+  reason: InkReason;
+  rung: number;
+  task: { title: string; url: string };
+}
+
+/**
+ * The `burrow:ink` window event the proactive engine sends to the board page's coach. The coach
+ * claims a stage with preventDefault, moves the rabbit, draws, and calls `done` once the picture
+ * is in place so the voice starts on it; a stage nobody claims proceeds at once.
+ */
+export interface InkStageDetail {
+  phase: "nudge" | "note" | "clear";
+  judgement: InkJudgement;
+  rung: number;
+  done: () => void;
+}
 
 export class BgUnavailableError extends Error {
   constructor(message = "background unavailable") {
