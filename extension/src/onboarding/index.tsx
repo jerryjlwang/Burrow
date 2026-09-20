@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Character } from "../components/Character";
+import type { PetController } from "../components/pet";
 import styles from "../components/styles.css";
 import { getSettings, setSettings } from "../shared/settings";
 
@@ -11,6 +12,11 @@ function Onboarding() {
   const [mic, setMic] = useState<MicState>("idle");
   const [name, setName] = useState("White Rabbit");
   const [serverUrl, setServerUrl] = useState("http://localhost:8787");
+  // He pops out of his hole when the art loads, then waves hello.
+  const onPet = (c: PetController | null) => {
+    if (!c) return;
+    void c.jumpIn(new Promise((r) => setTimeout(r, 600))).then(() => c.play("wave"));
+  };
 
   useEffect(() => {
     void getSettings().then((s) => {
@@ -46,7 +52,7 @@ function Onboarding() {
       </div>
       <div className="char">
         <div className="pip-root" style={{ position: "static", pointerEvents: "auto" }}>
-          <Character state={step === 3 ? "celebrating" : step === 1 ? "listening" : "idle"} level={0} lookAt={null} attention={0} reducedMotion={false} size={110} />
+          <Character state={step === 3 ? "celebrating" : step === 1 ? "listening" : "idle"} level={0} lookAt={null} attention={0} reducedMotion={false} size={110} startHidden onController={onPet} />
         </div>
       </div>
       {step === 0 && (
