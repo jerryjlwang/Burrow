@@ -7,8 +7,9 @@ import { parseSketch } from "@shared/sketch";
 import { planStepSuggestion } from "@shared/path";
 import type { PlanRoute } from "./store";
 import { classifyTask } from "../actions/policy";
+import { quoteRegion } from "../actions/inspect";
 import { ElementRegistry } from "../page-understanding/registry";
-import { extractPage } from "../page-understanding/extract";
+import { extractPage, HOST_ID } from "../page-understanding/extract";
 import { PageWatcher, type ChangeReason } from "../page-understanding/watcher";
 import { OverlayController } from "../actions/overlay";
 import { AgentLoop } from "../agent/loop";
@@ -97,10 +98,17 @@ export class CompanionController {
             return { ok: false, error: String(e) };
           }
         },
-        sketch: (spec) => {
+        sketch: (spec, opts) => {
           const sk = parseSketch(spec);
           if (!sk.items.length) return;
-          store.setState({ board: { id: `${Date.now()}`, title: sk.title, items: sk.items }, planView: null });
+          const anchor = opts?.elementId != null ? this.registry.get(opts.elementId) : opts?.quote ? quoteRegion(document.body, opts.quote, HOST_ID, { grow: false }) : null;
+          const prev = store.getState().board;
+          if (opts?.add && prev) {
+            // Extend the drawing on screen: same board id so the reveal continues, not restarts.
+            store.setState({ board: { ...prev, title: sk.title ?? prev.title, items: [...prev.items, ...sk.items].slice(0, 48), anchor: anchor ?? prev.anchor }, planView: null });
+            return;
+          }
+          store.setState({ board: { id: `${Date.now()}`, title: sk.title, items: sk.items, anchor }, planView: null });
         },
         goBack: async () => {
           try {

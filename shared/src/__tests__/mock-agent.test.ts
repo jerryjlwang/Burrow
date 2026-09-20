@@ -250,3 +250,22 @@ describe("sketch diagrams", () => {
     expect(eq.text).not.toMatch(/\bline \d/);
   });
 });
+
+describe("sketch extension and anchoring", () => {
+  it("sends only the new shapes with value 'add' when asked to extend", () => {
+    const d1 = decideMock(input("can you also add a square corner mark?"));
+    expect(d1.action).toBe("sketch");
+    expect(d1.value).toBe("add");
+    expect(d1.text).not.toMatch(/line 20 80/); // never resends the triangle
+    expect(validateDecision(d1).ok).toBe(true);
+  });
+
+  it("anchors 'circle the equation' onto the equation's own text", () => {
+    const d1 = decideMock(input("can you circle the equation?"));
+    expect(d1.action).toBe("sketch");
+    expect(d1.quote).toBe("3x + 5 = 20");
+    expect(d1.text).toMatch(/circle/);
+    const v = validateDecision(d1);
+    expect(v.ok && v.decision.quote).toBe("3x + 5 = 20");
+  });
+});

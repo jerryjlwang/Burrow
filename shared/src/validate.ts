@@ -9,7 +9,7 @@ const ELEMENT_ACTIONS = new Set<ActionName>(["highlight", "point_to", "focus", "
 const POINTER_ACTIONS = new Set<ActionName>(["click", "double_click", "right_click", "hover", "drag"]);
 const MAX_COORD = 20000;
 /** Actions that may carry a sub-element target (a verbatim quote or a line of a field's value): pointing, and observe's full-region read. */
-const ANCHOR_ACTIONS = new Set<ActionName>(["highlight", "point_to", "observe"]);
+const ANCHOR_ACTIONS = new Set<ActionName>(["highlight", "point_to", "observe", "sketch"]);
 
 export type DecisionValidation = { ok: true; decision: AgentDecision } | { ok: false; error: string };
 
@@ -87,8 +87,8 @@ export function validateDecision(raw: unknown): DecisionValidation {
       d.quote = null;
       d.line = null;
     } else {
-      // observe reads whole regions; only quote/elementId target it — a stray line is noise, not an error.
-      if (d.action === "observe") d.line = null;
+      // observe/sketch take whole-region targets; only quote/elementId apply — a stray line is noise, not an error.
+      if (d.action === "observe" || d.action === "sketch") d.line = null;
       if (d.quote !== null) d.quote = d.quote.trim().slice(0, 200) || null;
       if (d.line !== null && d.line < 1) return { ok: false, error: "line must be >= 1" };
       if (d.line !== null && d.elementId === null) return { ok: false, error: "line anchoring requires an elementId" };
@@ -118,6 +118,8 @@ export function validateDecision(raw: unknown): DecisionValidation {
     if (d.action === "look_up" && (!d.text || !d.text.trim())) return { ok: false, error: "look_up requires text (the query)" };
     if (d.action === "sketch" && (!d.text || !d.text.trim())) return { ok: false, error: "sketch requires text (the lines to draw)" };
     if (d.action === "sketch" && d.text!.length > 1200) return { ok: false, error: "sketch text too long" };
+    // sketch's value is a mode switch: "add" extends the drawing on screen; anything else means a fresh one.
+    if (d.action === "sketch" && d.value !== null && d.value !== "add") d.value = null;
     if (d.action === "look_up" && d.text!.length > 200) return { ok: false, error: "look_up query too long" };
     if (d.action === "make_plan" && (!d.text || !d.text.trim())) return { ok: false, error: "make_plan requires text (what the student wants to learn)" };
     if (d.action === "make_plan" && d.text!.length > 200) return { ok: false, error: "make_plan goal too long" };

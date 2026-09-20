@@ -31,8 +31,8 @@ export interface ExecutorDeps {
   makePlan: (topic: string) => Promise<StepPlan | null>;
   /** Open the plan map; false when there is no plan of any kind to show. */
   showPlan: () => boolean;
-  /** Show a worked example on the rabbit's chalkboard (newline-separated text lines and draw commands). */
-  sketch: (spec: string) => void;
+  /** Overlay a drawing on the screen (newline-separated text lines and draw commands). `add` extends the current one; elementId/quote wrap it to a page region. */
+  sketch: (spec: string, opts?: { add?: boolean; elementId?: number | null; quote?: string | null }) => void;
   /** Trusted mouse/keyboard input via the background; `ok: false` means fall back to DOM events. */
   input: (ops: InputOp[]) => Promise<{ ok: boolean; error?: string }>;
   /** Called right before an action that may unload the page. */
@@ -513,8 +513,8 @@ export async function executeAction(decision: AgentDecision, deps: ExecutorDeps)
       }
 
       case "sketch": {
-        deps.sketch(decision.text!);
-        return { ok: true, message: "drawn on the board" };
+        deps.sketch(decision.text!, { add: decision.value === "add", elementId: decision.elementId, quote: decision.quote });
+        return { ok: true, message: decision.value === "add" ? "added to the drawing" : "drawn on screen" };
       }
 
       case "switch_tab": {

@@ -261,7 +261,16 @@ export function decideMock(input: AgentInput): AgentDecision {
   if (/^(go|take me|head) back$/.test(u) || /^back$/.test(u)) return d({ action: "go_back", say: "Going back.", taskType: "navigation" });
 
   // ---- Clicking / navigating ----
-  // ---- Sketch: draw a worked example or a diagram on the chalkboard ----
+  // ---- Sketch: draw a worked example or a diagram, extend it, or wrap it onto the page ----
+  if (/\b(add|also)\b.*\b(mark|corner|angle|label|arrow|line|dot|square)\b/.test(u)) {
+    // Only the new shape rides in an "add" sketch; what's drawn stays drawn.
+    return d({ action: "sketch", value: "add", text: "rect 20 72 8 8\nlabel 30 72 90°", say: "Added the square corner.", done: true, taskType: "learning", reason: "extend the drawing" });
+  }
+  if (/\b(circle|ring|mark)\b.*\b(equation|problem|question)\b/.test(u)) {
+    const eq = page.textSummary.match(/-?\d*\s*x\s*[+\-]\s*\d+\s*=\s*-?\d+/);
+    if (eq) return d({ action: "sketch", quote: eq[0], text: "circle 50 50 46", say: "Right around here.", done: true, taskType: "learning", reason: "wrap a ring onto the equation" });
+    return d({ action: "speak", say: "I don't see an equation on this page to circle.", done: true, taskType: "learning" });
+  }
   if (/\b(draw|sketch|write (it|this) out|draw (it|this) out|show me how to (solve|do))\b/i.test(u)) {
     if (/\b(triangle|diagram|number line|shape)\b/.test(u)) {
       const spec = "A right triangle:\nline 20 80 80 80\nline 20 80 20 30\nline 20 30 80 80\nlabel 12 58 a\nlabel 48 92 b\nlabel 54 50 c\nThe square corner is between a and b.";

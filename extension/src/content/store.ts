@@ -46,11 +46,13 @@ export interface PlanView {
   routes: PlanRoute[];
 }
 
-/** A worked example the rabbit "draws out" on its chalkboard: text lines and freeform strokes. */
+/** A drawing the rabbit overlays on the screen: text lines and freeform strokes, optionally wrapped to a page region. */
 export interface SketchBoard {
   id: string;
   title?: string;
   items: SketchItem[];
+  /** Page element the 100×100 stroke space maps onto; null draws in the floating corner panel. */
+  anchor: Element | null;
 }
 
 export interface DebugInfo {
