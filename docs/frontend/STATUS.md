@@ -56,6 +56,11 @@ Updated: 2026-09-19
 2. The teach loop in the kid UI: "Did I get that right?" cards, once the backend persona teaches instead of tutors.
 3. If time: the burrow diorama on the new tab page.
 
+## Verification as of the meadow round two (2026-09-20)
+
+- `npx tsc -p tsconfig.json --noEmit`: clean. `npx vitest run`: 158 tests. `node tools/pet/check.mjs`: 86 of 86 (boot, petting, feeding, sun scrub, click reactions, concept flowers, parent map, popup, onboarding). `npm run e2e`: 31 of 31.
+- Fixed on the way: the search sign is clipped rather than hidden during the boot so the page extractor still lists it, and its accessible name is Search box.
+
 ## Verification as of the design round
 
 - `npx tsc -p tsconfig.json --noEmit`: clean. `npx vitest run`: 153 tests. `node tools/pet/check.mjs`: 69 of 69 on light and dark pages plus the new tab (four hours of the day), parent and popup pages. `npm run e2e` (teammates' smoke test, mock server): 30 of 30, including their quote anchor and step judge checks.
