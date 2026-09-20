@@ -56,6 +56,11 @@ export class CompanionController {
     this.watcher = new PageWatcher((reason) => this.handlePageChange(reason));
     this.voice = new VoiceController({
       onFinalTranscript: (text) => void this.handleUserText(text, "voice"),
+      // A pending yes/no or a stop command is answered locally, so there is nothing to get ahead on.
+      onProbableEndOfTurn: (text) => {
+        if (!this.pendingConfirmation && !this.pendingOffer && !isStopCommand(text) && isExtensionContextValid()) this.loop.speculate(text);
+      },
+      onTurnResumed: () => this.loop.dropSpeculation(),
       onSpeechStart: () => this.handleSpeechStart(),
     });
     this.loop = new AgentLoop({
@@ -220,6 +225,9 @@ export class CompanionController {
           break;
         case "settings.changed":
           this.applySettings(msg.settings);
+          break;
+        case "agent.say":
+          this.loop.handleEarlySay(msg.requestId, msg.say);
           break;
         case "ink.judgement":
           this.engine.onInkJudgement(msg.judgement);

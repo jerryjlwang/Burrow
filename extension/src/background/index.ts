@@ -100,6 +100,44 @@ async function postJson<T>(path: string, body: unknown, timeoutMs: number): Prom
   return (await r.json()) as T;
 }
 
+/**
+ * POST whose reply is newline-delimited JSON. Each line but the last is handed to `onLine` as it
+ * arrives; the last line's `result` is the return value.
+ */
+async function postNdjson<T>(path: string, body: unknown, timeoutMs: number, onLine: (line: Record<string, unknown>) => void): Promise<T> {
+  const r = await serverFetch(path, { method: "POST", body: JSON.stringify(body) }, timeoutMs);
+  if (!r.ok || !r.body) {
+    const text = await r.text().catch(() => "");
+    throw new Error(`server ${r.status}: ${text.slice(0, 200)}`);
+  }
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buffered = "";
+  let result: T | undefined;
+  for (;;) {
+    const { value, done } = await reader.read();
+    buffered += decoder.decode(value, { stream: !done });
+    let nl: number;
+    while ((nl = buffered.indexOf("\n")) >= 0) {
+      const raw = buffered.slice(0, nl).trim();
+      buffered = buffered.slice(nl + 1);
+      if (!raw) continue;
+      const line = JSON.parse(raw) as Record<string, unknown>;
+      if ("result" in line) result = line.result as T;
+      else onLine(line);
+    }
+    if (done) break;
+  }
+  // A server from before streaming answers with one plain JSON body: that body is the result.
+  const rest = buffered.trim();
+  if (result === undefined && rest) {
+    const whole = JSON.parse(rest) as Record<string, unknown>;
+    result = ("result" in whole ? whole.result : whole) as T;
+  }
+  if (result === undefined) throw new Error("stream ended without a result");
+  return result;
+}
+
 // ---------------- Learner knowledge graph (canonical, persisted) ----------------
 const GRAPH_KEY = "pip.graph";
 const graphHost = new GraphHost({
@@ -205,7 +243,12 @@ async function handle(msg: BgRequest, sender: chrome.runtime.MessageSender): Pro
         .filter((t) => t.id !== undefined)
         .map((t) => ({ id: t.id!, title: (t.title ?? "").slice(0, 80), url: (t.url ?? "").slice(0, 200), active: t.id === tabId }))
         .slice(0, 12);
-      return (await postJson("/api/agent/decide", { ...msg.input, openTabs }, 40_000));
+      const { requestId } = msg;
+      if (!requestId || tabId == null) return (await postJson("/api/agent/decide", { ...msg.input, openTabs }, 40_000));
+      // Streamed: the spoken sentence reaches the tab the moment it is complete, not when the JSON closes.
+      return (await postNdjson("/api/agent/decide?stream=1", { ...msg.input, openTabs }, 40_000, (line) => {
+        if (typeof line.say === "string") void sendToTab(tabId, { type: "agent.say", requestId, say: line.say });
+      }));
     }
     case "agent.intervene":
       return (await postJson("/api/agent/intervene", msg.input, 15_000));

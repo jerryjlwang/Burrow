@@ -16,6 +16,8 @@ export interface Config {
   ttsSpeed: number;
   ttsExpressivity: number;
   sttModel: string;
+  /** Flux eager end-of-turn confidence (0.3–0.9, at most the end-of-turn threshold of 0.7); 0 turns speculation off. */
+  sttEagerEotThreshold: number;
   demoMode: boolean;
   /** Gemini key for the tablet judge; without it the judge runs its scripted mock. */
   geminiApiKey: string;
@@ -53,6 +55,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ttsSpeed: num(env.DEEPGRAM_TTS_SPEED, 1),
     ttsExpressivity: num(env.DEEPGRAM_TTS_EXPRESSIVITY, 0),
     sttModel: env.DEEPGRAM_STT_MODEL || "flux-general-en",
+    sttEagerEotThreshold: Math.min(0.7, Math.max(0, num(env.DEEPGRAM_EAGER_EOT, 0.4))),
     demoMode,
     geminiApiKey: env.GEMINI_API_KEY || "",
     inkModel: env.INK_MODEL || "gemini-3.8-flash",
