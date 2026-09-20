@@ -83,6 +83,11 @@ const AFFIRMATION_RE = /^\s*(?:yes|yep|yeah|yup|correct|right|exactly|that's (?:
 
 export function leakedAnswer(text: string, finalAnswers: string[], opts: { utterance?: string } = {}): { leaked: boolean; matched?: string } {
   if (!text || !finalAnswers.length) return { leaked: false };
+  // Worded answers (from the step planner): the whole answer phrase appearing verbatim is a leak.
+  const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const said = ` ${norm(text)} `;
+  const phrase = finalAnswers.filter((a) => !Number.isFinite(Number(a)) && norm(a).length >= 4).find((a) => said.includes(` ${norm(a)} `));
+  if (phrase) return { leaked: true, matched: phrase };
   const targets = finalAnswers.map(Number).filter(Number.isFinite);
   if (!targets.length) return { leaked: false };
   const bare = text.trim().match(/^(-?\d+(?:\.\d+)?)\s*[.!]?$/);

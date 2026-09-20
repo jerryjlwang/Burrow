@@ -7,6 +7,8 @@ import { AgentService } from "./api/agent";
 import { ExtractService } from "./api/extract";
 import { lookUp } from "./api/lookup";
 import { InkService } from "./api/ink";
+import { StepService, type JudgeRequest, type PlanRequest } from "./api/steps";
+import { OpenAIProvider } from "./agent/openai";
 import { attachSttSession } from "./voice/stt";
 import { attachTtsSession } from "./voice/tts";
 import { serveStatic } from "./util/static";
@@ -18,7 +20,8 @@ import type { InkJudgeInput } from "@shared/ink";
 const logger = log("server");
 const here = dirname(fileURLToPath(import.meta.url));
 const cfg = loadConfig();
-const agent = new AgentService(cfg);
+const steps = new StepService(cfg.llmProvider === "openai" ? new OpenAIProvider({ apiKey: cfg.llmApiKey, model: cfg.llmModel, effort: cfg.llmEffort }) : null);
+const agent = new AgentService(cfg, steps);
 const extract = new ExtractService(cfg);
 const ink = new InkService(cfg);
 const demoRoot = resolve(here, "../../demo-pages");
@@ -95,12 +98,30 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/lookup") {
-      const body = (await readJson(req)) as { query?: string };
+      const body = (await readJson(req)) as { query?: string; prefer?: string };
       if (!body || typeof body.query !== "string" || !body.query.trim()) {
         json(res, 400, { error: "invalid query" });
         return;
       }
-      json(res, 200, { ok: true, results: await lookUp(body.query) });
+      json(res, 200, { ok: true, results: await lookUp(body.query, { prefer: typeof body.prefer === "string" ? body.prefer : undefined, youtubeApiKey: cfg.youtubeApiKey }) });
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/steps/plan") {
+      const body = (await readJson(req)) as PlanRequest;
+      if (!body || (typeof body.topic !== "string" && typeof body.key !== "string")) {
+        json(res, 400, { error: "plan needs a topic or a problem key" });
+        return;
+      }
+      json(res, 200, { plan: await steps.plan(body) });
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/steps/judge") {
+      const body = (await readJson(req)) as JudgeRequest;
+      if (!body || typeof body.working !== "string" || !body.plan || !Array.isArray(body.plan.steps) || typeof body.plan.key !== "string") {
+        json(res, 400, { error: "invalid input" });
+        return;
+      }
+      json(res, 200, await steps.judge(body));
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/extract") {

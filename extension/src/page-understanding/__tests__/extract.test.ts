@@ -81,6 +81,19 @@ describe("extractPage", () => {
     const names = page.elements.map((e) => e.name);
     expect(names).toEqual(expect.arrayContaining(["Search courses", "Type here", "Profile", "Close dialog"]));
   });
+  it("hands over the whole page's text: long paragraphs uncut, late content included", () => {
+    const paragraph = "word ".repeat(400).trim();
+    const filler = Array.from({ length: 60 }, (_, i) => `<p>filler paragraph number ${i} with enough words to take up room on the page</p>`).join("");
+    const { page } = render(`<main><p>${paragraph}</p>${filler}<p>the description at the very bottom</p></main>`);
+    expect(page.textSummary).toContain(paragraph);
+    expect(page.textSummary).toContain("the description at the very bottom");
+    expect(page.textSummary.length).toBeGreaterThan(5000);
+  });
+  it("still bounds a pathological page so the request fits the model", () => {
+    const { page } = render(`<main>${Array.from({ length: 400 }, (_, i) => `<p>${i} ${"x".repeat(999)}</p>`).join("")}</main>`);
+    expect(page.textSummary.length).toBeLessThanOrEqual(120_000);
+    expect(page.textSummary.length).toBeGreaterThan(100_000);
+  });
   it("keeps ids stable across rescans", () => {
     document.body.innerHTML = `<button>One</button><button>Two</button>`;
     const registry = new ElementRegistry();

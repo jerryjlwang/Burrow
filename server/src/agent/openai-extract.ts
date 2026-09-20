@@ -12,9 +12,10 @@ export interface OpenAIExtractorOptions {
 
 const SYSTEM_PROMPT = `You build a learner knowledge graph from what a student is currently looking at in their browser (a page, or a search query they typed).
 
-Extract three things:
+Extract four things:
 - concepts: the curriculum-level ideas actually present — e.g. "axial tilt", "linear equations", "photosynthesis". Use canonical names, NOT UI labels, site names, section boilerplate, or navigation. Add short aliases only if the page phrases a concept differently. salience is 0..1: how central each concept is to this view.
 - edges: prerequisite links (from must be understood before to) and related links, both among the concepts above and to well-known foundational concepts a learner needs first (e.g. "fractions" is a prerequisite of "ratios"). Only include edges you are confident about.
+- missed: ONLY when the page is showing graded results or feedback (a score, questions marked incorrect): the concepts of the questions the student got WRONG, using the same canonical names. [] on every other page — never guess.
 - misconceptions: a wrong belief evident in the student's query or text — e.g. the query "why is summer hot sun closer" reveals the belief "summer happens because Earth is closer to the sun" on the concept "seasons". Only emit one when there is REAL evidence; never invent a misconception. Put the triggering text in evidence.
 
 Prefer a few high-quality concepts over many noisy ones. Return empty arrays if there is nothing meaningful (e.g. a login page). Output only the JSON object.`;
@@ -65,8 +66,9 @@ const EXTRACTION_JSON_SCHEMA = {
         additionalProperties: false,
       },
     },
+    missed: { type: "array", items: { type: "string" }, description: "Concepts of questions the page marks as answered wrong; [] unless graded results are showing." },
   },
-  required: ["concepts", "edges", "misconceptions"],
+  required: ["concepts", "edges", "misconceptions", "missed"],
   additionalProperties: false,
 } as const;
 
@@ -74,6 +76,7 @@ export interface RawExtraction {
   concepts: Array<{ label: string; aliases: string[]; domain: string | null; salience: number }>;
   edges: Array<{ from: string; to: string; type: "prerequisite" | "related"; weight: number }>;
   misconceptions: Array<{ concept: string; belief: string; evidence: string | null }>;
+  missed?: string[];
 }
 
 function formatInput(input: ExtractionInput): string {
@@ -99,6 +102,7 @@ export function normalizeExtraction(raw: RawExtraction): ConceptExtraction {
     misconceptions: (raw.misconceptions ?? [])
       .filter((m) => m && typeof m.concept === "string" && typeof m.belief === "string" && m.belief.trim())
       .map((m) => ({ concept: m.concept.trim(), belief: m.belief.trim(), evidence: m.evidence ?? undefined })),
+    missed: (raw.missed ?? []).filter((c) => typeof c === "string" && c.trim()).map((c) => c.trim().slice(0, 60)).slice(0, 6),
   };
 }
 
@@ -113,7 +117,7 @@ export class OpenAIConceptExtractor implements ConceptExtractor {
     this.opts = opts;
     this.name = `openai:${opts.model}`;
     this.client = new OpenAI({ apiKey: opts.apiKey, timeout: 35_000, maxRetries: 1 });
-    this.reasoningModel = /^(gpt-5|o\d)/.test(opts.model);
+    this.reasoningModel = /^(gpt-[5-9]|o\d)/.test(opts.model);
   }
 
   async extract(input: ExtractionInput): Promise<ConceptExtraction> {
@@ -126,7 +130,8 @@ export class OpenAIConceptExtractor implements ConceptExtractor {
       response_format: { type: "json_schema", json_schema: { name: "concept_extraction", strict: true, schema: EXTRACTION_JSON_SCHEMA as unknown as Record<string, unknown> } },
       max_completion_tokens: 1200,
     };
-    if (this.reasoningModel) params.reasoning_effort = this.opts.effort === "none" ? "minimal" : this.opts.effort;
+    // "low" is the lowest effort every model generation accepts ("none"/"minimal" each 400 on some), and extraction is off the voice latency path.
+    if (this.reasoningModel) params.reasoning_effort = this.opts.effort === "none" || this.opts.effort === "minimal" ? "low" : this.opts.effort;
     else params.temperature = 0.2;
     const res = await this.client.chat.completions.create(params);
     const choice = res.choices[0];

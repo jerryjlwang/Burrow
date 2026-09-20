@@ -127,7 +127,7 @@ export function lineLocator(el: Element, line: number): RectLocator | null {
 
 // ---------- quote resolution (DOM text or field values) ----------
 
-function textNodesUnder(root: Node, skipId?: string): Text[] {
+export function textNodesUnder(root: Node, skipId?: string): Text[] {
   const out: Text[] = [];
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {

@@ -5,11 +5,16 @@ export const ACTIONS = [
   "highlight",
   "point_to",
   "click",
+  "double_click",
+  "right_click",
+  "hover",
+  "drag",
   "focus",
   "type",
   "clear",
   "select",
   "press_enter",
+  "press_key",
   "scroll",
   "scroll_to",
   "navigate",
@@ -18,9 +23,12 @@ export const ACTIONS = [
   "go_back",
   "wait",
   "look_up",
+  "make_plan",
+  "show_plan",
   "ask_user",
   "ask_confirmation",
   "explain",
+  "sketch",
   "finish",
 ] as const;
 export type ActionName = (typeof ACTIONS)[number];
@@ -55,6 +63,13 @@ export interface AgentDecision {
   line: number | null;
   /** switch_tab: the id of the tab to activate, from the OPEN TABS list. */
   tabId: number | null;
+  /** Pointer target in CSS pixels from the viewport's top-left (= screenshot pixels); an alternative to elementId. */
+  x: number | null;
+  y: number | null;
+  /** drag: where to drop — another element, or a viewport point. */
+  toElementId: number | null;
+  toX: number | null;
+  toY: number | null;
   pendingAction: PendingAction | null;
   taskType: TaskType | null;
   reason: string;
@@ -81,6 +96,11 @@ export const DECISION_DEFAULTS: Omit<AgentDecision, "action" | "reason"> = {
   quote: null,
   line: null,
   tabId: null,
+  x: null,
+  y: null,
+  toElementId: null,
+  toX: null,
+  toY: null,
   pendingAction: null,
   taskType: null,
   done: false,

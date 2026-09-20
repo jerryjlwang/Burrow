@@ -1,6 +1,10 @@
-import type { AgentInput, AgentOutput, InterventionInput, InterventionOutput, ConversationTurn, StudentSessionState, ActionRecord, PendingOffer } from "@shared/types";
-import type { ApplyContext, ConceptExtraction, ExtractionInput } from "@shared/concepts";
-import type { GraphSnapshot, ResolutionMethod } from "@shared/graph";
+import type { AgentInput, AgentOutput, InterventionInput, InterventionOutput, ConversationTurn, StudentSessionState, ActionRecord, PathContext, PendingOffer } from "@shared/types";
+import type { ConceptExtraction, ExtractionInput } from "@shared/concepts";
+import type { GraphSnapshot } from "@shared/graph";
+import type { LearnerEvent } from "@shared/events";
+import type { StepPlan } from "@shared/plan";
+import type { WorkingJudgement } from "@shared/steps";
+import type { KeyChord } from "@shared/keys";
 import type { InkJudgement } from "@shared/ink";
 import type { Settings } from "./settings";
 
@@ -10,9 +14,7 @@ import type { Settings } from "./settings";
  * events through the same shared functions, so one writer persists and tabs can't clobber
  * each other.
  */
-export type GraphEvent =
-  | { kind: "extraction"; extraction: ConceptExtraction; ctx: ApplyContext; at: number }
-  | { kind: "resolve"; concept: string; belief: string; at: number; resolution: { method: ResolutionMethod; rung?: number; note: string } };
+export type GraphEvent = LearnerEvent;
 
 export interface VoiceState {
   mode: "off" | "starting" | "listening" | "error";
@@ -33,6 +35,8 @@ export interface PendingLoop {
   at: number;
   pendingOffer: PendingOffer | null;
   lastReferencedElementName: string | null;
+  /** The path suggestion this loop is carrying out, kept across navigations and new tabs. */
+  path?: PathContext | null;
 }
 
 export interface TabSession {
@@ -73,6 +77,15 @@ export type OffscreenEvent =
   | { type: "tts.state"; id: string; state: "started" | "ended" | "error" | "interrupted"; error?: string }
   | { type: "tts.level"; level: number };
 
+/** Trusted input, replayed by the background through the DevTools protocol (content-script events are untrusted: no :hover, no native drag). Points are viewport CSS px. */
+export type InputOp =
+  | { kind: "move"; x: number; y: number }
+  | { kind: "click"; x: number; y: number; button: "left" | "right"; count: number }
+  | { kind: "drag"; x: number; y: number; toX: number; toY: number }
+  | { kind: "wheel"; x: number; y: number; deltaY: number }
+  | { kind: "key"; chord: KeyChord }
+  | { kind: "text"; text: string };
+
 export type BgRequest =
   | { type: "agent.decide"; input: AgentInput }
   | { type: "agent.intervene"; input: InterventionInput }
@@ -86,11 +99,16 @@ export type BgRequest =
   | { type: "tab.session.set"; patch: Partial<TabSession> }
   | { type: "tab.session.clear" }
   | { type: "nav.navigate"; url: string }
-  | { type: "nav.open"; url: string }
+  /** `resume` hands the running loop to the new tab, so a chain can continue on the page it opened. */
+  | { type: "nav.open"; url: string; resume?: PendingLoop }
   | { type: "nav.switch"; tabId: number }
   | { type: "nav.back" }
-  | { type: "lookup"; query: string }
-  | { type: "screenshot" }
+  | { type: "lookup"; query: string; prefer?: string }
+  | { type: "steps.plan"; request: { key?: string; topic?: string; url?: string; title?: string; headings?: string[]; text?: string } }
+  | { type: "steps.judge"; request: { plan: StepPlan; text?: string; working: string } }
+  /** `viewport` (CSS px) makes the image exactly viewport-sized, so its pixels are click coordinates. */
+  | { type: "screenshot"; viewport?: { width: number; height: number } }
+  | { type: "input"; ops: InputOp[] }
   | { type: "open.onboarding" }
   | { type: "open.demo" }
   | { type: "offscreen.event"; event: OffscreenEvent }
@@ -129,7 +147,10 @@ export type BgResponseMap = {
   "nav.switch": { ok: boolean };
   "nav.back": { ok: boolean };
   lookup: { ok: boolean; results: string };
+  "steps.plan": { plan: StepPlan | null };
+  "steps.judge": WorkingJudgement;
   screenshot: { ok: boolean; dataUrl?: string; error?: string };
+  input: { ok: boolean; error?: string };
   "open.onboarding": { ok: boolean };
   "open.demo": { ok: boolean };
   "offscreen.event": { ok: boolean };

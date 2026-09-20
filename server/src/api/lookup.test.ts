@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatResults } from "./lookup";
+import { formatResults, rankResults } from "./lookup";
 
 describe("formatResults", () => {
   it("renders numbered, citable lines with snippets capped", () => {
@@ -16,5 +16,20 @@ describe("formatResults", () => {
 
   it("says so plainly when there is nothing", () => {
     expect(formatResults("zzz", [])).toContain('No results for "zzz"');
+  });
+});
+
+describe("rankResults", () => {
+  const results = [
+    { title: "Axial tilt (Wikipedia)", url: "https://en.wikipedia.org/wiki/Axial_tilt" },
+    { title: "Khan search", url: "https://www.khanacademy.org/search?page_search_query=axial%20tilt" },
+    { title: "A video", url: "https://www.youtube.com/watch?v=abc" },
+  ];
+
+  it("tags each result with its modality and lists the preferred one first, otherwise stable", () => {
+    const ranked = rankResults(results, "video");
+    expect(ranked.map((r) => r.kind)).toEqual(["video", "article", "lesson"]);
+    expect(rankResults(results).map((r) => r.kind)).toEqual(["article", "lesson", "video"]);
+    expect(formatResults("q", ranked).split("\n")[0]).toMatch(/^1\. \[video\] A video — https:\/\/www\.youtube\.com/);
   });
 });

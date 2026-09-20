@@ -110,13 +110,12 @@ export function DebugPanel({ pet }: { pet?: RefObject<PetController | null> }) {
   const characterState = useStore((s) => s.characterState);
   const voice = useStore((s) => s.voice);
   const logs = useStore((s) => s.logs);
-  const offline = useStore((s) => s.offline);
   return (
     <aside className="pip-debug" aria-label="Developer panel">
       <h4>Burrow dev</h4>
       <div className="pip-debug-grid">
         <span>character</span><b>{characterState}</b>
-        <span>voice</span><b>{voice.mode}{voice.ttsPlaying ? " · tts" : ""}{voice.serverOk === false || offline ? " · server ✗" : voice.serverOk ? " · server ✓" : ""}</b>
+        <span>voice</span><b>{voice.mode}{voice.ttsPlaying ? " · tts" : ""}{voice.serverOk === false ? " · server ✗" : voice.serverOk ? " · server ✓" : ""}</b>
         <span>goal</span><b>{debug.goal ?? "—"}</b>
         <span>transcript</span><b>{debug.lastTranscript ?? "—"}</b>
         <span>provider</span><b>{debug.provider ?? "—"}{debug.degraded ? " (degraded)" : ""}{debug.latencyMs != null ? ` · ${debug.latencyMs}ms` : ""}</b>

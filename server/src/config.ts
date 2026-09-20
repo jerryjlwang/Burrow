@@ -20,6 +20,8 @@ export interface Config {
   /** Gemini key for the tablet judge; without it the judge runs its scripted mock. */
   geminiApiKey: string;
   inkModel: string;
+  /** Optional: lets look_up return actual videos instead of a YouTube search link. */
+  youtubeApiKey: string;
 }
 
 function num(v: string | undefined, fallback: number): number {
@@ -43,7 +45,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     deepgramApiKey: env.DEEPGRAM_API_KEY || "",
     llmProvider,
     llmApiKey,
-    llmModel: env.LLM_MODEL || "gpt-5.4-mini",
+    llmModel: env.LLM_MODEL || "gpt-6-astra",
     llmEffort: effortRaw === "medium" || effortRaw === "high" || effortRaw === "minimal" || effortRaw === "none" ? effortRaw : "low",
     ttsModel: env.DEEPGRAM_TTS_MODEL || "flux-rufus-en",
     ttsSpeed: num(env.DEEPGRAM_TTS_SPEED, 1),
@@ -52,5 +54,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     demoMode,
     geminiApiKey: env.GEMINI_API_KEY || "",
     inkModel: env.INK_MODEL || "gemini-3.8-flash",
+    youtubeApiKey: env.YOUTUBE_API_KEY || "",
   };
 }

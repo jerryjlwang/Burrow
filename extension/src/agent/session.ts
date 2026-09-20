@@ -1,6 +1,7 @@
 import type { ConversationTurn, StudentSessionState, PendingOffer } from "@shared/types";
 import { emptyStudentState } from "@shared/types";
 import { KnowledgeGraph } from "@shared/graph";
+import { applyLearnerEvent, type LearnerEvent } from "@shared/events";
 import { sendToBackground, type TabSession, type PendingLoop } from "../shared/messages";
 import { store } from "../content/store";
 import { log } from "../shared/logger";
@@ -22,6 +23,8 @@ export class Session {
    * controller/engine), which owns persistence — this copy is a fast local mirror.
    */
   graph = new KnowledgeGraph();
+  /** Called after every recorded learner event (the plan map refreshes on it). */
+  onRecord: (() => void) | null = null;
   private syncTimer: number | null = null;
   private loaded = false;
 
@@ -47,6 +50,13 @@ export class Session {
       this.loaded = true;
       return null;
     }
+  }
+
+  /** Apply a learner event to this tab's mirror and forward it to the background's canonical graph. */
+  record(event: LearnerEvent): void {
+    applyLearnerEvent(this.graph, event);
+    this.onRecord?.();
+    void sendToBackground({ type: "graph.event", event }, 5000).catch(() => undefined);
   }
 
   addTurn(turn: ConversationTurn): void {

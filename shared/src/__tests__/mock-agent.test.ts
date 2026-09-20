@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decideMock, interveneMock } from "../mock-agent";
+import { decideMock, interveneMock, pickLookupResult } from "../mock-agent";
 import { emptySignals, emptyStudentState, type AgentInput, type PageSummary, type PageElement } from "../types";
 import { validateDecision } from "../validate";
 
@@ -27,6 +27,34 @@ const page: PageSummary = {
 function input(utterance: string, extra: Partial<AgentInput> = {}): AgentInput {
   return { utterance, goal: utterance, conversation: [], page, history: [], signals: emptySignals(), student: emptyStudentState(), pendingOffer: null, lastReferencedElementId: null, step: 0, maxSteps: 6, ...extra };
 }
+
+describe("mock agent: the visible surface", () => {
+  it("hovers, double-clicks and right-clicks a named element", () => {
+    for (const [said, action] of [["hover over the dashboard", "hover"], ["Double-click the dashboard", "double_click"], ["right click on Dashboard", "right_click"]] as const) {
+      const dec = decideMock(input(said));
+      expect(dec.action, said).toBe(action);
+      expect(dec.elementId, said).toBe(1);
+      expect(validateDecision(dec).ok, said).toBe(true);
+    }
+  });
+  it("drags one named element onto another", () => {
+    const dec = decideMock(input("drag the dashboard to sign in"));
+    expect(dec).toMatchObject({ action: "drag", elementId: 1, toElementId: 2 });
+    expect(validateDecision(dec).ok).toBe(true);
+  });
+  it("aims at spoken coordinates", () => {
+    expect(decideMock(input("click at 300, 200"))).toMatchObject({ action: "click", x: 300, y: 200, elementId: null });
+    const drag = decideMock(input("drag from 100, 400 to 380, 400"));
+    expect(drag).toMatchObject({ action: "drag", x: 100, y: 400, toX: 380, toY: 400 });
+    expect(validateDecision(drag).ok).toBe(true);
+  });
+  it("presses a named key rather than hunting for a button called that", () => {
+    expect(decideMock(input("press escape"))).toMatchObject({ action: "press_key", text: "escape" });
+    const arrow = decideMock(input("hit the arrow down"));
+    expect(arrow).toMatchObject({ action: "press_key", text: "down" });
+    expect(validateDecision(arrow).ok).toBe(true);
+  });
+});
 
 describe("mock agent", () => {
   it("points at the element the student asks for", () => {
@@ -114,5 +142,94 @@ describe("mock intervention", () => {
   it("stays quiet without signals", () => {
     const d = interveneMock({ page, signals: emptySignals(), student: emptyStudentState(), conversation: [], level: 0 });
     expect(d.intervene).toBe(false);
+  });
+});
+
+describe("path playbook and learning plans", () => {
+  const RESULTS = [
+    '1. [article] Axial tilt (Wikipedia) — https://en.wikipedia.org/wiki/Axial_tilt — the angle',
+    '2. [lesson] Khan Academy search for "axial tilt" — https://www.khanacademy.org/search?page_search_query=axial%20tilt',
+    '3. [video] YouTube search for "axial tilt" — https://www.youtube.com/results?search_query=axial%20tilt',
+  ].join("\n");
+
+  it("pickLookupResult honours the preferred modality and falls back to the first", () => {
+    expect(pickLookupResult(RESULTS, "video")?.url).toContain("youtube.com");
+    expect(pickLookupResult(RESULTS, "practice")?.url).toContain("wikipedia.org");
+    expect(pickLookupResult("No results for \"x\".")).toBeNull();
+  });
+
+  it("runs look_up → open_tab for a resource-backed path suggestion, then stops", () => {
+    const path = { kind: "reconcile", conceptLabel: "Axial tilt", query: "Axial tilt explained", prefer: "video" };
+    const base = { ...input("Yes please"), path };
+    const first = decideMock(base);
+    expect(first).toMatchObject({ action: "look_up", text: "Axial tilt explained", done: false });
+    const looked = { step: 0, decision: first, result: { ok: true, message: "ok" }, at: 0 };
+    const second = decideMock({ ...base, step: 1, history: [looked], lookupResults: RESULTS });
+    expect(second.action).toBe("open_tab");
+    expect(second.url).toContain("youtube.com");
+    const opened = { step: 1, decision: second, result: { ok: true, message: "ok" }, at: 0 };
+    expect(decideMock({ ...base, step: 2, history: [looked, opened], resumedAfterNavigation: true }).action).toBe("finish");
+  });
+
+  it("turns 'I want to learn about X' into make_plan, without hijacking help requests", () => {
+    expect(decideMock(input("I want to learn more about geology"))).toMatchObject({ action: "make_plan", text: "geology" });
+    expect(decideMock(input("teach me about volcanoes"))).toMatchObject({ action: "make_plan", text: "volcanoes" });
+    expect(decideMock(input("help me, I'm stuck")).action).not.toBe("make_plan");
+  });
+});
+
+describe("asking about plans", () => {
+  it("opens the plan map instead of reciting, for the ways a kid might ask", () => {
+    for (const q of ["what's my plan?", "what are my plans", "show me our plan", "what's next in my plan?", "where am I in the plan", "what are the steps"]) {
+      expect(decideMock(input(q)), q).toMatchObject({ action: "show_plan", done: true });
+    }
+    expect(validateDecision(decideMock(input("what's my plan?"))).ok).toBe(true);
+  });
+
+  it("does not hijack unrelated requests", () => {
+    expect(decideMock(input("where is the sign in button")).action).not.toBe("show_plan");
+    expect(decideMock(input("give me a hint")).action).not.toBe("show_plan");
+  });
+});
+
+describe("region reading (observe with a target)", () => {
+  it("observes with a quote first, then answers from the full readout", () => {
+    const first = decideMock(input("What does the description say?"));
+    expect(first).toMatchObject({ action: "observe", quote: "description", done: false });
+    expect(validateDecision(first).ok).toBe(true);
+
+    const readout = `region containing "description":\nThis assignment closes the unit. ${"More context. ".repeat(30)}Spotting it earns a golden ratio bonus.`;
+    const second = decideMock(input("What does the description say?", { step: 1, history: [{ step: 0, decision: first, result: { ok: true, message: "read" }, at: 0 }], readout }));
+    expect(second.action).toBe("explain");
+    expect(second.done).toBe(true);
+    expect(second.text).toMatch(/golden ratio bonus/);
+    expect(second.text).not.toMatch(/region containing/); // label line stripped
+  });
+
+  it("gives up honestly when the region was not found", () => {
+    const first = decideMock(input("read the fine print"));
+    expect(first).toMatchObject({ action: "observe", quote: "fine print" });
+    const second = decideMock(input("read the fine print", { step: 1, history: [{ step: 0, decision: first, result: { ok: false, message: "not found" }, at: 0 }] }));
+    expect(second.action).toBe("speak");
+    expect(second.done).toBe(true);
+  });
+
+  it("does not hijack page summaries or clicks", () => {
+    expect(decideMock(input("What's on this page?")).action).toBe("explain");
+    expect(decideMock(input("click the check answer button")).action).toBe("click");
+  });
+});
+
+describe("sketch diagrams", () => {
+  it("draws strokes for a diagram request and text steps for an equation", () => {
+    const tri = decideMock(input("can you draw a right triangle?"));
+    expect(tri.action).toBe("sketch");
+    expect(tri.text).toMatch(/^A right triangle:/);
+    expect(tri.text).toMatch(/line 20 80 80 80/);
+    expect(validateDecision(tri).ok).toBe(true);
+    const eq = decideMock(input("can you draw it out for me?"));
+    expect(eq.action).toBe("sketch");
+    expect(eq.text).toMatch(/2x \+ 4 = 10/);
+    expect(eq.text).not.toMatch(/\bline \d/);
   });
 });
