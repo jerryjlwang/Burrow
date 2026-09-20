@@ -93,6 +93,8 @@ export interface StruggleSignals {
   failedUiAction: boolean;
   lastClickedName?: string;
   lastErrorText?: string;
+  /** The step-judge found a wrong line in the student's written working. */
+  wrongStep?: { step: number; category: string; ageMs: number };
   /** Human-readable list, e.g. "2 incorrect attempts on the same problem". */
   summary: string[];
   strength: number;

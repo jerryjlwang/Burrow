@@ -258,6 +258,28 @@ try {
     await sp2.close();
   }
 
+  // Step-judge: a wrong line in written working escalates from a silent glance to a bubble that
+  // names the step, never the fix. Fresh tab so earlier offers' cooldowns don't suppress it.
+  {
+    const wp = await context.newPage();
+    await wp.goto(`http://localhost:${PORT}/demo/working.html`, { waitUntil: "load" });
+    await wp.locator("#pip-companion-host").waitFor({ state: "attached", timeout: 10000 });
+    await new Promise((r) => setTimeout(r, 800));
+    await wp.fill("#working", "3x + 5 = 20\n3x = 25"); // arithmetic slip on line 2
+    const stepBubble = wp.locator(".pip-bubble");
+    await stepBubble.waitFor({ timeout: 25000 }).catch(() => null);
+    const stepText = (await stepBubble.count()) ? await stepBubble.first().textContent() : "";
+    check("wrong working step earns a bubble naming the step", /step 2/i.test(stepText ?? ""), stepText || "(no bubble)");
+    check("step bubble never contains the correction", !/15|x\s*=\s*5/.test(stepText ?? ""), stepText ?? "");
+    await wp.screenshot({ path: resolve(shots, "14-step-judge.png") });
+    // Fixing the working clears the signal; finishing correctly draws the success confirmation.
+    await wp.fill("#working", "3x + 5 = 20\n3x = 15\nx = 5");
+    await wp.click("#check-working");
+    const fixed = await wp.locator("#working-feedback.success.show").waitFor({ timeout: 5000 }).then(() => true).catch(() => false);
+    check("corrected working passes the page's final check", fixed);
+    await wp.close();
+  }
+
   // Consequential action asks for confirmation.
   await page.goto(`http://localhost:${PORT}/demo/quiz.html`, { waitUntil: "load" });
   await page.locator("#pip-companion-host").waitFor({ state: "attached", timeout: 10000 });

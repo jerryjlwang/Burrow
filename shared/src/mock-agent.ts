@@ -245,6 +245,18 @@ export function interveneMock(input: InterventionInput): InterventionDecision {
   const none: InterventionDecision = { intervene: false, confidence: 0, type: "none", message: null, elementId: null, reason: "no strong signal" };
   const answer = findAnswerInput(page);
 
+  if (signals.wrongStep) {
+    // Point at WHERE, never at WHAT: the step number is safe, the mistake's content is not.
+    const working = page.elements.find((e) => (e.role === "textarea" || e.role === "textbox") && (e.value ?? "").includes("=")) ?? answer;
+    return {
+      intervene: true,
+      confidence: 0.9,
+      type: "hint",
+      message: `Step ${signals.wrongStep.step} might be worth a second look. Want to check it together?`,
+      elementId: working?.id ?? null,
+      reason: "step judge found a wrong line in the working",
+    };
+  }
   if (signals.incorrectAttempts >= 2) {
     const n = student.hintsForCurrentProblem;
     const message =

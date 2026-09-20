@@ -88,6 +88,24 @@
     });
   }
 
+  // ---- Show your work (working.html) ----
+  var checkWorking = document.getElementById("check-working");
+  if (checkWorking) {
+    var workingBox = document.getElementById("working");
+    var wf = document.getElementById("working-feedback");
+    checkWorking.addEventListener("click", function () {
+      var lines = String(workingBox.value || "").split("\n").map(function (l) { return l.replace(/\s+/g, ""); }).filter(Boolean);
+      var last = lines[lines.length - 1] || "";
+      if (last === "x=5" || last === "5") {
+        wf.className = "feedback success show";
+        wf.textContent = "Correct! x = 5, and your steps got you there. Nice work.";
+      } else {
+        wf.className = "feedback error show";
+        wf.textContent = "Not quite — the last line should tell you what x is.";
+      }
+    });
+  }
+
   // ---- Seasons reading (seasons.html) ----
   var saveNotes = document.getElementById("save-notes");
   if (saveNotes) {

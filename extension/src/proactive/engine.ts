@@ -4,6 +4,8 @@ import type { InterventionDecision } from "@shared/actions";
 import type { Misconception } from "@shared/graph";
 import { composeMisconceptionNudge } from "@shared/nudge";
 import { interveneMock, findAnswerInput } from "@shared/mock-agent";
+import { detectProblem } from "@shared/hints";
+import { judgeWorking } from "@shared/steps";
 import { computeLevel, SignalTracker, THRESHOLDS, type ClickRecord } from "./signals";
 import { store } from "../content/store";
 import { sendToBackground } from "../shared/messages";
@@ -60,6 +62,9 @@ export class ProactiveEngine {
   /** The nudge currently on screen / most recently answered, for success attribution. */
   private activeNudge: NudgeRecord | null = null;
   private lastNudge: (NudgeRecord & { outcome: "accepted" | "declined" | "dismissed" }) | null = null;
+  /** The element holding the student's written working, for step-judge cues. */
+  private workingEl: (HTMLTextAreaElement | HTMLInputElement) | null = null;
+  private judgeTimer: number | null = null;
 
   constructor(deps: EngineDeps) {
     this.deps = deps;
@@ -72,7 +77,14 @@ export class ProactiveEngine {
       if (e.key === "Enter" && (e.target as Element)?.closest?.("input, textarea, [contenteditable]")) this.deps.tracker.recordKeySubmit(Date.now());
     };
     document.addEventListener("keydown", onKey, true);
-    this.removeListeners.push(() => document.removeEventListener("pointerdown", onPointerDown, true), () => document.removeEventListener("keydown", onKey, true));
+    // Step-judge: watch the student's written working and judge it locally (no model, no latency).
+    const onInput = (e: Event) => this.handleWorkingInput(e);
+    document.addEventListener("input", onInput, true);
+    this.removeListeners.push(
+      () => document.removeEventListener("pointerdown", onPointerDown, true),
+      () => document.removeEventListener("keydown", onKey, true),
+      () => document.removeEventListener("input", onInput, true),
+    );
     this.tickTimer = window.setInterval(() => this.evaluate("tick"), 4000);
     this.deps.tracker.recordUrl(location.href, Date.now());
   }
@@ -82,6 +94,28 @@ export class ProactiveEngine {
     this.removeListeners = [];
     if (this.tickTimer) window.clearInterval(this.tickTimer);
     if (this.cueTimer) window.clearTimeout(this.cueTimer);
+    if (this.judgeTimer) window.clearTimeout(this.judgeTimer);
+  }
+
+  /** Debounced local step-judging of whatever multi-line working the student is typing. */
+  private handleWorkingInput(e: Event): void {
+    const target = e.target as Element | null;
+    if (!target || target.closest?.(`#${HOST_ID}`)) return;
+    if (!(target instanceof HTMLTextAreaElement) && !(target instanceof HTMLInputElement)) return;
+    this.workingEl = target;
+    if (this.judgeTimer) window.clearTimeout(this.judgeTimer);
+    this.judgeTimer = window.setTimeout(() => this.judgeNow(), 900);
+  }
+
+  private judgeNow(): void {
+    const page = this.deps.getPage();
+    const value = String(this.workingEl?.value ?? "");
+    if (!page || !value.includes("=")) return;
+    const judgement = judgeWorking(detectProblem(page), value);
+    if (!judgement.judged) return;
+    this.deps.tracker.recordWorkingJudgement(judgement, Date.now());
+    logger.debug("working judged", { firstWrongStep: judgement.firstWrongStep, solved: judgement.solved });
+    this.evaluate("working");
   }
 
   private handlePointerDown(e: PointerEvent): void {
@@ -213,9 +247,13 @@ export class ProactiveEngine {
 
   private async act(level: 1 | 2 | 3 | 4, summary: string[]): Promise<void> {
     if (level <= 2) {
-      const id = this.issueElementId();
-      const el = id != null ? this.deps.registry.get(id) : null;
-      const rect = el?.getBoundingClientRect();
+      // A wrong working step glances at the working itself; otherwise at the answer input.
+      const wrongStep = store.getState().signals.wrongStep;
+      let rect = wrongStep && this.workingEl ? this.workingEl.getBoundingClientRect() : undefined;
+      if (!rect) {
+        const id = this.issueElementId();
+        rect = (id != null ? this.deps.registry.get(id) : null)?.getBoundingClientRect();
+      }
       const cue = level as 1 | 2;
       store.setState({ attention: cue, lookAt: rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : null });
       if (this.cueTimer) window.clearTimeout(this.cueTimer);
