@@ -4,6 +4,6 @@ extension/dist/
 .env.local
 *.log
 .DS_Store
-e2e/.profile/
+e2e/.profile*/
 e2e/screenshots/
 coverage/
