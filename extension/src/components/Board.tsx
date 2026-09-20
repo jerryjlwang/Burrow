@@ -123,7 +123,7 @@ function StrokeShape({ stroke, animate }: { stroke: Stroke; animate: boolean }) 
       return <circle cx={a} cy={b} r={1.3} fill={CHALK} stroke="none" />;
     case "label":
       return (
-        <text x={a} y={b} fill={CHALK} stroke="none" fontSize={6} style={animate ? { animation: "pip-chalk-fade 400ms ease-out both" } : undefined}>
+        <text className="pip-board-label" x={a} y={b} fill={CHALK} stroke="none" fontSize={6} style={animate ? { animation: "pip-chalk-fade 400ms ease-out both" } : undefined}>
           {stroke.text}
         </text>
       );

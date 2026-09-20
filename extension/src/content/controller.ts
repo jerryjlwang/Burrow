@@ -56,6 +56,11 @@ export class CompanionController {
     this.watcher = new PageWatcher((reason) => this.handlePageChange(reason));
     this.voice = new VoiceController({
       onFinalTranscript: (text) => void this.handleUserText(text, "voice"),
+      // A pending yes/no or a stop command is answered locally, so there is nothing to get ahead on.
+      onProbableEndOfTurn: (text) => {
+        if (!this.pendingConfirmation && !this.pendingOffer && !isStopCommand(text) && isExtensionContextValid()) this.loop.speculate(text);
+      },
+      onTurnResumed: () => this.loop.dropSpeculation(),
       onSpeechStart: () => this.handleSpeechStart(),
     });
     this.loop = new AgentLoop({
@@ -103,14 +108,17 @@ export class CompanionController {
         sketch: (spec, opts) => {
           const sk = parseSketch(spec);
           if (!sk.items.length) return;
-          const anchor = opts?.elementId != null ? this.registry.get(opts.elementId) : opts?.quote ? quoteRegion(document.body, opts.quote, HOST_ID, { grow: false }) : null;
+          const named = opts?.elementId != null ? this.registry.get(opts.elementId) : opts?.quote ? quoteRegion(document.body, opts.quote, HOST_ID, { grow: false }) : null;
           const prev = store.getState().board;
           if (opts?.add && prev) {
             // Extend the drawing on screen: same board id so the reveal continues, not restarts.
-            store.setState({ board: { ...prev, title: sk.title ?? prev.title, items: [...prev.items, ...sk.items].slice(0, 48), anchor: anchor ?? prev.anchor }, planView: null });
+            store.setState({ board: { ...prev, title: sk.title ?? prev.title, items: [...prev.items, ...sk.items].slice(0, 48), anchor: named ?? prev.anchor, region: named ? null : prev.region }, planView: null });
             return;
           }
-          store.setState({ board: { id: `${Date.now()}`, title: sk.title, items: sk.items, anchor }, planView: null });
+          // A video has no element id and no text to quote, so the model can never name it. While one
+          // is being watched, an unanchored drawing goes onto the frame's empty space instead of the corner.
+          const onVideo = named ? null : this.video.watcher.element;
+          store.setState({ board: { id: `${Date.now()}`, title: sk.title, items: sk.items, anchor: named ?? onVideo, region: onVideo ? this.video.watcher.emptyRegion() : null }, planView: null });
         },
         goBack: async () => {
           try {
@@ -222,6 +230,9 @@ export class CompanionController {
           break;
         case "settings.changed":
           this.applySettings(msg.settings);
+          break;
+        case "agent.say":
+          this.loop.handleEarlySay(msg.requestId, msg.say);
           break;
         case "ink.judgement":
           this.engine.onInkJudgement(msg.judgement);

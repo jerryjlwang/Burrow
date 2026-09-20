@@ -355,3 +355,62 @@ export interface VideoContext {
   /** Whether a transcript exists at all; false means only the frame is available. */
   hasTranscript: boolean;
 }
+
+/** A sub-rectangle of the video frame, as fractions of its width and height. */
+export interface FrameRegion {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Mean detail inside it, 0 (flat colour) upward; above {@link EMPTY_BUSY} it covers some of the picture. */
+  busy: number;
+}
+
+/** Mean detail at or under this is blank background: a slide's margin, an empty stretch of whiteboard. Above it the drawing needs a scrim. */
+export const EMPTY_BUSY = 1.5;
+
+/**
+ * Where in a video frame a drawing can go without covering the lesson: the largest rectangle
+ * that is actually blank, or failing that the least detailed one. Candidates are all big enough
+ * to draw a diagram in — a blank sliver is no use, however blank. `luma` is a small greyscale grid of the frame (row-major, 0..255). Detail is local
+ * gradient, summed with an integral image so every candidate rectangle costs O(1). The bottom
+ * strip is never used — player controls and captions live there.
+ */
+export function emptiestRegion(luma: ArrayLike<number>, cols: number, rows: number): FrameRegion | null {
+  if (cols < 8 || rows < 6 || luma.length < cols * rows) return null;
+  const at = (x: number, y: number) => luma[y * cols + x];
+  // integral[y][x] = total detail in the cells above and left of (x, y).
+  const integral = new Float64Array((cols + 1) * (rows + 1));
+  for (let y = 0; y < rows; y++) {
+    let run = 0;
+    for (let x = 0; x < cols; x++) {
+      run += Math.abs(at(Math.min(x + 1, cols - 1), y) - at(x, y)) + Math.abs(at(x, Math.min(y + 1, rows - 1)) - at(x, y));
+      integral[(y + 1) * (cols + 1) + x + 1] = integral[y * (cols + 1) + x + 1] + run;
+    }
+  }
+  const sum = (x: number, y: number, w: number, h: number) => integral[(y + h) * (cols + 1) + x + w] - integral[y * (cols + 1) + x + w] - integral[(y + h) * (cols + 1) + x] + integral[y * (cols + 1) + x];
+  const usableRows = Math.floor(rows * 0.84);
+  // Blank beats big: size only breaks ties among rectangles that cover nothing. A bigger canvas
+  // that clips the lesson's own writing is exactly what this exists to avoid.
+  let blank: FrameRegion | null = null;
+  let blankArea = 0;
+  let calmest: FrameRegion | null = null;
+  for (const wf of [0.26, 0.34, 0.42, 0.5, 0.58]) {
+    for (const hf of [0.45, 0.6, 0.75]) {
+      const w = Math.round(cols * wf);
+      const h = Math.min(usableRows - 1, Math.round(rows * hf));
+      for (let y = 1; y + h <= usableRows; y++) {
+        for (let x = 1; x + w <= cols - 1; x++) {
+          const busy = sum(x, y, w, h) / (w * h);
+          const region = { x: x / cols, y: y / rows, w: w / cols, h: h / rows, busy };
+          if (busy <= EMPTY_BUSY && (w * h > blankArea || (w * h === blankArea && busy < blank!.busy))) {
+            blank = region;
+            blankArea = w * h;
+          }
+          if (!calmest || busy < calmest.busy) calmest = region;
+        }
+      }
+    }
+  }
+  return blank ?? calmest;
+}

@@ -48,6 +48,18 @@ While a video plays, the proactive engine counts as busy, so only the video gate
 
 `Settings.videoCompanion`: `"ask"` (default) offers once after 20 seconds of a video that has a transcript; "Sure" becomes `"on"`, a standing permission to follow silently, offer help, and pause for what is crucial. `"off"` surfaces nothing. It is a toggle in the panel and the popup.
 
+### Drawing into the video (`emptiestRegion`, `Board.tsx`)
+
+A `<video>` has no element id and no text to quote, so the model could never anchor a sketch to it and every drawing on a video page fell back to the corner panel. While a video is being watched, a sketch with no named anchor now goes onto the video element, inside the emptiest part of the frame on screen: the frame is reduced to a 96×54 luma grid, local gradient is summed with an integral image, and the largest candidate rectangle that is actually blank wins (blank beats big; every candidate is tall enough to hold a diagram; the bottom strip with controls and captions is never used). Words and diagram both live inside that region. When nothing that size is blank the calmest region is used with a translucent scrim under the drawing.
+
+Two rendering fixes came with it. Strokes are laid out in the canvas's own pixels instead of a stretched `viewBox` with `vector-effect: non-scaling-stroke`: under that effect Chrome measures dashes in screen pixels and ignores `pathLength`, so the draw-in's `stroke-dasharray: 100` left every stroke longer than 100px permanently dashed. The dash pattern now lives only in the keyframes. And every stroke is drawn twice (dark pass, then chalk) with a glow on text, so white ink reads on light pages; outside element wraps the 100×100 space keeps its proportions instead of stretching.
+
+### YouTube dies under Playwright's launch flags, not under the extension
+
+Measured 2026-09-20. Launched through Playwright (`launchPersistentContext`), YouTube plays for 30 to 45 seconds, then the player shows "Something went wrong. Refresh or try again later" and resets — identically with and without the extension, headed and headless; heap flat, no renderer crash, no JS errors. The same Chrome for Testing binary spawned directly, extension loaded, played 180 seconds without a fault. So it is something among the ~40 default flags Playwright adds (which one was not isolated). The extension's script cost during playback measured about 0.05s per 10s over the bare browser.
+
+Consequences: the live test window is spawned directly (`npm run live`, `scripts/live.mjs`), never through Playwright's launcher; the e2e suites keep using Playwright and therefore never depend on YouTube (`demo-pages/video.html` instead).
+
 ## Bubbles hold for as long as they take to read (`extension/src/content/bubbles.ts`)
 
 Separate from video but found alongside it: `showBubble` replaced the current bubble instantly and left lifetimes to each caller, while the typewriter alone needs about five seconds for 200 characters. `BubbleQueue` now owns every bubble write. A bubble is guaranteed `bubbleHoldMs(text)` (time to type it out plus reading time, 2.5 to 16 seconds); later bubbles queue behind it, latest-wins among plain replies; an expiry shorter than the hold is stretched; a bubble with buttons stays until answered or expired; only a confirmation jumps the queue.

@@ -7,6 +7,10 @@ const logger = log("voice");
 export interface VoiceCallbacks {
   onFinalTranscript: (text: string) => void;
   onInterimTranscript?: (text: string) => void;
+  /** Speech recognition thinks the turn has probably ended (it is not sure yet). */
+  onProbableEndOfTurn?: (text: string) => void;
+  /** It was wrong: the student kept talking. */
+  onTurnResumed?: () => void;
   onSpeechStart?: () => void;
 }
 
@@ -221,6 +225,8 @@ export class VoiceController {
         } else {
           store.setState({ interimTranscript: text });
           this.callbacks.onInterimTranscript?.(text);
+          if (msg.event === "EagerEndOfTurn" && text) this.callbacks.onProbableEndOfTurn?.(text);
+          else if (msg.event === "TurnResumed") this.callbacks.onTurnResumed?.();
         }
         return true;
       }

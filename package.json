@@ -11,6 +11,7 @@
     "build": "npm run build:extension",
     "build:extension": "node extension/build.mjs",
     "start": "tsx server/src/index.ts",
+    "live": "node scripts/live.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
