@@ -122,11 +122,7 @@ function StrokeShape({ stroke, animate }: { stroke: Stroke; animate: boolean }) 
     case "dot":
       return <circle cx={a} cy={b} r={1.3} fill={CHALK} stroke="none" />;
     case "label":
-      return (
-        <text x={a} y={b} fill={CHALK} stroke="none" fontSize={6} style={animate ? { animation: "pip-chalk-fade 400ms ease-out both" } : undefined}>
-          {stroke.text}
-        </text>
-      );
+      return null; // labels are HTML over the canvas, see the drawing in Board
   }
 }
 
@@ -345,13 +341,34 @@ export function Board() {
           );
         })}
         {hasStrokes && (
-          <svg className="pip-board-canvas" viewBox="0 0 100 100" aria-hidden="true">
-            {entries.map((e, i) => (e.kind === "stroke" && i <= at ? <StrokeShape key={`${shown.id}-s${i}`} stroke={e.stroke} animate={!reduced} /> : null))}
-          </svg>
+          <div className="pip-board-drawing">
+            <svg className="pip-board-canvas" viewBox="0 0 100 100" aria-hidden="true">
+              {entries.map((e, i) => (e.kind === "stroke" && e.stroke.kind !== "label" && i <= at ? <StrokeShape key={`${shown.id}-s${i}`} stroke={e.stroke} animate={!reduced} /> : null))}
+            </svg>
+            {/* Labels are HTML at percentage positions, as on the page overlay, so the chalk text stays crisp. */}
+            {entries.map((e, i) =>
+              e.kind === "stroke" && e.stroke.kind === "label" && i <= at ? (
+                <span key={`${shown.id}-l${i}`} className="pip-board-label" style={{ left: `${e.stroke.n[0]}%`, top: `${e.stroke.n[1]}%`, animation: reduced ? undefined : "pip-chalk-fade 400ms ease-out both" }}>
+                  {e.stroke.text}
+                </span>
+              ) : null,
+            )}
+          </div>
         )}
       </div>
       <span className="pip-board-chalk" aria-hidden="true" />
-      <button type="button" className="pip-board-close" aria-label="Close the board" onClick={() => store.setState({ board: null })}>
+      <button
+        type="button"
+        className="pip-board-close"
+        aria-label="Close the board"
+        onClick={() => {
+          // The ✕ takes the board down in the same event, no sink: a click handler flushes at once, so
+          // the page's checks (and the kid) see it gone on the click, not after a render or two.
+          setShown(null);
+          setLeaving(false);
+          store.setState({ board: null });
+        }}
+      >
         ×
       </button>
     </div>

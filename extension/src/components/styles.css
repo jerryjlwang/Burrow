@@ -464,7 +464,9 @@
 .pip-board-line.pip-board-title { color: var(--gold); font-size: 30px; line-height: 33px; margin-bottom: 6px; opacity: 1; }
 .pip-board-line.pip-board-title .pip-board-head { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 3px; text-decoration-color: rgba(242, 193, 78, 0.9); }
 .pip-board-caret { display: inline-block; width: 9px; height: 15px; margin-left: 3px; vertical-align: -1px; background: var(--cream); animation: pip-blink 0.5s steps(2) infinite; }
-.pip-board-canvas { display: block; width: 100%; aspect-ratio: 1 / 1; margin-top: 6px; overflow: visible; }
+.pip-board-drawing { position: relative; margin-top: 6px; }
+.pip-board-canvas { display: block; width: 100%; aspect-ratio: 1 / 1; overflow: visible; }
+.pip-board-label { position: absolute; transform: translateY(-50%); white-space: nowrap; font-size: 21px; line-height: 21px; pointer-events: none; }
 .pip-board-canvas text { font-family: inherit; }
 .pip-board-chalk {
   position: absolute; left: 6px; bottom: -15px; width: 27px; height: 12px; pointer-events: none;
