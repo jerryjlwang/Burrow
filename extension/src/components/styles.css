@@ -166,6 +166,11 @@
 .pip-bubble.kind-offer, .pip-bubble.kind-confirmation { padding-right: 0; }
 .pip-bubble.kind-error .pip-bubble-text::before { content: "! "; color: var(--red); }
 .pip-bubble-text { margin: 0; }
+/* While the rabbit talks the rest of the sentence is already there, just not shown yet. */
+.pip-bubble-rest { visibility: hidden; }
+.pip-bubble.typing { cursor: pointer; }
+.pip-bubble.typing .pip-bubble-text::after { content: ""; display: inline-block; width: 9px; height: 15px; margin-left: 3px; vertical-align: -3px; background: var(--ink); animation: pip-blink 0.6s steps(2) infinite; }
+.pip-bubble-actions.pending { visibility: hidden; }
 .pip-bubble-actions { display: flex; gap: 9px; margin-top: 9px; flex-wrap: wrap; }
 .pip-bubble-close {
   position: absolute; right: -9px; top: -9px; width: 24px; height: 24px; border: 0; padding: 0;

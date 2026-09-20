@@ -62,3 +62,24 @@ export function playCue(state: string): void {
     t += secs;
   }
 }
+
+/**
+ * One syllable of rabbit talk: a short triangle blip whose pitch comes from the letter, so the
+ * same word always sounds the same. Quiet and quick, like game dialogue.
+ */
+export function voiceBlip(charCode: number): void {
+  if (!enabled || !ctx || ctx.state !== "running") return;
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(560 + ((charCode * 37) % 320), t);
+  osc.frequency.exponentialRampToValueAtTime(420 + ((charCode * 53) % 240), t + 0.05);
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.035, t + 0.004);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.055);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(t);
+  osc.stop(t + 0.06);
+}
+
