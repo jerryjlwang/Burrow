@@ -5,6 +5,7 @@ import { Character } from "./Character";
 import { besidePoint, type PetBox, type PetController } from "./pet";
 import { Panel } from "./Panel";
 import { Bubble } from "./Bubble";
+import { TeachCard } from "./TeachCard";
 import { Overlay } from "./Overlay";
 import { Board } from "./Board";
 import { DebugPanel } from "./DebugPanel";
@@ -277,6 +278,7 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
         <div className="pip-dock-stack" style={stackStyle}>
           {bubble && !panelOpen && <Bubble bubble={bubble} onAction={(v) => controller.bubbleAction(v)} />}
           {bubble && panelOpen && (bubble.kind === "offer" || bubble.kind === "confirmation" || bubble.kind === "error") && <Bubble bubble={bubble} onAction={(v) => controller.bubbleAction(v)} />}
+          <TeachCard controller={controller} />
           {panelOpen && <Panel controller={controller} />}
         </div>
         <div className="pip-char-wrap">

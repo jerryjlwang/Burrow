@@ -302,3 +302,77 @@
   .pip-panel { width: calc(100vw - 24px); }
   .pip-dock { right: 12px; bottom: 12px; }
 }
+
+/* ---------- Teach card and memory: the teaching loop made visible (TeachCard.tsx) ---------- */
+/* The card wears the bubble's cream frame and tail at a fixed width on the 3px grid, buttons on their
+   own line. Driven by the page events burrow:teach and burrow:forget (docs/frontend/KID_UI.md, Events). */
+.pip-teach {
+  position: relative;
+  pointer-events: auto;
+  width: 300px;
+  max-width: 100%;
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 24px;
+  margin: 0 9px 15px 0;
+  box-shadow: var(--shadow);
+  animation: pip-pop 0.18s steps(3);
+}
+.pip-teach::after {
+  content: ""; position: absolute; right: 27px; bottom: -24px; width: 21px; height: 12px;
+  background: var(--ui-tail) no-repeat; background-size: 21px 12px; image-rendering: pixelated;
+}
+.pip-dock.below .pip-teach { margin: 15px 9px 0 0; }
+.pip-dock.below .pip-teach::after { bottom: auto; top: -24px; transform: scaleY(-1); }
+.pip-teach.kind-forget { width: 240px; }
+.pip-teach-text { margin: 0; }
+.pip-teach.got .pip-teach-text { color: var(--teal-deep); }
+.pip-teach-actions { display: flex; gap: 9px; margin-top: 9px; flex-wrap: wrap; }
+.pip-teach-close {
+  position: absolute; right: -9px; top: -9px; width: 24px; height: 24px; border: 0; padding: 0;
+  background: transparent; color: var(--ink); cursor: pointer; font: 20px/1 var(--pip-font);
+}
+
+/* The thought he loses: a cream frame with two trailing pixel circles toward his head, like the bubble
+   in his thinking strip. The wrap holds the trail and the shadow so the dissolve covers all of it. */
+.pip-thought-wrap {
+  /* One 3px cell in the top left of a 12px tile; mask-position moves it to any cell of the 4 x 4 grid. */
+  --px-cell: conic-gradient(at 3px 3px, transparent 0 270deg, #000 270deg);
+  position: relative;
+  pointer-events: none;
+  padding: 0 3px 33px 0;
+  margin: 0 6px 0 0;
+  mask-size: 12px 12px;
+  mask-repeat: repeat;
+}
+.pip-dock.below .pip-thought-wrap { padding: 33px 3px 0 0; }
+.pip-thought {
+  position: relative;
+  width: 180px;
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 24px;
+  text-align: center;
+  overflow-wrap: anywhere;
+  box-shadow: var(--shadow);
+  animation: pip-pop 0.18s steps(3);
+}
+.pip-thought::before, .pip-thought::after { content: ""; position: absolute; background: var(--cream); border: 3px solid var(--ink); box-shadow: var(--shadow); }
+.pip-thought::before { right: 27px; bottom: -30px; width: 15px; height: 15px; }
+.pip-thought::after { right: 21px; bottom: -45px; width: 9px; height: 9px; }
+.pip-dock.below .pip-thought::before { bottom: auto; top: -30px; }
+.pip-dock.below .pip-thought::after { bottom: auto; top: -45px; }
+/* The dissolve: eight Bayer steps of 90 ms, cells leaving in the order of the 4 x 4 matrix. Under reduced
+   motion the animation is off and the bubble simply goes when the card comes. */
+.pip-thought-wrap.dissolving { animation: pip-dissolve 0.72s steps(1, end) forwards; }
+@keyframes pip-dissolve {
+  0% { mask-image: none; }
+  12.5% { mask-image: var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell); mask-position: 3px 0px, 6px 0px, 9px 0px, 0px 3px, 3px 3px, 6px 3px, 9px 3px, 0px 6px, 3px 6px, 9px 6px, 0px 9px, 3px 9px, 6px 9px, 9px 9px; }
+  25% { mask-image: var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell); mask-position: 3px 0px, 9px 0px, 0px 3px, 3px 3px, 6px 3px, 9px 3px, 3px 6px, 9px 6px, 0px 9px, 3px 9px, 6px 9px, 9px 9px; }
+  37.5% { mask-image: var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell); mask-position: 3px 0px, 9px 0px, 0px 3px, 6px 3px, 9px 3px, 3px 6px, 9px 6px, 0px 9px, 3px 9px, 6px 9px; }
+  50% { mask-image: var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell); mask-position: 3px 0px, 9px 0px, 0px 3px, 6px 3px, 3px 6px, 9px 6px, 0px 9px, 6px 9px; }
+  62.5% { mask-image: var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell); mask-position: 9px 0px, 0px 3px, 6px 3px, 3px 6px, 0px 9px, 6px 9px; }
+  75% { mask-image: var(--px-cell), var(--px-cell), var(--px-cell), var(--px-cell); mask-position: 0px 3px, 6px 3px, 0px 9px, 6px 9px; }
+  87.5% { mask-image: var(--px-cell), var(--px-cell); mask-position: 6px 3px, 0px 9px; }
+  100% { mask-image: linear-gradient(transparent, transparent); }
+}

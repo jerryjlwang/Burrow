@@ -13,9 +13,20 @@ The kid UI is everything the kid sees around the rabbit: the speech bubble, the 
 
 - **Speech bubble.** Cream frame with the tail pointing at the rabbit's head. One or two short sentences. Buttons inside are the pixel buttons: teal for the main choice, gold for the other, cream for quiet actions like "Not now".
 - **Hold to talk.** A big round pixel button under the rabbit with an ear on it. Hold with mouse, touch or the space bar. While held the rabbit plays listening and the button fills teal from the bottom like a rising meter tied to loudness. Release sends the turn. Kids do not need to find a microphone icon.
-- **Teach card.** After the rabbit asks a question, the bubble shows what he thinks he heard ("So a moat is a ditch with water?") with "Yes" and "Not quite" buttons. This is the teaching loop made visible.
-- **Memory.** When he forgets, the thought bubble shows the pixel dissolve and a small "Remind me?" button appears. No streaks, no guilt.
+- **Teach card.** After the rabbit asks a question, a card in his dock shows what he thinks he heard ("So a moat is a ditch with water?") with "Yes" (teal) and "Not quite" (gold). Yes makes him celebrate and the card says "Got it. I'll remember." for two seconds. Not quite opens the panel with "Tell me again" in its status line. Enter is Yes, Escape is Not quite. This is the teaching loop made visible; `TeachCard.tsx`, driven by `burrow:teach` (see Events).
+- **Memory.** When he forgets, a thought bubble with the concept dissolves in Bayer steps (a CSS mask, eight steps of 90 ms) and a small card says "I forgot about moats." with one "Remind me?" button, which opens the panel with "Remind me about moats" already typed. Escape or the corner cross puts it away. No streaks, no guilt. Driven by `burrow:forget`.
 - **Panel.** Same cream frame, teal header band with the rabbit's name and a gold underline. Conversation turns are cream (rabbit) and pale teal (kid) frames. Session ends on its own: the panel shows "That's enough for today, thank you for teaching me" and the rabbit sleeps.
+
+## Events
+
+Page events on `window` that drive the teaching loop. The backend dispatches them from the content script or any page script; the developer panel's "teach card" and "forget" buttons send the same events with "moats".
+
+- `burrow:teach`, detail `{ heard: string, concept: string }`. Shows the teach card with `heard` as its line ("So a moat is a ditch with water?") and the Yes and Not quite buttons. A new event replaces the card on screen.
+- `burrow:forget`, detail `{ concept: string }`. The thought bubble with the concept, the dissolve, then the "I forgot about <concept>." card with "Remind me?".
+- The card answers with `burrow:taught`, detail `{ concept: string, heard: string, yes: boolean }`, on Yes and on Not quite, so the backend can record the outcome. "Remind me?" reaches the backend as the kid's own message once they send it.
+- The rabbit's state is the backend's: the card only asks him to play `celebrate` on Yes (through `burrow:play`); set `confused` around a forget if he should look it.
+
+The other page events, `burrow:play` {state}, `burrow:goto` {x, y}, `burrow:leave` {url, line?, arriveLine?} and `burrow:enter`, are in `CompanionRoot.tsx`.
 
 ## Copy
 
