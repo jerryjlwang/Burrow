@@ -232,7 +232,13 @@ Do NOT draw anything or return any grid of pixels. Return only this JSON:
  "facing":"front|left|right",
  "palette":[{"role":"<body|shade|detail|eye|accent>","hex":"#rrggbb"}],
  "line_art":<true if the drawing is pen or pencil outlines with nothing coloured in>,
+ "eyes":[[x,y],[x,y]],
+ "mouth":[x,y],
+ "cheeks":[[x,y],[x,y]] or null,
+ "eye_size":<1 for small dot eyes, 2 for medium, 3 for big round eyes>,
  "keep":"<one short sentence: the one feature that must survive shrinking, for example the long ears or the round belly>"}
+
+Every coordinate is a fraction of this image: x from 0 at the left edge to 1 at the right, y from 0 at the top to 1 at the bottom. Read them off the drawing as carefully as you can, because the sprite's face is placed from these numbers and nothing else. Put "cheeks" where round cheek patches are if the character has them, else null.
 
 Give between two and five palette entries, ordered by how much of the drawing they cover, taking the colours from the drawing itself. If the drawing is only pencil or pen on paper, give the colours the subject is actually known to have, brightest first, because the sprite is coloured from this and not from the page. No em dashes."""
 
@@ -370,7 +376,111 @@ def neighbours4(x, y):
     return ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1))
 
 
-def clean(im, drop_strays=True):  # noqa: D401
+EYE = (42, 31, 51, 255)
+SHINE = (255, 255, 255, 255)
+CHEEK = (233, 106, 106, 255)
+
+
+def place_face(im, inside, facts, mirrored=False):
+    """
+    Put the face where the model says it is.
+
+    Finding the eyes from the pixels was the wrong tool: a hand drawn eye is a few dark cells after
+    the shrink and the heuristics that pick them out also pick out a nostril, an ear tip or a fold,
+    so the face ended up crooked or in the wrong place. The vision model already read the drawing,
+    so it is asked for the face's coordinates and the eyes are placed on those, level with each
+    other by construction. Without coordinates the drawing is left exactly as it was.
+    """
+    eyes = facts.get("eyes") or []
+    if len(eyes) != 2:
+        return im
+    w, h = im.size
+    px, ip = im.load(), inside.load()
+
+    def to_sprite(pt):
+        try:
+            return int(round(float(pt[0]) * w)), int(round(float(pt[1]) * h))
+        except (TypeError, ValueError, IndexError):
+            return None
+
+    spots = [to_sprite(e) for e in eyes]
+    if any(s is None for s in spots):
+        return im
+    (ax, ay), (bx, by) = spots
+    if not (0 <= ax < w and 0 <= bx < w and 0 <= ay < h and 0 <= by < h):
+        return im
+    # Level them and keep them symmetric about their own midpoint: a drawn face never is, and at
+    # this size a one pixel difference reads as a squint.
+    cy = (ay + by) // 2
+    half = max(2, abs(bx - ax) // 2)
+    if mirrored:
+        # On a mirrored body the middle is the middle, whatever the drawing's own bbox was.
+        row = [x for x in range(w) if ip[x, cy]]
+        cx = (min(row) + max(row)) // 2 if row else (ax + bx) // 2
+    else:
+        cx = (ax + bx) // 2
+    size = int(facts.get("eye_size") or 2)
+    eh = 2 if size <= 1 else 3
+    ew = 2 if size <= 2 else 3
+
+    def clear(x0, y0, x1, y1):
+        for y in range(max(0, y0), min(h, y1 + 1)):
+            for x in range(max(0, x0), min(w, x1 + 1)):
+                if ip[x, y] and px[x, y] == INK:
+                    px[x, y] = body_at(im, x, y)
+
+    clear(cx - half - ew - 1, cy - eh, cx + half + ew + 1, cy + eh)
+    for sx in (cx - half, cx + half):
+        for dy in range(eh):
+            for dx in range(ew):
+                if 0 <= sx + dx < w and 0 <= cy + dy < h:
+                    px[sx + dx][cy + dy] if False else px.__setitem__((sx + dx, cy + dy), EYE)
+        if 0 <= sx < w and 0 <= cy < h:
+            px[sx, cy] = SHINE
+    # Cheeks in the character's own accent colour, mirrored onto the body's middle when it is
+    # symmetric. They sit near the edge of a face, where the filled body often stops, so they are
+    # not required to land on it.
+    accent = next((hexrgb(q["hex"]) for q in facts.get("palette", []) if q.get("role") in ("accent", "detail")), None)
+    cheeks = [to_sprite(c) for c in (facts.get("cheeks") or [])]
+    cheeks = [c for c in cheeks if c]
+    if accent and len(cheeks) == 2:
+        cyy = (cheeks[0][1] + cheeks[1][1]) // 2
+        off = max(half + 2, abs(cheeks[1][0] - cheeks[0][0]) // 2)
+        for sx in ((cx - off, cx + off) if mirrored else (cheeks[0][0], cheeks[1][0])):
+            for dx in range(2):
+                for dy in range(2):
+                    x, y = sx + dx, cyy + dy
+                    if 0 <= x < w and 0 <= y < h and px[x, y][3] and px[x, y] != INK:
+                        px[x, y] = accent + (255,)
+    m = to_sprite(facts.get("mouth") or [])
+    if m and 0 <= m[0] < w and 0 <= m[1] < h:
+        mx, my = (cx, m[1]) if mirrored else m
+        clear(mx - 3, my - 1, mx + 3, my + 1)
+        # A small closed smile: the corners a pixel higher than the middle, which is all a mouth
+        # needs at this size and never reads as a hole in the face.
+        for dx in (-1, 0, 1):
+            if 0 <= mx + dx < w:
+                px[mx + dx, my] = EYE
+        for dx in (-2, 2):
+            if 0 <= mx + dx < w and my - 1 >= 0:
+                px[mx + dx, my - 1] = EYE
+    return im
+
+
+def body_at(im, x, y):
+    """The nearest colour that is not ink, so clearing a drawn feature leaves skin and not a hole."""
+    w, h = im.size
+    px = im.load()
+    for r in range(1, 9):
+        for dx in range(-r, r + 1):
+            for dy in (-r, r):
+                for nx, ny in ((x + dx, y + dy), (x + dy, y + dx)):
+                    if 0 <= nx < w and 0 <= ny < h and px[nx, ny][3] and px[nx, ny] not in (INK, EYE, SHINE, CHEEK):
+                        return px[nx, ny]
+    return px[x, y]
+
+
+def clean(im, drop_strays=True):
     """Strays go, one pixel holes close. Pixel art wants a solid shape, not photo noise."""
     w, h = im.size
     px = im.load()
@@ -458,6 +568,7 @@ def main():
     ap.add_argument("--no-model", action="store_true")
     ap.add_argument("--no-mirror", action="store_true")
     ap.add_argument("--line-art", action="store_true", help="pen only: fill what the strokes enclose")
+    ap.add_argument("--keep-face", action="store_true", help="leave the eyes exactly as drawn, with no shine")
     ap.add_argument("--body", default="", help="hex for the filled body when the drawing has no colour")
     args = ap.parse_args()
 
@@ -481,8 +592,14 @@ def main():
     art_is_lines = bool(facts.get("line_art")) or args.line_art
     art = rasterise(im, mask, pal, line_art=art_is_lines)
     art = clean(art)
-    if facts.get("symmetric") and not args.no_mirror:
+    mirrored = bool(facts.get("symmetric")) and not args.no_mirror
+    if mirrored:
+        # The body is made symmetric before the face goes on, never after: mirroring a placed face
+        # copies one eye over the other and the whole point of asking where they were is lost.
         art = mirror(art)
+    if not args.keep_face:
+        strokes = mask if art_is_lines else ink_lines(im, mask)
+        art = place_face(art, pool_max(interior(strokes), art.width, art.height), facts, mirrored)
     art = outline(art)
     cell, body = centre(art)
 

@@ -88,3 +88,18 @@ With the model in the loop the whole run is about 13 seconds, nearly all of it t
 and it names the character itself ("Pikachu face") and gives the colours. Without it, `--line-art
 --body "#f7d02c"` does the same in under a second, which is the safer thing to have bound to a key
 on the day.
+
+## The face comes from the model, not from the pixels
+
+Hunting for eyes in the shrunk sprite was the wrong tool. A drawn eye is a few dark cells after the
+shrink, and the same rules that find it also find a nostril, an ear tip or a fold, so the face came
+out crooked or in the wrong place, and a first attempt at stamping a friendly face landed it above
+the drawn one and gave the sprite two.
+
+The vision model has already read the drawing, so it is asked where the face is: `eyes`, `mouth` and
+`cheeks` as fractions of the picture, plus an `eye_size`. The eyes are then placed on those numbers,
+levelled with each other and, on a body that was mirrored, centred on it. Order matters: the body is
+made symmetric *before* the face goes on, because mirroring afterwards copies one eye over the other.
+
+Still open: the cheek patches do not paint. The coordinates come back and the accent colour is in
+the palette, so the placement test is what rejects them.
