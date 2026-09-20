@@ -1,10 +1,6 @@
 {
   "manifest_version": 3,
-<<<<<<< HEAD
   "name": "Wonderland",
-=======
-  "name": "Pip \u2014 Learning Companion",
->>>>>>> origin/main
   "version": "0.1.0",
   "description": "A pixel-art White Rabbit that lives on the page. Kids teach it in their own words, and it asks, forgets, and learns.",
   "minimum_chrome_version": "116",
@@ -40,11 +36,7 @@
   ],
   "action": {
     "default_popup": "popup.html",
-<<<<<<< HEAD
     "default_title": "Wonderland",
-=======
-    "default_title": "Pip \u2014 Learning Companion",
->>>>>>> origin/main
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
@@ -64,15 +56,10 @@
   },
   "commands": {
     "toggle-companion": {
-<<<<<<< HEAD
-      "suggested_key": { "default": "Alt+Shift+P" },
-      "description": "Open or close the rabbit's panel"
-=======
       "suggested_key": {
         "default": "Alt+Shift+P"
       },
-      "description": "Open or close Pip's panel"
->>>>>>> origin/main
+      "description": "Open or close the rabbit's panel"
     },
     "toggle-voice": {
       "suggested_key": {
@@ -82,6 +69,13 @@
     }
   },
   "web_accessible_resources": [
-    { "resources": ["characters/*"], "matches": ["<all_urls>"] }
+    {
+      "resources": [
+        "characters/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
   ]
 }
