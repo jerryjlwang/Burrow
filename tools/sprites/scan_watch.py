@@ -1,10 +1,10 @@
 """
 Watch for a scan and put the guest next to the rabbit.
 
-    python3 tools/sprites/scan_watch.py
+    python3 tools/sprites/scan_watch.py        (Windows: py -3 tools\\sprites\\scan_watch.py)
 
-Leave it running on the demo laptop. Drop a photo of the sketch into `scans/` (a phone over AirDrop,
-or the laptop's own camera) and within a second the sprite is built and written into
+Leave it running on the demo laptop. Drop a photo of the sketch into `scans/` and within a second the
+sprite is built and written into
 `extension/dist/characters/guest/`, which the running extension picks up on its own: no rebuild, no
 reload, because `characters/*` is already web accessible. The newest photo wins, so a second shot
 just replaces the first.
@@ -19,7 +19,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..", "..")
 WATCH = os.path.join(ROOT, "scans")
 DIST = os.path.join(ROOT, "extension", "dist", "characters", "guest")
-EXTS = (".jpg", ".jpeg", ".png", ".heic", ".webp")
+EXTS = (".jpg", ".jpeg", ".png", ".heic", ".webp", ".bmp")
+# A file is only read once it has stopped growing: a camera or a sync client writes it in pieces.
+SETTLE_S = 0.4
 
 
 def newest():
@@ -36,7 +38,7 @@ def main():
     seen = None
     while True:
         f = newest()
-        if f and f != seen:
+        if f and f != seen and time.time() - os.path.getmtime(f) > SETTLE_S:
             seen = f
             t0 = time.time()
             r = subprocess.run(
