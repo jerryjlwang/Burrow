@@ -1,5 +1,6 @@
 import type { PageSummary, StruggleSignals } from "@shared/types";
 import { detectProblem, problemKey } from "@shared/hints";
+import type { WorkingJudgement } from "@shared/steps";
 
 export const THRESHOLDS = {
   repeatedClickWindowMs: 20_000,
@@ -12,6 +13,8 @@ export const THRESHOLDS = {
   oscillationWindowMs: 90_000,
   /** How long after a user action an appearing error is attributed to that action. */
   attributionMs: 4_000,
+  /** A wrong working step younger than this gets only a silent cue; older earns the bubble. */
+  wrongStepBubbleMs: 8_000,
   cooldownMs: 45_000,
   declineCooldownMs: 180_000,
   dismissCooldownMs: 60_000,
@@ -49,6 +52,7 @@ export class SignalTracker {
   private lastErrorText: string | undefined;
   private hasQuizUi = false;
   private successSinceHint = false;
+  private wrongStep: { step: number; category: string; firstAt: number } | null = null;
 
   recordClick(rec: ClickRecord): ClickRecord {
     this.clicks.push(rec);
@@ -81,6 +85,7 @@ export class SignalTracker {
       this.knownErrors.clear();
       this.knownSuccesses.clear();
       this.successSinceHint = false;
+      this.wrongStep = null;
       problemChanged = true;
     }
     const newErrors = page.errors.filter((e) => !this.knownErrors.has(e));
@@ -126,6 +131,21 @@ export class SignalTracker {
     return { newErrors, newSuccesses, problemChanged };
   }
 
+  /**
+   * Feed each step-judge verdict on the student's written working. A wrong step arms the signal
+   * (keeping its first-seen time while the SAME step stays wrong, so escalation can grow with
+   * persistence); a clean or newly-correct working disarms it.
+   */
+  recordWorkingJudgement(j: WorkingJudgement, now: number): void {
+    if (!j.judged) return;
+    if (j.firstWrongStep === null) {
+      this.wrongStep = null;
+      return;
+    }
+    const category = j.steps.find((s) => s.step === j.firstWrongStep)?.category ?? "unknown";
+    if (this.wrongStep?.step !== j.firstWrongStep) this.wrongStep = { step: j.firstWrongStep, category, firstAt: now };
+  }
+
   /** Called by the engine when it verified a click produced no DOM change. */
   markLastClickUnchanged(): void {
     const last = this.clicks[this.clicks.length - 1];
@@ -142,6 +162,8 @@ export class SignalTracker {
     this.validationAt = [];
     this.clicks = [];
     this.problemStartedAt = Date.now();
+    // The wrong line is still on screen; keep the signal armed but restart the escalation clock.
+    if (this.wrongStep) this.wrongStep = { ...this.wrongStep, firstAt: Date.now() };
   }
 
   get currentProblemKey(): string | null {
@@ -182,6 +204,8 @@ export class SignalTracker {
     if (navigationOscillation) summary.push("bouncing back and forth between the same pages");
     if (this.deadEnd) summary.push("landed on an error / not-found page");
     if (timeOnCurrentProblemMs > THRESHOLDS.hesitationMs) summary.push(`on this problem for ${Math.round(timeOnCurrentProblemMs / 1000)}s`);
+    const wrongStep = this.wrongStep ? { step: this.wrongStep.step, category: this.wrongStep.category, ageMs: now - this.wrongStep.firstAt } : undefined;
+    if (wrongStep) summary.push(`step ${wrongStep.step} of their written working doesn't check out`);
 
     const strength = Math.min(
       1,
@@ -191,7 +215,10 @@ export class SignalTracker {
         (rapidClicks >= THRESHOLDS.rapidClicksMin ? 0.35 : 0) +
         (navigationOscillation ? 0.6 : 0) +
         (this.deadEnd ? 0.7 : 0) +
-        (timeOnCurrentProblemMs > THRESHOLDS.hesitationMs ? 0.45 : 0),
+        (timeOnCurrentProblemMs > THRESHOLDS.hesitationMs ? 0.45 : 0) +
+        // Graded escalation: a fresh wrong step earns a silent glance (level 2); one that
+        // persists past the grace window earns the bubble (level 3).
+        (wrongStep ? (wrongStep.ageMs >= THRESHOLDS.wrongStepBubbleMs ? 0.7 : 0.5) : 0),
     );
 
     return {
@@ -205,6 +232,7 @@ export class SignalTracker {
       failedUiAction,
       lastClickedName,
       lastErrorText: this.lastErrorText,
+      wrongStep,
       summary,
       strength,
     };
@@ -233,7 +261,11 @@ export interface LevelContext {
 /** Maps signal strength to an intervention intensity level 0..4 (see product spec §36). */
 export function computeLevel(signals: StruggleSignals, ctx: LevelContext): 0 | 1 | 2 | 3 | 4 {
   if (!ctx.proactiveEnabled) return 0;
-  const strong = signals.incorrectAttempts >= THRESHOLDS.incorrectMin || signals.failedUiAction || signals.deadEnd;
+  const strong =
+    signals.incorrectAttempts >= THRESHOLDS.incorrectMin ||
+    signals.failedUiAction ||
+    signals.deadEnd ||
+    (signals.wrongStep !== undefined && signals.wrongStep.ageMs >= THRESHOLDS.wrongStepBubbleMs);
   let level: 0 | 1 | 2 | 3 | 4;
   if (signals.strength < 0.25) level = 0;
   else if (signals.strength < 0.45) level = 1;

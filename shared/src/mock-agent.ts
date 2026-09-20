@@ -81,7 +81,10 @@ function hintDecision(input: AgentInput, opts: { fromOffer: boolean }): AgentDec
     null;
   const preface = opts.fromOffer ? "" : "";
   if (target) {
-    return d({ action: "point_to", elementId: target.id, say: preface + hint, done: true, taskType: "learning", reason: "progressive hint" });
+    // A step-judge signal points at the exact wrong line of the working, not just the box.
+    const line = input.signals.wrongStep && (target.value ?? "").includes("=") ? input.signals.wrongStep.step : null;
+    const say = line ? `Look at step ${line} again—right here. What did that move do to both sides?` : preface + hint;
+    return d({ action: "point_to", elementId: target.id, line, say, done: true, taskType: "learning", reason: line ? "point at the wrong step" : "progressive hint" });
   }
   return d({ action: "speak", say: preface + hint, done: true, taskType: "learning", reason: "progressive hint" });
 }
@@ -214,6 +217,11 @@ export function decideMock(input: AgentInput): AgentDecision {
   }
 
   // ---- Pointing / finding ----
+  // A quoted phrase gets a text anchor: point at the words themselves, not a whole element.
+  const quoted = utterance.match(/(?:where does it say|point (?:to|at)|highlight)\s+["“']([^"”']{3,120})["”']/i);
+  if (quoted) {
+    return d({ action: "point_to", quote: quoted[1], say: "Right here.", done: true, taskType: "navigation", reason: "quote anchor" });
+  }
   const wantsFind = /(where|find|show me|which (one|button|link)|point (to|at)|highlight|locate|how do i (get to|find|open|submit)|where do i)/.test(u);
   if (wantsFind) {
     const target = extractTarget(utterance);
@@ -245,6 +253,18 @@ export function interveneMock(input: InterventionInput): InterventionDecision {
   const none: InterventionDecision = { intervene: false, confidence: 0, type: "none", message: null, elementId: null, reason: "no strong signal" };
   const answer = findAnswerInput(page);
 
+  if (signals.wrongStep) {
+    // Point at WHERE, never at WHAT: the step number is safe, the mistake's content is not.
+    const working = page.elements.find((e) => (e.role === "textarea" || e.role === "textbox") && (e.value ?? "").includes("=")) ?? answer;
+    return {
+      intervene: true,
+      confidence: 0.9,
+      type: "hint",
+      message: `Step ${signals.wrongStep.step} might be worth a second look. Want to check it together?`,
+      elementId: working?.id ?? null,
+      reason: "step judge found a wrong line in the working",
+    };
+  }
   if (signals.incorrectAttempts >= 2) {
     const n = student.hintsForCurrentProblem;
     const message =

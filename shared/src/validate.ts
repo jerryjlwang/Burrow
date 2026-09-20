@@ -4,6 +4,8 @@ const ACTION_SET = new Set<string>(ACTIONS);
 const TASK_SET = new Set<string>(TASK_TYPES);
 const INTERVENTION_SET = new Set<string>(INTERVENTION_TYPES);
 const ELEMENT_ACTIONS = new Set<ActionName>(["highlight", "point_to", "click", "focus", "type", "clear", "select", "scroll_to"]);
+/** Actions that may anchor to a sub-element target (a verbatim quote or a line of a field's value). */
+const ANCHOR_ACTIONS = new Set<ActionName>(["highlight", "point_to"]);
 
 export type DecisionValidation = { ok: true; decision: AgentDecision } | { ok: false; error: string };
 
@@ -63,12 +65,28 @@ export function validateDecision(raw: unknown): DecisionValidation {
       direction: direction as AgentDecision["direction"],
       amount: optNum(raw.amount, "amount"),
       value: optStr(raw.value, "value"),
+      quote: optStr(raw.quote, "quote"),
+      line: optInt(raw.line, "line"),
       pendingAction: parsePending(raw.pendingAction),
       taskType: taskType as AgentDecision["taskType"],
       reason: typeof raw.reason === "string" ? raw.reason : "",
       done: raw.done === true,
     };
-    if (ELEMENT_ACTIONS.has(d.action) && (d.elementId === null || d.elementId < 0)) return { ok: false, error: `${d.action} requires a valid elementId` };
+    // Anchors only make sense on pointing actions; quash them elsewhere rather than reject.
+    if (!ANCHOR_ACTIONS.has(d.action)) {
+      d.quote = null;
+      d.line = null;
+    } else {
+      if (d.quote !== null) d.quote = d.quote.trim().slice(0, 200) || null;
+      if (d.line !== null && d.line < 1) return { ok: false, error: "line must be >= 1" };
+      if (d.line !== null && d.elementId === null) return { ok: false, error: "line anchoring requires an elementId" };
+    }
+    // point_to/highlight may target a quote instead of an element; everything else needs the element.
+    const elementSatisfied = d.elementId !== null && d.elementId >= 0;
+    if (ELEMENT_ACTIONS.has(d.action) && !elementSatisfied && !(ANCHOR_ACTIONS.has(d.action) && d.quote)) {
+      return { ok: false, error: `${d.action} requires a valid elementId` };
+    }
+    if (ELEMENT_ACTIONS.has(d.action) && d.elementId !== null && d.elementId < 0) return { ok: false, error: `${d.action} requires a valid elementId` };
     if (d.action === "type" && (d.text === null || d.text.length === 0)) return { ok: false, error: "type requires text" };
     if (d.action === "type" && d.text!.length > 2000) return { ok: false, error: "type text too long" };
     if (d.action === "select" && d.value === null) return { ok: false, error: "select requires value" };

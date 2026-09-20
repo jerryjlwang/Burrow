@@ -298,7 +298,7 @@ export class AgentLoop {
   private localDecision(input: AgentInput): AgentDecision {
     const v = validateDecision(decideMock(input));
     if (v.ok) return v.decision;
-    return { action: "speak", say: "I'm having trouble thinking right now. Try me again in a moment.", elementId: null, text: null, url: null, direction: null, amount: null, value: null, pendingAction: null, taskType: "chat", reason: "fallback", done: true };
+    return { action: "speak", say: "I'm having trouble thinking right now. Try me again in a moment.", elementId: null, text: null, url: null, direction: null, amount: null, value: null, quote: null, line: null, pendingAction: null, taskType: "chat", reason: "fallback", done: true };
   }
 
   private async captureScreenshot(): Promise<string | null> {

@@ -45,6 +45,10 @@ export interface AgentDecision {
   direction: "up" | "down" | null;
   amount: number | null;
   value: string | null;
+  /** point_to/highlight: exact text copied verbatim from the page to anchor the pointer inside/without an element. */
+  quote: string | null;
+  /** point_to/highlight on a textbox/textarea: 1-based line of its value to anchor to (e.g. a working step). */
+  line: number | null;
   pendingAction: PendingAction | null;
   taskType: TaskType | null;
   reason: string;
@@ -68,6 +72,8 @@ export const DECISION_DEFAULTS: Omit<AgentDecision, "action" | "reason"> = {
   direction: null,
   amount: null,
   value: null,
+  quote: null,
+  line: null,
   pendingAction: null,
   taskType: null,
   done: false,

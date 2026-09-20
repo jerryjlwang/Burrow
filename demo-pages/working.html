@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Show your work: Linear Equations · Riverside Learning</title>
+  <link rel="stylesheet" href="demo.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="top-inner">
+      <a class="logo" href="index.html"><span aria-hidden="true"></span>Riverside Learning</a>
+      <nav class="main" aria-label="Main">
+        <a href="index.html">Dashboard</a>
+        <a href="modules.html" aria-current="page">Modules</a>
+        <a href="assignment.html">Assignments</a>
+        <a href="grades.html">Grades</a>
+      </nav>
+      <a class="btn" href="signin.html">Sign in</a>
+    </div>
+  </header>
+  <main>
+    <h1>Show your work</h1>
+    <p class="sub">Module 3 · Practice · write one step per line</p>
+
+    <div class="problem">
+      <h2>Question 1 of 1</h2>
+      <p>Solve for x, showing each step of your working:</p>
+      <div class="equation" id="working-equation">3x + 5 = 20</div>
+      <label for="working">Your working (one step per line)</label>
+      <textarea id="working" rows="6" placeholder="3x + 5 = 20&#10;…" style="width:100%;max-width:640px;"></textarea>
+      <div class="row">
+        <button id="check-working" class="btn primary">I'm done</button>
+      </div>
+      <div id="working-feedback" class="feedback" role="status"></div>
+      <p class="note">Whatever you do to one side of an equation, do to the other side too.</p>
+    </div>
+  </main>
+  <footer>Riverside Learning · a demo site for the Pip learning companion</footer>
+  <script src="demo.js"></script>
+</body>
+</html>
