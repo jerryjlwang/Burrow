@@ -78,6 +78,8 @@ function isObj(v: unknown): v is Record<string, unknown> {
 }
 
 const clamp01 = (v: number): number => Math.min(1, Math.max(0, v));
+/** Four decimals: a tenth of a pixel on a 4K frame, and no float noise on the wire. */
+const r4 = (v: number): number => Math.round(v * 1e4) / 1e4;
 
 /**
  * A box in either form: the model's `[ymin, xmin, ymax, xmax]` on 0..1000 (fractions 0..1 are
@@ -92,7 +94,7 @@ export function parseInkBox(raw: unknown): InkBox | null {
     const y = clamp01(n[1]);
     const w = Math.min(1 - x, Math.max(0, n[2]));
     const h = Math.min(1 - y, Math.max(0, n[3]));
-    return w >= MIN_BOX && h >= MIN_BOX ? { x, y, w, h } : null;
+    return w >= MIN_BOX && h >= MIN_BOX ? { x: r4(x), y: r4(y), w: r4(w), h: r4(h) } : null;
   }
   if (!Array.isArray(raw) || raw.length !== 4) return null;
   const n = raw.map(Number);
@@ -101,7 +103,7 @@ export function parseInkBox(raw: unknown): InkBox | null {
   const [y1, x1, y2, x2] = n.map((v) => clamp01(v / scale));
   const w = x2 - x1;
   const h = y2 - y1;
-  return w >= MIN_BOX && h >= MIN_BOX ? { x: x1, y: y1, w, h } : null;
+  return w >= MIN_BOX && h >= MIN_BOX ? { x: r4(x1), y: r4(y1), w: r4(w), h: r4(h) } : null;
 }
 
 export function validateInkJudgement(raw: unknown): { ok: true; judgement: InkJudgement } | { ok: false; error: string } {

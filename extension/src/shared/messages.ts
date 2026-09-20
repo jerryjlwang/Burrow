@@ -6,7 +6,7 @@ import type { StepPlan } from "@shared/plan";
 import type { WorkingJudgement } from "@shared/steps";
 import type { TranscriptSegment, WatchNote } from "@shared/video";
 import type { KeyChord } from "@shared/keys";
-import type { InkJudgement } from "@shared/ink";
+import type { InkJudgement, InkReason } from "@shared/ink";
 import type { Settings } from "./settings";
 
 /**

@@ -9,6 +9,7 @@ import { TeachCard } from "./TeachCard";
 import { Overlay } from "./Overlay";
 import { Board } from "./Board";
 import { SketchOverlay } from "./SketchOverlay";
+import { InkCoach } from "./InkCoach";
 import { ActionFx } from "./actfx";
 import { PlanMap } from "./PlanMap";
 import { DebugPanel } from "./DebugPanel";
@@ -289,6 +290,7 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
       <Overlay />
       <Board />
       <SketchOverlay />
+      <InkCoach pet={petRef} />
       <ActionFx pet={petRef} />
       <PlanMap controller={controller} />
       {settings.debugMode && <DebugPanel pet={petRef} />}
