@@ -19,6 +19,7 @@ const entryPoints = {
   "pcm-worklet": join(here, "src/offscreen/pcm-worklet.ts"),
   onboarding: join(here, "src/onboarding/index.tsx"),
   popup: join(here, "src/popup/index.tsx"),
+  newtab: join(here, "src/newtab/index.tsx"),
 };
 
 function copyStatic() {
@@ -26,7 +27,7 @@ function copyStatic() {
   cpSync(join(here, "manifest.json"), join(outdir, "manifest.json"));
   const pub = join(here, "public");
   if (existsSync(pub)) cpSync(pub, outdir, { recursive: true });
-  for (const html of ["offscreen", "onboarding", "popup"]) {
+  for (const html of ["offscreen", "onboarding", "popup", "newtab"]) {
     const src = join(here, `src/${html}/${html}.html`);
     if (existsSync(src)) cpSync(src, join(outdir, `${html}.html`));
   }

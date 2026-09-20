@@ -11,7 +11,7 @@ const logger = log("agent");
 export interface OpenAIProviderOptions {
   apiKey: string;
   model: string;
-  effort: "minimal" | "low" | "medium" | "high";
+  effort: "none" | "minimal" | "low" | "medium" | "high";
 }
 
 type ContentPart = OpenAI.Chat.Completions.ChatCompletionContentPart;

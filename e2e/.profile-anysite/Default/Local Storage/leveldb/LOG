@@ -1,0 +1,6 @@
+2026/09/19-21:07:01.587 e094f Reusing MANIFEST /Users/krishivthakuria/Wonderland/Human-eval/e2e/.profile-anysite/Default/Local Storage/leveldb/MANIFEST-000001
+2026/09/19-21:07:01.589 e094f Recovering log #3
+2026/09/19-21:07:01.589 e094f Reusing old log /Users/krishivthakuria/Wonderland/Human-eval/e2e/.profile-anysite/Default/Local Storage/leveldb/000003.log 
+2026/09/19-21:07:15.009 e0952 Level-0 table #5: started
+2026/09/19-21:07:15.014 e0952 Level-0 table #5: 170580 bytes OK
+2026/09/19-21:07:15.015 e0952 Delete type=0 #3

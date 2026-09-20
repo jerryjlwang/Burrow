@@ -1,4 +1,4 @@
-import type { AgentDecision, InterventionDecision } from "@shared/schemas";
+import type { AgentDecision, InterventionDecision } from "@shared/actions";
 import type { AgentInput, InterventionInput } from "@shared/types";
 
 /** Abstraction so the browser architecture never depends on one model vendor. */
