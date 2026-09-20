@@ -1,7 +1,15 @@
 import type { RefObject } from "react";
+import { judgeInkMock, type InkReason } from "@shared/ink";
 import { store, useStore, type CharacterState } from "../content/store";
 import { besidePoint, type PetController } from "./pet";
 import { grant, requestJump } from "./handoff";
+
+/** A scripted tablet verdict, delivered the way the watcher's broadcast is, so the coach and the nudge rehearse without a tablet. */
+function judgeOut(reason: InkReason, seq: number, rung: number): void {
+  const task = { title: document.title, url: location.href };
+  const judgement = judgeInkMock({ frame: "", context: null, contextTitle: task.title, contextUrl: task.url, previousLines: [], seq, reason, rung, lastWrongLine: null });
+  window.dispatchEvent(new CustomEvent("burrow:judge", { detail: { judgement, meta: { reason, rung, task } } }));
+}
 
 const STATES: { label: string; state: CharacterState; level?: number }[] = [
   { label: "idle", state: "idle" },
@@ -120,6 +128,12 @@ function PetControls({ pet }: { pet?: RefObject<PetController | null> }) {
         >
           chalkboard
         </button>
+      </div>
+      <div className="pip-debug-pet">
+        <button type="button" onClick={() => judgeOut("ink", 1, 1)}>ink: slip</button>
+        <button type="button" onClick={() => judgeOut("ink", 1, 2)}>ink: slip, rung 2</button>
+        <button type="button" onClick={() => judgeOut("stall", 1, 2)}>ink: stall note</button>
+        <button type="button" onClick={() => judgeOut("ink", 2, 1)}>ink: solved</button>
       </div>
       <div className="pip-debug-pet">
         <button type="button" onClick={() => void grant("use_voice")}>grant voice</button>
