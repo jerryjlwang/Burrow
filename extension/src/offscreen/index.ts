@@ -264,6 +264,8 @@ let ttsWs: WebSocket | null = null;
 let ttsConnecting: Promise<WebSocket | null> | null = null;
 let playCtx: AudioContext | null = null;
 let activeStreamId: string | null = null;
+/** How much faster than recorded the voice is played, which is what raises it (the server has Deepgram speak that much slower, so the pace holds). */
+let ttsPitch = 1;
 interface ActiveTts {
   id: string;
   nextTime: number;
@@ -326,13 +328,16 @@ function connectTts(serverUrl: string): Promise<WebSocket | null> {
 
 function onTtsMessage(ev: MessageEvent): void {
   if (typeof ev.data === "string") {
-    let msg: { type: string; id?: string; message?: string };
+    let msg: { type: string; id?: string; message?: string; pitch?: number };
     try {
       msg = JSON.parse(ev.data);
     } catch {
       return;
     }
-    if (msg.type === "start") activeStreamId = msg.id ?? null;
+    if (msg.type === "start") {
+      activeStreamId = msg.id ?? null;
+      ttsPitch = msg.pitch && msg.pitch > 0 ? msg.pitch : 1;
+    }
     else if (msg.type === "done" && currentTts && msg.id === currentTts.id) scheduleEnd();
     else if (msg.type === "cancelled" && currentTts && msg.id === currentTts.id) finishTts("interrupted");
     else if (msg.type === "error") {
@@ -349,7 +354,10 @@ function playChunk(buffer: ArrayBuffer): void {
   if (!tts || buffer.byteLength < 2) return;
   const ctx = ensurePlayCtx();
   const int16 = new Int16Array(buffer, 0, Math.floor(buffer.byteLength / 2));
-  const audio = ctx.createBuffer(1, int16.length, TTS_SAMPLE_RATE);
+  // Declaring the samples at a higher rate than they were made at is the whole pitch shift:
+  // the context resamples, and the buffer's duration comes out shorter to match.
+  const rate = TTS_SAMPLE_RATE * ttsPitch;
+  const audio = ctx.createBuffer(1, int16.length, rate);
   const ch = audio.getChannelData(0);
   for (let i = 0; i < int16.length; i++) ch[i] = int16[i] / 0x8000;
   const source = ctx.createBufferSource();
@@ -379,7 +387,7 @@ function playChunk(buffer: ArrayBuffer): void {
       sum += v * v;
     }
     const level = Math.min(1, Math.sqrt(sum / Math.max(1, end - off)) * 3.5);
-    const at = startAt + off / TTS_SAMPLE_RATE;
+    const at = startAt + off / rate;
     tts.timers.push(window.setTimeout(() => currentTts === tts && emit({ type: "tts.level", level }), Math.max(0, (at - ctx.currentTime) * 1000)));
   }
 }
