@@ -431,7 +431,7 @@ export class CompanionController {
     const text = raw.trim();
     if (!text) return;
     if (!isExtensionContextValid()) {
-      store.setState({ status: "Pip was updated—reload this page to keep chatting." });
+      store.setState({ status: "Bunny was updated—reload this page to keep chatting." });
       return;
     }
     const yesNo = AgentLoop.interpretYesNo(text);

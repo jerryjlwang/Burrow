@@ -216,7 +216,7 @@ function looksLikeEcho(text: string): boolean {
   const words = t.split(" ");
   // A lone word while audio is actually playing is almost always our own voice coming back
   // through the speakers. The multi-word heuristics below can't judge a single token, and
-  // letting it through lets Pip barge in on itself mid-sentence.
+  // letting it through lets Bunny barge in on itself mid-sentence.
   if (words.length === 1) return currentTts !== null && spoken.includes(t);
   if (words.length >= 2 && spoken.includes(t)) return true;
   if (words.length >= 4) {
@@ -242,7 +242,7 @@ function handleTranscript(msg: { text: string; final: boolean; event: string; tu
       logger.debug("dropping echo transcript", { text });
       return;
     }
-    // Two words (or one confirmed final) before we cut Pip off: a single interim token is far
+    // Two words (or one confirmed final) before we cut Bunny off: a single interim token is far
     // more often speaker bleed than a real interruption.
     const wordCount = text.split(/\s+/).filter(Boolean).length;
     if (currentTts && (wordCount >= 2 || (msg.final && wordCount >= 1)) && (msg.event === "StartOfTurn" || msg.event === "Update" || msg.event === "EagerEndOfTurn" || msg.final)) {

@@ -328,13 +328,13 @@ export function decideMock(input: AgentInput): AgentDecision {
   // "… for real" asks for real mouse/keyboard input, the way the model escalates with `trusted`.
   const trusted = /\bfor real$/.test(u) ? true : null;
   const su = u.replace(/\s*\bfor real$/, "");
-  const pointer = /^(?:please |pip |ok |okay |can you |could you )*(hover (?:over|on)|double[- ]click(?: on)?|right[- ]click(?: on)?)\s+(?:the\s+)?(.+)$/.exec(su);
+  const pointer = /^(?:please |bunny |ok |okay |can you |could you )*(hover (?:over|on)|double[- ]click(?: on)?|right[- ]click(?: on)?)\s+(?:the\s+)?(.+)$/.exec(su);
   if (pointer) {
     const el = resolveTarget(input, pointer[2], "any");
     const action = pointer[1].startsWith("hover") ? "hover" : pointer[1].startsWith("double") ? "double_click" : "right_click";
     if (el) return d({ action, elementId: el.id, trusted, say: "Yep.", done: true, taskType: "navigation", reason: `${action} by name` });
   }
-  const at = /^(?:please |pip |can you |could you )*(double[- ]click|right[- ]click|click|hover)(?: (?:at|on|over))? (\d+) (\d+)$/.exec(su);
+  const at = /^(?:please |bunny |can you |could you )*(double[- ]click|right[- ]click|click|hover)(?: (?:at|on|over))? (\d+) (\d+)$/.exec(su);
   if (at) {
     const action = at[1] === "click" ? "click" : at[1] === "hover" ? "hover" : at[1].startsWith("double") ? "double_click" : "right_click";
     return d({ action, x: Number(at[2]), y: Number(at[3]), trusted, say: "Right there.", done: true, taskType: "navigation", reason: `${action} at a point` });
@@ -365,7 +365,7 @@ export function decideMock(input: AgentInput): AgentDecision {
     return d({ action: "speak", say: "I don't see that here to open. Which link should I use?", done: true, taskType: "navigation" });
   }
 
-  const wantsClick = /^(?:please |pip |ok |okay |yeah |yes |can you |could you |would you )*(click|press|tap|hit|open|select|choose|check|tick|pick|go to|take me to|navigate to|bring me to|start|launch|submit|turn in|send)\b/.test(u);
+  const wantsClick = /^(?:please |bunny |ok |okay |yeah |yes |can you |could you |would you )*(click|press|tap|hit|open|select|choose|check|tick|pick|go to|take me to|navigate to|bring me to|start|launch|submit|turn in|send)\b/.test(u);
   if (wantsClick) {
     const urlMatch = utterance.match(/((?:https?:\/\/)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:\/\S*)?)/i);
     const target = extractTarget(utterance);
