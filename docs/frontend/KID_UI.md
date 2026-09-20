@@ -16,6 +16,14 @@ The kid UI is everything the kid sees around the rabbit: the speech bubble, the 
 - **Teach card.** After the rabbit asks a question, a card in his dock shows what he thinks he heard ("So a moat is a ditch with water?") with "Yes" (teal) and "Not quite" (gold). Yes makes him celebrate and the card says "Got it. I'll remember." for two seconds. Not quite opens the panel with "Tell me again" in its status line. Enter is Yes, Escape is Not quite. This is the teaching loop made visible; `TeachCard.tsx`, driven by `burrow:teach` (see Events).
 - **Memory.** When he forgets, a thought bubble with the concept dissolves in Bayer steps (a CSS mask, eight steps of 90 ms) and a small card says "I forgot about moats." with one "Remind me?" button, which opens the panel with "Remind me about moats" already typed. Escape or the corner cross puts it away. No streaks, no guilt. Driven by `burrow:forget`.
 - **Panel.** Same cream frame, teal header band with the rabbit's name and a gold underline. Conversation turns are cream (rabbit) and pale teal (kid) frames. Session ends on its own: the panel shows "That's enough for today, thank you for teaching me" and the rabbit sleeps.
+- **Chalkboard.** When he explains a worked example he pulls up a chalkboard beside himself: the hand-placed wooden frame in `ui/board.png` (gold lit edge, chalk tray with a stub of chalk) around a dark green slate. Chalk is VT323 through the FontFace API, cream for the steps and gold for the title, because Pixelify's digits are hard to read. He writes one line at a time with a chalk squeak (`chalk` in `sounds.ts`); the line being written is bright with a chalk underline once it lands, earlier lines dim. The board rises from the floor in pixel steps and sinks the same way (nothing moves under reduced motion). It stands on his side of the hold to talk button with its tray on his feet line, follows him, and never covers him; above his head only when neither side has room. He thinks while he writes and has his aha when the last line lands. A small × in the slate's corner or Escape dismisses it; tapping the slate finishes the writing.
+
+## Events
+
+Pages and the extension's own views can direct the rabbit with window events: `window.dispatchEvent(new CustomEvent(name, { detail }))`.
+
+- `burrow:board` with `{ title?: string, lines: string[] }` opens the chalkboard and writes those lines out. A line that starts with a draw command (`line`, `arrow`, `circle`, `rect`, `dot`, `label`; see `shared/src/sketch.ts`) becomes a chalk stroke. Empty `lines` closes the board. The developer panel's "chalkboard" button does the same with a sample. Handled in `Board.tsx`.
+- `burrow:play` with `{ state }`, `burrow:goto` with `{ x, y }` and `burrow:leave` with `{ url, line?, arriveLine? }` are handled in `CompanionRoot.tsx`.
 
 ## Events
 
