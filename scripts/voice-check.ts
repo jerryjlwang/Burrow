@@ -1,5 +1,5 @@
 /**
- * Loopback check of the voice pipeline through a running Pip server:
+ * Loopback check of the voice pipeline through a running Bunny server:
  *   1. Flux TTS: speak a sentence, measure time-to-first-audio, collect the 24 kHz PCM.
  *   2. Flux STT: downsample to 16 kHz, stream it back as a microphone would, print the transcript.
  * Usage: PIP_SERVER=http://localhost:8787 npx tsx scripts/voice-check.ts

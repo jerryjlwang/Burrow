@@ -167,6 +167,25 @@ export function decideMock(input: AgentInput): AgentDecision {
   }
   if (isStopCommand(u)) return d({ action: "finish", say: null, done: true });
 
+  // ---- Working the player: pause, play, jump, speed — and finding a part of the video by what is said in it ----
+  if (input.video && input.step === 0) {
+    const control = (value: string, text: string | null, say: string) => d({ action: "video", value, text, say, done: true, taskType: "navigation", reason: "player control asked for" });
+    const stamp = utterance.match(/\b(\d{1,3}:\d{2}(?::\d{2})?)\b/)?.[1];
+    if (/\b(skip|jump|go|take me) (ahead |back |forward )?to\b/.test(u) && stamp) return control("seek", stamp, `Jumping to ${stamp}.`);
+    const about = u.match(/\b(?:skip|jump|go|take me) to (?:where|the (?:part|bit)) (?:he|she|they|it)?\s*(?:talks? about|explains?|about|on|shows?|says?)?\s*(.+)$/)?.[1];
+    if (about) {
+      const words = about.split(" ").filter((w) => w.length > 3);
+      const line = input.video.transcript.split("\n").find((l) => words.length > 0 && words.every((w) => normalizeText(l).includes(w)));
+      const at = line?.match(/^\[([\d:]+)\]/)?.[1];
+      return at ? control("seek", at, `That's at ${at}. Jumping there.`) : d({ action: "speak", say: "I couldn't find that part in this video.", done: true, taskType: "learning" });
+    }
+    if (/\b(go|skip|jump) back\b|\brewind\b/.test(u)) return control("seek", "-10", "Back ten seconds.");
+    if (/\b(go|skip|jump) (forward|ahead)\b/.test(u)) return control("seek", "+10", "Ahead ten seconds.");
+    if (/\bslow(er| (it |this )?down)\b/.test(u)) return control("speed", "0.75", "Slowing it down.");
+    if (/\bnormal speed\b/.test(u)) return control("speed", "1", "Back to normal speed.");
+    if (/^(please |can you |could you )?(play|resume|unpause)\b|\bkeep (going|playing)\b/.test(u)) return control("play", null, "Playing.");
+  }
+
   // ---- Watching a video: answer from what was just said — never "let me look at the frame" ----
   if (input.video && input.step === 0 && /\b(video|he|she|just (said|say|did)|mean|explain|don t (get|understand)|didn t (get|understand)|say that again|what did)\b/.test(u)) {
     if (!input.video.hasTranscript) return d({ action: "speak", say: "I can see the picture, but I can't hear this one.", done: true, taskType: "learning", reason: "video without transcript" });
@@ -309,13 +328,13 @@ export function decideMock(input: AgentInput): AgentDecision {
   // "… for real" asks for real mouse/keyboard input, the way the model escalates with `trusted`.
   const trusted = /\bfor real$/.test(u) ? true : null;
   const su = u.replace(/\s*\bfor real$/, "");
-  const pointer = /^(?:please |pip |ok |okay |can you |could you )*(hover (?:over|on)|double[- ]click(?: on)?|right[- ]click(?: on)?)\s+(?:the\s+)?(.+)$/.exec(su);
+  const pointer = /^(?:please |bunny |ok |okay |can you |could you )*(hover (?:over|on)|double[- ]click(?: on)?|right[- ]click(?: on)?)\s+(?:the\s+)?(.+)$/.exec(su);
   if (pointer) {
     const el = resolveTarget(input, pointer[2], "any");
     const action = pointer[1].startsWith("hover") ? "hover" : pointer[1].startsWith("double") ? "double_click" : "right_click";
     if (el) return d({ action, elementId: el.id, trusted, say: "Yep.", done: true, taskType: "navigation", reason: `${action} by name` });
   }
-  const at = /^(?:please |pip |can you |could you )*(double[- ]click|right[- ]click|click|hover)(?: (?:at|on|over))? (\d+) (\d+)$/.exec(su);
+  const at = /^(?:please |bunny |can you |could you )*(double[- ]click|right[- ]click|click|hover)(?: (?:at|on|over))? (\d+) (\d+)$/.exec(su);
   if (at) {
     const action = at[1] === "click" ? "click" : at[1] === "hover" ? "hover" : at[1].startsWith("double") ? "double_click" : "right_click";
     return d({ action, x: Number(at[2]), y: Number(at[3]), trusted, say: "Right there.", done: true, taskType: "navigation", reason: `${action} at a point` });
@@ -346,7 +365,7 @@ export function decideMock(input: AgentInput): AgentDecision {
     return d({ action: "speak", say: "I don't see that here to open. Which link should I use?", done: true, taskType: "navigation" });
   }
 
-  const wantsClick = /^(?:please |pip |ok |okay |yeah |yes |can you |could you |would you )*(click|press|tap|hit|open|select|choose|check|tick|pick|go to|take me to|navigate to|bring me to|start|launch|submit|turn in|send)\b/.test(u);
+  const wantsClick = /^(?:please |bunny |ok |okay |yeah |yes |can you |could you |would you )*(click|press|tap|hit|open|select|choose|check|tick|pick|go to|take me to|navigate to|bring me to|start|launch|submit|turn in|send)\b/.test(u);
   if (wantsClick) {
     const urlMatch = utterance.match(/((?:https?:\/\/)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:\/\S*)?)/i);
     const target = extractTarget(utterance);

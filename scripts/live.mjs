@@ -32,7 +32,10 @@ rmSync(profile, { recursive: true, force: true });
 
 const browser = spawn(
   chromium.executablePath(),
-  [`--user-data-dir=${profile}`, `--disable-extensions-except=${extPath}`, `--load-extension=${extPath}`, "--no-first-run", "--no-default-browser-check", "--start-maximized", ...urls],
+  // The profile is wiped every launch, so the mic prompt would come back every time — and answering
+  // it "Allow this time" leaves voice dead (the grant never reaches the offscreen document). This
+  // flag answers the prompt with yes; the microphone itself is still the real one.
+  [`--user-data-dir=${profile}`, `--disable-extensions-except=${extPath}`, `--load-extension=${extPath}`, "--no-first-run", "--no-default-browser-check", "--use-fake-ui-for-media-stream", "--start-maximized", ...urls],
   { stdio: "ignore" },
 );
 console.log("live window up — close it to end");

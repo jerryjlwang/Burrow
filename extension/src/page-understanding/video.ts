@@ -34,6 +34,8 @@ export class VideoWatcher {
   private video: HTMLVideoElement | null = null;
   private key: string | null = null;
   private lastT = 0;
+  /** A seek the rabbit made is on its way: it is not the student going back over something. */
+  private ownSeek = false;
   private detach: (() => void) | null = null;
 
   constructor(private events: VideoWatcherEvents) {}
@@ -101,10 +103,12 @@ export class VideoWatcher {
       }),
       on("seeked", () => {
         if (this.inAdvert || !this.checkIdentity()) return;
-        this.tracker.seek(this.lastT, video.currentTime, Date.now());
+        const ours = this.ownSeek;
+        this.ownSeek = false;
+        if (!ours) this.tracker.seek(this.lastT, video.currentTime, Date.now());
         this.lastT = video.currentTime;
         this.events.onBehaviour();
-        announceVideo("seek", "them", video);
+        announceVideo("seek", ours ? "us" : "them", video);
       }),
       on("pause", () => {
         if (this.inAdvert || video.ended) return;
@@ -166,6 +170,28 @@ export class VideoWatcher {
   play(): void {
     void this.video?.play().catch(() => undefined);
     announceVideo("play", "us", this.video);
+  }
+
+  get time(): number {
+    return this.video?.currentTime ?? 0;
+  }
+
+  get rate(): number {
+    return this.video?.playbackRate ?? 1;
+  }
+
+  /** Returns where it landed (clamped to the video), or null with no video to move. */
+  seek(t: number): number | null {
+    const v = this.video;
+    if (!v || !this.active) return null;
+    const to = Math.min(Math.max(0, t), Math.max(0, this.duration - 1));
+    this.ownSeek = true;
+    v.currentTime = to;
+    return to;
+  }
+
+  setRate(rate: number): void {
+    if (this.video) this.video.playbackRate = rate;
   }
 
   /**

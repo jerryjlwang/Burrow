@@ -123,14 +123,14 @@ try {
   // Playwright's CSS engine pierces open shadow roots, so plain selectors reach our UI.
   const inShadow = (sel) => page.locator(sel);
 
-  // New Tab override: Ctrl+T lands on Pip's start page, where the companion also lives.
+  // New Tab override: Ctrl+T lands on Bunny's start page, where the companion also lives.
   {
     const nt = await context.newPage();
     await nt.goto("chrome://newtab", { waitUntil: "load" }).catch(() => null);
     await new Promise((r) => setTimeout(r, 1200));
     const onOurPage = nt.url().startsWith("chrome-extension://") && nt.url().endsWith("/newtab.html");
     const pipOnNewTab = onOurPage && (await nt.evaluate(() => !!document.getElementById("pip-companion-host")?.shadowRoot?.querySelector(".pip-char")));
-    check("new tab page is Pip's start page with the companion present", pipOnNewTab, nt.url());
+    check("new tab page is Bunny's start page with the companion present", pipOnNewTab, nt.url());
     if (pipOnNewTab) {
       await nt.evaluate(() => document.getElementById("pip-companion-host").shadowRoot.querySelector(".pip-char-btn").click());
       await nt.locator(".pip-panel").waitFor({ timeout: 5000 });

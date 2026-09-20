@@ -5,38 +5,38 @@ Run through this before a demo. Server: `npm run dev:server` (or `DEMO_MODE=1 np
 ## Install & basics
 - [ ] `npm install` → `npm run build` → load unpacked → onboarding tab opens automatically.
 - [ ] Onboarding: "Enable microphone" prompts Chrome once; "Got it" finishes; "Open demo pages" works.
-- [ ] Visit any normal site (news, docs, Wikipedia): Pip appears bottom-right, does not cover content, page still scrolls/clicks normally.
+- [ ] Visit any normal site (news, docs, Wikipedia): Bunny appears bottom-right, does not cover content, page still scrolls/clicks normally.
 - [ ] Dark-mode site: panel and bubble remain readable.
-- [ ] Site with a body transform / weird CSS (e.g. a page using `transform` on `<body>`): Pip stays fixed bottom-right.
+- [ ] Site with a body transform / weird CSS (e.g. a page using `transform` on `<body>`): Bunny stays fixed bottom-right.
 - [ ] Popup: shows server connected + voice status; toggles persist.
-- [ ] Protected page (`chrome://extensions`): popup explains Pip can't run there; no errors.
+- [ ] Protected page (`chrome://extensions`): popup explains Bunny can't run there; no errors.
 
 ## Panel & text mode
 - [ ] Click character → panel opens; Esc closes; "–" minimizes to an edge tab; tab restores.
 - [ ] Type "what's on this page" → short spoken summary + "More" detail in the panel.
 - [ ] Type "where is the sign in button" on the demo dashboard → ring + beam on the Sign in control, character looks toward it.
-- [ ] Type "click it" → navigates to Sign in page; panel stays open; conversation preserved; Pip says "It's open."
+- [ ] Type "click it" → navigates to Sign in page; panel stays open; conversation preserved; Bunny says "It's open."
 - [ ] "take me to the quiz" on the dashboard → scrolls down, highlights and clicks "Take the quiz".
 - [ ] "type 5 into your answer" on the practice page → value set, page reacts.
-- [ ] "type my password" / password field → Pip refuses and points, never types.
+- [ ] "type my password" / password field → Bunny refuses and points, never types.
 - [ ] "scroll down", "go back" work.
 
 ## Voice (needs DEEPGRAM_API_KEY)
 - [ ] Mic button → green live dot on the character, "Listening…" status.
 - [ ] Speak "where is the sign in button" → interim transcript shows while speaking, final transcript becomes a user message.
 - [ ] Reply is spoken in flux-rufus-en; character animates while speaking; ring reacts to your voice while listening.
-- [ ] Talk over Pip mid-sentence → audio stops immediately, your words are processed.
+- [ ] Talk over Bunny mid-sentence → audio stops immediately, your words are processed.
 - [ ] Say "stop" while it talks → audio stops, "Okay." shown, nothing else happens.
 - [ ] Mute button ends voice mode; green dot disappears.
 - [ ] Kill the server while listening → "Voice is having trouble connecting" notice; text chat still works.
 - [ ] Mic permission denied → friendly bubble with "Open setup".
 
 ## Proactive (demo practice page)
-- [ ] Enter a wrong answer once → Pip glances toward the answer box (no bubble).
+- [ ] Enter a wrong answer once → Bunny glances toward the answer box (no bubble).
 - [ ] Wrong answer twice → bubble "…Want a hint?" (spoken if voice mode is on). Nothing before ~45s cooldown repeats.
 - [ ] Click "Yes, please" (or say "yeah") → hint mentions doing the same thing to both sides, points at the answer box; does NOT reveal x = 5.
 - [ ] Ask "hint" again → hint escalates (subtract 5 → 3x = 15 → divide).
-- [ ] Enter 5 → "Correct!" → Pip celebrates ("Nice—you got it.").
+- [ ] Enter 5 → "Correct!" → Bunny celebrates ("Nice—you got it.").
 - [ ] "I'm good" to an offer → no more offers for ~3 minutes.
 - [ ] Quiz page: click the disabled-looking Continue 3× → bubble points at the options: "That one unlocks once you answer…".
 - [ ] Grades page (403) → "Looks like a dead end. Want me to take you back?"
@@ -48,9 +48,9 @@ Run through this before a demo. Server: `npm run dev:server` (or `DEMO_MODE=1 np
 - [ ] Sign-in page password never appears in the developer panel's element list (marked [sensitive], no value).
 
 ## Resilience
-- [ ] Server down: Pip still points/clicks/hints using the offline brain; panel shows the offline notice.
+- [ ] Server down: Bunny still points/clicks/hints using the offline brain; panel shows the offline notice.
 - [ ] LLM key missing: server logs `agent provider: mock`; everything still works.
-- [ ] Reload the extension while a page is open → Pip re-injects into open tabs (or page reload restores it).
+- [ ] Reload the extension while a page is open → Bunny re-injects into open tabs (or page reload restores it).
 - [ ] Developer panel (settings → Developer panel) shows page elements, signals, last decision/result, provider latency.
 
 ## Tablet watcher (needs GEMINI_API_KEY in .env; a second touch display is optional)

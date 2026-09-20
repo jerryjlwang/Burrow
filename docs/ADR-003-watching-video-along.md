@@ -38,7 +38,21 @@ Sources, in order: captions the page itself carries (`<track>` via `textTracks`,
 
 ### What the agent is told (`VideoContext`)
 
-Position, paused or playing, how they are watching (replays, slow-downs), the rabbit's notes up to where the student is, and the transcript of the last 75 seconds. Never past the current time: the agent must not know, or spoil, what the student has not heard yet.
+Position, paused or playing, how they are watching (replays, slow-downs), the transcript of the last 75 seconds, and the whole video: its full timestamped transcript and all of the rabbit's notes.
+
+Revised 2026-09-20. The first version stopped at the current time ("the agent must not know, or spoil, what the student has not heard yet"). That made the agent unable to do what a student most wants from a lesson video: find where something is explained, jump there, answer about any part. Not spoiling is a rule about what the rabbit says, not about what it knows, so it moved into the prompt: answer about any part and give its time, but never volunteer what is still ahead (the answer to a worked example they have not watched); say it is coming and where, and offer to jump.
+
+The whole-video text is identical on every step and turn, so it is sent as its own leading message part (`formatVideoReference`), ahead of the frame and the per-step context, where the provider's prefix cache holds it. Over 60k characters (about an hour of speech) it is windowed around the student's position, snapped to five minutes so it still caches; the notes cover the rest.
+
+### The agent works the player (`video` action)
+
+`video` with `value` of `play`, `pause`, `seek` (`text`: "6:40", or "+10" / "-15" from here) or `speed` (`text`: "0.75"). It sets the element directly: instant and exact, where clicking the scrubber from a screenshot was neither. With the whole transcript the agent maps "where he explains the sign flip" to a time itself. A seek the rabbit makes is flagged in `VideoWatcher` so it is not counted as the student going back over something. "pause" is already a local stop command; over a playing video with a quiet rabbit it pauses the video, with no model round trip.
+
+Chapters stay on the page. Asked which chapter covers something, the agent still reads the description and points at the exact chapter line, because seeing it in the page's own list is the useful part; asked to skip to one, it seeks.
+
+### Related and looked-up videos are real videos
+
+`look_up` reads actual videos off YouTube's own results page, server-side and with no cookies (`youtubeSearch`): captioned videos only, so the rabbit can follow whatever gets opened, nothing under a minute, Restricted Mode on. It costs about half a second and needs no key. Supadata's search endpoint was tried first and measured 7–11s per call, too slow to sit inside the agent's chain. The page's embedded `ytInitialData` is not a contract; when it changes the search throws and `look_up` degrades to the search link. Demo mode never searches YouTube, so the e2e stays off it. Before this `look_up` could only return a YouTube search link, so the related-video banner offered "YouTube search for …" as "another video", and its query was the current video's title, whose top hit is the video already playing. The banner's query is now built from the student's question (`relatedQuery`), falling back to the title when the question only points ("what did he just do?").
 
 ### A playing video has the floor
 
@@ -73,5 +87,6 @@ Separate from video but found alongside it: `showBubble` replaced the current bu
 ## Consequences
 
 - One Supadata request and one to six model passes per new video, cached per server process. Everything after that is local.
+- Every agent step on a video page carries the whole transcript (about 3–4k tokens per 20 minutes), served from the prefix cache after the first step. One request to YouTube's results page per `look_up` and per related-video banner.
 - Videos with no captions and no service key get frame-only help. Tab-audio STT through the existing Deepgram path would close that gap on every site; it needs the `tabCapture` permission and is not built.
 - `e2e/video.mjs` covers the flow end to end against `demo-pages/video.html` in demo mode.
