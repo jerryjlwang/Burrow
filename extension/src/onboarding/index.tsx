@@ -12,9 +12,8 @@ function Onboarding() {
   const [mic, setMic] = useState<MicState>("idle");
   const [name, setName] = useState("White Rabbit");
   const [serverUrl, setServerUrl] = useState("http://localhost:8787");
-  // He pops out of his hole when the art loads, then waves hello.
-  // He pops out of his hole once. The player re-hands its controller on every render, so this must
-  // not be a fresh closure that dives him again at each step.
+  // He pops out of his hole once, when the art loads, then waves hello. The player re-hands its
+  // controller on every render, so this must not be a fresh closure that dives him again at each step.
   const arrived = useRef(false);
   const onPet = useCallback((c: PetController | null) => {
     if (!c || arrived.current) return;
@@ -48,7 +47,7 @@ function Onboarding() {
   };
 
   return (
-    <div className="card">
+    <div className="card px-frame">
       <div className="steps" aria-hidden="true">
         {[0, 1, 2].map((i) => (
           <span key={i} className={i <= Math.min(step, 2) ? "on" : ""} />
@@ -62,14 +61,14 @@ function Onboarding() {
       {step === 0 && (
         <>
           <h1>Meet the {name}.</h1>
-          <p>Your learning companion lives right in your browser: a tiny character in the corner of every page.</p>
+          <p>He lives in your browser. A small rabbit in the corner of every page.</p>
           <ul>
-            <li>Ask him questions about what's on screen.</li>
-            <li>Let him show you where things are (he points!).</li>
-            <li>If you get stuck, he can notice and offer a hint, without doing the work for you.</li>
+            <li>Ask him about what's on the screen.</li>
+            <li>He can point at things for you.</li>
+            <li>If you get stuck, he offers a hint. He never does the work for you.</li>
           </ul>
           <div className="row">
-            <button className="btn primary" onClick={() => setStep(1)}>
+            <button className="px-btn primary" onClick={() => setStep(1)}>
               Next
             </button>
           </div>
@@ -77,17 +76,17 @@ function Onboarding() {
       )}
       {step === 1 && (
         <>
-          <h1>Enable your microphone</h1>
-          <p>Voice mode lets you just talk to {name}. Chrome will ask once; you can always mute from the panel.</p>
-          {mic === "granted" && <p className="ok">Microphone enabled. You can turn voice mode on from {name}'s panel.</p>}
-          {mic === "denied" && <p className="err">Microphone was blocked. You can allow it from the site permissions (lock icon) later, text chat works either way.</p>}
+          <h1>Let him hear you</h1>
+          <p>With the microphone on, you can just talk to him. Chrome asks once. You can mute him any time from his panel.</p>
+          {mic === "granted" && <p className="ok">Microphone enabled. Turn voice on from his panel.</p>}
+          {mic === "denied" && <p className="err">Chrome blocked the microphone. You can allow it later from the lock icon. Typing works either way.</p>}
           <div className="row">
             {mic !== "granted" && (
-              <button className="btn primary" onClick={() => void requestMic()} disabled={mic === "asking"}>
-                {mic === "asking" ? "Waiting for Chrome…" : "Enable microphone"}
+              <button className="px-btn primary" onClick={() => void requestMic()} disabled={mic === "asking"}>
+                {mic === "asking" ? "Waiting for Chrome" : "Enable microphone"}
               </button>
             )}
-            <button className="btn" onClick={() => setStep(2)}>
+            <button className="px-btn" onClick={() => setStep(2)}>
               {mic === "granted" ? "Next" : "Skip for now"}
             </button>
           </div>
@@ -95,17 +94,17 @@ function Onboarding() {
       )}
       {step === 2 && (
         <>
-          <h1>How {name} treats your data</h1>
+          <h1>What he does with your data</h1>
           <div className="privacy">
-            <p>When voice mode is on, your microphone audio is streamed to your own local server and on to Deepgram to understand what you're saying. Nothing is recorded or stored.</p>
-            <p>{name} reads the current page only when he needs context to help you. Passwords and payment fields are never read, and {name} will never type them.</p>
-            <p style={{ marginBottom: 0 }}>A green dot on the rabbit always means the microphone is live. One click mutes it.</p>
+            <p>With voice on, your microphone audio goes to your own local server, then to Deepgram to turn it into words. Nothing is recorded or kept.</p>
+            <p>He reads the page only when he needs it to help you. He never reads or types passwords or payment details.</p>
+            <p>A green dot on him means the microphone is live. One click mutes it.</p>
           </div>
-          <p style={{ marginTop: 14 }}>
-            Local server: <code>{serverUrl}</code> (change in the extension popup if needed).
+          <p className="server">
+            Local server: <code>{serverUrl}</code>. Change it from the toolbar popup.
           </p>
           <div className="row">
-            <button className="btn primary" onClick={() => void finish()}>
+            <button className="px-btn primary" onClick={() => void finish()}>
               Got it
             </button>
           </div>
@@ -113,13 +112,13 @@ function Onboarding() {
       )}
       {step === 3 && (
         <>
-          <h1>You're all set.</h1>
-          <p>Open any webpage and look for {name} in the bottom-right corner. Try the demo course to see the whole flow.</p>
+          <h1>All set.</h1>
+          <p>Open any page and look for him in the bottom right corner. The demo course shows the whole flow.</p>
           <div className="row">
-            <button className="btn primary" onClick={() => void chrome.tabs.create({ url: `${serverUrl.replace(/\/$/, "")}/demo/` })}>
-              Open demo pages
+            <button className="px-btn primary" onClick={() => void chrome.tabs.create({ url: `${serverUrl.replace(/\/$/, "")}/demo/` })}>
+              Open the demo pages
             </button>
-            <button className="btn" onClick={() => window.close()}>
+            <button className="px-btn" onClick={() => window.close()}>
               Close
             </button>
           </div>

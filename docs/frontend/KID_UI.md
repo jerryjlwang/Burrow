@@ -29,3 +29,11 @@ Calm and precise: system font, cream and brown, tables not bubbles. Cards for ea
 
 The kid's start page is the meadow above the burrow: hand-placed pixel layers from `tools/sprites/scene_px.py`, composed at source resolution and drawn at 3x by `extension/src/newtab/scene.ts`. The light follows the time of day (morning, day, evening, night, with `?hour=N` to force it), clouds drift, grass sways, fireflies blink at night, and the mouse moves the layers in whole pixels. The clock is pixel digits from `scene/digits.png`. The search lives on a wooden sign: typing pops letters with a blip, focusing calls the rabbit over to listen, and Enter makes him dive down his hole before the page leaves, then pop out on the results page. The `fx.js` overlay adds scanlines and the dither dissolve.
 
+## Panel, popup and onboarding
+
+One product with the rabbit, on the same 3px grid:
+
+- **Panel.** The teal band carries his name, a 9px status dot and one status line at 17px (gold and blinking while he listens). The header buttons are 7 x 7 pixel glyphs drawn at 3x (`GLYPHS` in `Panel.tsx`), never font symbols. An empty panel says hi and offers three starters as cream pixel chips; a tap fills the input so the kid can change the words before sending. His turns are the cream frame; the kid's turns are the same frame with a pale teal inside, a layer clipped to the frame's 3px staircase, so no new art was needed. "More" opens the long version as plain paragraphs at 17px, not a `pre`. Settings are 21px pixel checkboxes (teal with a paper dot when on) in 30px rows. Offline and voice trouble show as a gold strip with a pixel bang.
+- **Popup.** The same card: cream frame, teal band with his face (`icons/icon48.png`, the 16px face at 3x), one status line, five pixel buttons in a two column grid, the same toggles (`.px-check` in `burrow.css`), the server field. 320px wide, everything 17px or larger, nothing scrolls.
+- **Onboarding.** He is "he", in short sentences. The three step bars are 168px wide with 4px gaps (512px, the card's inner width). The card hangs 48px from the top, never vertically centred, so its edges stay on whole pixels. `burrow.css` line heights are whole pixels: body 24px, h1 36px, h2 27px, h3 24px.
+

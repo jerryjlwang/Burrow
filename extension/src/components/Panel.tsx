@@ -1,17 +1,44 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 import { plainCopy } from "./copy";
 import { useStore } from "../content/store";
 import type { CompanionController } from "../content/controller";
 
-function MicIcon({ active }: { active: boolean }) {
+/* Glyphs for the panel's buttons, hand-placed on a 7 x 7 grid and drawn at 3x so they sit on the same
+   pixel grid as the frames. No font symbols: Pixelify Sans has none of these and the fallback would not
+   match the rest of the panel. */
+const GLYPHS = {
+  gear: ["#.###.#", ".#####.", "##...##", "##...##", "##...##", ".#####.", "#.###.#"],
+  minus: [".......", ".......", ".......", "#######", ".......", ".......", "......."],
+  close: ["##...##", ".##.##.", "..###..", "...#...", "..###..", ".##.##.", "##...##"],
+  stop: [".......", ".#####.", ".#####.", ".#####.", ".#####.", ".#####.", "......."],
+  mic: ["..###..", "..###..", "..###..", "#.###.#", ".#####.", "...#...", ".#####."],
+  send: ["...#...", "...##..", "...###.", "#######", "...###.", "...##..", "...#..."],
+  bang: ["..###..", "..###..", "..###..", "..###..", ".......", "..###..", "..###.."],
+};
+
+function Glyph({ name }: { name: keyof typeof GLYPHS }) {
+  const rows = GLYPHS[name];
+  const rects: ReactElement[] = [];
+  rows.forEach((row, y) => {
+    for (let x = 0; x < row.length; ) {
+      if (row[x] !== "#") {
+        x += 1;
+        continue;
+      }
+      const start = x;
+      while (x < row.length && row[x] === "#") x += 1;
+      rects.push(<rect key={`${y}-${start}`} x={start} y={y} width={x - start} height={1} />);
+    }
+  });
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="9" y="3" width="6" height="11" rx="3" fill={active ? "currentColor" : "none"} />
-      <path d="M5 11a7 7 0 0 0 14 0" />
-      <path d="M12 18v3" />
+    <svg className="pip-glyph" width={rows[0].length * 3} height={rows.length * 3} viewBox={`0 0 ${rows[0].length} ${rows.length}`} shapeRendering="crispEdges" fill="currentColor" aria-hidden="true">
+      {rects}
     </svg>
   );
 }
+
+/* Three things he can do on any page. A tap fills the input so the kid can change the words first. */
+const STARTERS = ["What's on this page?", "Where's the sign in button?", "Give me a hint"];
 
 export function Panel({ controller }: { controller: CompanionController }) {
   const conversation = useStore((s) => s.conversation);
@@ -43,33 +70,40 @@ export function Panel({ controller }: { controller: CompanionController }) {
     void controller.handleUserText(t, "text");
   };
 
+  const pick = (starter: string) => {
+    setText(starter);
+    inputRef.current?.focus({ preventScroll: true });
+  };
+
   const listening = voice.mode === "listening";
-  const statusText = status || (characterState === "speaking" ? "Speaking…" : busy ? "Thinking…" : listening ? "Listening…" : "Here if you need me");
+  const speaking = characterState === "speaking";
+  const statusText = status || (speaking ? "Speaking" : busy ? "Thinking" : listening ? "Listening" : "Here if you need me");
+  const statusClass = `pip-status${listening ? " live" : busy || speaking ? " busy" : ""}`;
 
   return (
     <section className="pip-panel" role="dialog" aria-label={`${settings.characterName} conversation`}>
       <header className="pip-panel-head">
         <div className="pip-panel-title">
           <strong>{settings.characterName}</strong>
-          <span className={`pip-status${listening ? " live" : ""}`} aria-live="polite">
-            {listening && <span className="pip-live-dot" aria-hidden="true" />}
-            {statusText}
+          <span className={statusClass} aria-live="polite">
+            <span className="pip-status-dot" aria-hidden="true" />
+            <span className="pip-status-text">{statusText}</span>
           </span>
         </div>
         <div className="pip-panel-tools">
-          {characterState === "speaking" && (
+          {speaking && (
             <button type="button" className="pip-icon-btn" title="Stop speaking" aria-label="Stop speaking" onClick={() => controller.stopSpeaking()}>
-              ■
+              <Glyph name="stop" />
             </button>
           )}
-          <button type="button" className="pip-icon-btn" title="Settings" aria-label="Settings" aria-expanded={showSettings} onClick={() => setShowSettings((v) => !v)}>
-            ⚙
+          <button type="button" className={`pip-icon-btn${showSettings ? " on" : ""}`} title="Settings" aria-label="Settings" aria-expanded={showSettings} onClick={() => setShowSettings((v) => !v)}>
+            <Glyph name="gear" />
           </button>
           <button type="button" className="pip-icon-btn" title="Minimize" aria-label="Minimize companion" onClick={() => controller.minimize()}>
-            –
+            <Glyph name="minus" />
           </button>
           <button type="button" className="pip-icon-btn" title="Close" aria-label="Close panel" onClick={() => controller.closePanel()}>
-            ×
+            <Glyph name="close" />
           </button>
         </div>
       </header>
@@ -78,7 +112,7 @@ export function Panel({ controller }: { controller: CompanionController }) {
         <div className="pip-settings">
           <label className="pip-toggle">
             <input type="checkbox" checked={settings.proactiveEnabled} onChange={(e) => void controller.updateSetting({ proactiveEnabled: e.target.checked })} />
-            <span>Notice when I'm stuck and offer help</span>
+            <span>Offer help when I'm stuck</span>
           </label>
           <label className="pip-toggle">
             <input type="checkbox" checked={settings.ttsEnabled} onChange={(e) => void controller.updateSetting({ ttsEnabled: e.target.checked })} />
@@ -90,10 +124,10 @@ export function Panel({ controller }: { controller: CompanionController }) {
           </label>
           <div className="pip-settings-links">
             <button type="button" className="pip-link" onClick={() => controller.openOnboarding()}>
-              Microphone & privacy setup
+              Microphone and privacy
             </button>
             <button type="button" className="pip-link" onClick={() => controller.openDemo()}>
-              Open demo pages
+              Demo pages
             </button>
           </div>
         </div>
@@ -102,12 +136,15 @@ export function Panel({ controller }: { controller: CompanionController }) {
       <div className="pip-messages" ref={listRef} aria-live="polite" aria-relevant="additions">
         {conversation.length === 0 && (
           <div className="pip-empty">
-            <p>Hi! I can see this page. Try:</p>
-            <ul>
-              <li>“What’s on this page?”</li>
-              <li>“Where’s the sign in button?”</li>
-              <li>“Give me a hint.”</li>
-            </ul>
+            <p className="pip-empty-hi">Hi! I can see this page too.</p>
+            <p className="pip-empty-sub">Tap one, or ask me anything.</p>
+            <div className="pip-chips">
+              {STARTERS.map((s) => (
+                <button key={s} type="button" className="pip-chip" onClick={() => pick(s)}>
+                  {s}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {conversation.map((t, i) => (
@@ -116,7 +153,15 @@ export function Panel({ controller }: { controller: CompanionController }) {
             {t.detail && t.detail !== t.text && (
               <details className="pip-msg-detail" onToggle={(e) => e.currentTarget.open && e.currentTarget.scrollIntoView({ block: "nearest" })}>
                 <summary>More</summary>
-                <pre>{plainCopy(t.detail)}</pre>
+                <div className="pip-msg-more">
+                  {plainCopy(t.detail)
+                    .split(/\n+/)
+                    .map((line) => line.trim())
+                    .filter(Boolean)
+                    .map((line, j) => (
+                      <p key={j}>{line}</p>
+                    ))}
+                </div>
               </details>
             )}
           </div>
@@ -128,8 +173,18 @@ export function Panel({ controller }: { controller: CompanionController }) {
         )}
       </div>
 
-      {offline && <div className="pip-offline">Server not reachable. Running in offline mode: no voice, simple answers.</div>}
-      {voice.mode === "error" && voice.error && <div className="pip-offline">{voice.error}</div>}
+      {offline && (
+        <div className="pip-offline">
+          <Glyph name="bang" />
+          <span>I can't reach my server. Simple answers for now, and no voice.</span>
+        </div>
+      )}
+      {voice.mode === "error" && voice.error && (
+        <div className="pip-offline">
+          <Glyph name="bang" />
+          <span>{plainCopy(voice.error)}</span>
+        </div>
+      )}
 
       <form
         className="pip-input-row"
@@ -146,7 +201,7 @@ export function Panel({ controller }: { controller: CompanionController }) {
           title={listening ? "Voice mode is on (click to mute)" : "Start voice mode"}
           onClick={() => void controller.toggleVoice()}
         >
-          <MicIcon active={listening} />
+          <Glyph name="mic" />
         </button>
         <input
           ref={inputRef}
@@ -158,7 +213,7 @@ export function Panel({ controller }: { controller: CompanionController }) {
           autoComplete="off"
         />
         <button type="submit" className="pip-send" aria-label="Send" disabled={!text.trim()}>
-          ➤
+          <Glyph name="send" />
         </button>
       </form>
     </section>

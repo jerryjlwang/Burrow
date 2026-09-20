@@ -184,11 +184,13 @@
 .pip-btn.alert { border-image-source: var(--ui-btn-alert); color: var(--paper); }
 
 /* ---------- Panel ---------- */
+/* One cream frame: a teal band with his name and a status line, the turns, then the input row.
+   Every height lands on the 3px grid: band 57 + 3, toggle rows 30, chips 45, mic and send 45, input 51. */
 .pip-panel {
   pointer-events: auto;
   width: 351px;
   max-width: calc(100vw - 36px);
-  max-height: min(560px, 72vh);
+  max-height: min(561px, 72vh);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -197,44 +199,90 @@
   overflow: hidden;
   animation: pip-pop 0.18s steps(3);
 }
+/* Button glyphs are 7 x 7 source pixels drawn at 3x, see GLYPHS in Panel.tsx. */
+.pip-glyph { display: block; flex-shrink: 0; }
 .pip-panel-head {
-  display: flex; align-items: center; justify-content: space-between; padding: 6px 6px 6px 9px;
+  display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 6px 6px 9px;
   background: var(--teal); color: var(--paper); border-bottom: 3px solid var(--gold);
 }
-.pip-panel-title { display: flex; flex-direction: column; gap: 0; min-width: 0; }
-.pip-panel-title strong { font-size: 20px; font-weight: 400; }
-.pip-status { font-size: 17px; color: var(--paper); display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pip-panel-title { display: flex; flex-direction: column; min-width: 0; }
+.pip-panel-title strong { font-size: 20px; line-height: 24px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pip-status { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 17px; line-height: 21px; color: var(--paper); }
+.pip-status-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pip-status-dot { width: 9px; height: 9px; background: var(--paper); flex-shrink: 0; }
+.pip-status.busy .pip-status-dot { animation: pip-blink 0.6s steps(2) infinite; }
 .pip-status.live { color: var(--gold); }
-.pip-live-dot { width: 9px; height: 9px; background: var(--gold); animation: pip-blink 1.2s steps(2) infinite; }
-.pip-panel-tools { display: flex; gap: 3px; }
-.pip-icon-btn { width: 30px; height: 30px; border: 0; background: transparent; color: var(--paper); cursor: pointer; font-size: 18px; line-height: 1; padding: 0; }
+.pip-status.live .pip-status-dot { background: var(--gold); animation: pip-blink 1.2s steps(2) infinite; }
+.pip-panel-tools { display: flex; gap: 3px; flex-shrink: 0; }
+.pip-icon-btn { width: 27px; height: 27px; border: 0; background: transparent; color: var(--paper); cursor: pointer; padding: 0; display: grid; place-items: center; }
 .pip-icon-btn:hover { background: var(--teal-deep); }
-.pip-settings { padding: 9px 12px; border-bottom: 3px solid var(--ink); display: flex; flex-direction: column; gap: 6px; font-size: 17px; background: var(--paper); }
-.pip-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-.pip-toggle input { accent-color: var(--teal); width: 16px; height: 16px; }
-.pip-settings-links { display: flex; gap: 12px; flex-wrap: wrap; }
-.pip-link { border: 0; background: none; color: var(--teal-deep); cursor: pointer; padding: 0; font: inherit; text-decoration: underline; }
+.pip-icon-btn.on { background: var(--teal-deep); box-shadow: inset 0 -3px 0 var(--gold); }
+/* Settings: the same pixel toggles as the popup, 30px rows, 17px labels. */
+.pip-settings { padding: 6px 9px 9px; border-bottom: 3px solid var(--ink); display: flex; flex-direction: column; gap: 3px; font-size: 17px; line-height: 21px; background: var(--paper); }
+.pip-toggle { display: flex; align-items: center; gap: 9px; min-height: 30px; cursor: pointer; }
+.pip-toggle input {
+  appearance: none; -webkit-appearance: none; width: 21px; height: 21px; margin: 0; flex-shrink: 0; cursor: pointer;
+  border: 3px solid var(--ink); background: var(--cream); display: grid; place-items: center;
+}
+.pip-toggle input::after { content: ""; width: 9px; height: 9px; background: var(--paper); opacity: 0; }
+.pip-toggle input:checked { background: var(--teal); }
+.pip-toggle input:checked::after { opacity: 1; }
+.pip-settings-links { display: flex; gap: 15px; flex-wrap: wrap; padding: 6px 0 0 30px; }
+.pip-link { border: 0; background: none; color: var(--teal-deep); cursor: pointer; padding: 0; font: 17px/21px var(--pip-font); text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 3px; }
+/* Turns: the cream frame for him, the same frame with a pale teal inside for the kid. */
 .pip-messages { flex: 1; overflow-y: auto; padding: 9px 3px; display: flex; flex-direction: column; gap: 9px; scroll-behavior: smooth; min-height: 120px; }
-.pip-empty { color: var(--pip-muted); font-size: 17px; padding: 3px 6px; }
-.pip-empty p { margin: 0 0 6px; }
-.pip-empty ul { margin: 0; padding-left: 18px; }
-.pip-msg { max-width: 88%; padding: 0; font-size: 17px; line-height: 21px; word-wrap: break-word; animation: pip-pop 0.15s steps(2); }
-.pip-msg.user { align-self: flex-end; border-image-source: var(--ui-bubble-teal); color: var(--paper); }
+.pip-empty { padding: 6px 6px 3px; font-size: 17px; line-height: 21px; color: var(--ink); }
+.pip-empty p { margin: 0; }
+.pip-empty-hi { font-size: 20px; line-height: 24px; margin-bottom: 3px; }
+.pip-empty-sub { color: var(--pip-muted); margin-bottom: 9px; }
+.pip-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pip-chip {
+  border: var(--btn-frame) solid transparent; border-image: var(--ui-btn-quiet) 4 fill / var(--btn-frame) repeat; image-rendering: pixelated;
+  background: none; border-radius: 0; color: var(--ink); cursor: pointer; padding: 0 3px; text-align: left;
+  font: 17px/21px var(--pip-font); box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.2);
+}
+.pip-chip:hover { border-image-source: var(--ui-btn); }
+.pip-chip:active { transform: translate(3px, 3px); box-shadow: none; }
+.pip-msg { position: relative; max-width: 288px; font-size: 17px; line-height: 21px; word-wrap: break-word; animation: pip-pop 0.15s steps(2); }
+.pip-msg.user { align-self: flex-end; z-index: 0; }
+/* The pale fill is a layer under the text, clipped to the inside of the frame one 3px step at a time
+   round the corners, so it never shows past the outline. */
+.pip-msg.user::before {
+  content: ""; position: absolute; inset: -15px; z-index: -1; background: #d2e8e2;
+  clip-path: polygon(
+    15px 3px, calc(100% - 15px) 3px, calc(100% - 15px) 6px, calc(100% - 9px) 6px, calc(100% - 9px) 9px, calc(100% - 6px) 9px,
+    calc(100% - 6px) 12px, calc(100% - 3px) 12px, calc(100% - 3px) calc(100% - 12px), calc(100% - 6px) calc(100% - 12px),
+    calc(100% - 6px) calc(100% - 9px), calc(100% - 9px) calc(100% - 9px), calc(100% - 9px) calc(100% - 6px),
+    calc(100% - 15px) calc(100% - 6px), calc(100% - 15px) calc(100% - 3px), 15px calc(100% - 3px), 15px calc(100% - 6px),
+    9px calc(100% - 6px), 9px calc(100% - 9px), 6px calc(100% - 9px), 6px calc(100% - 12px), 3px calc(100% - 12px),
+    3px 12px, 6px 12px, 6px 9px, 9px 9px, 9px 6px, 15px 6px
+  );
+}
 .pip-msg.user.interim { opacity: 0.6; }
 .pip-msg.companion { align-self: flex-start; }
-.pip-msg.companion.kind-status { border: 0; border-image: none; color: var(--pip-muted); font-size: 17px; padding: 0 6px; }
-.pip-msg-detail { margin-top: 6px; font: 17px/1.4 var(--pip-font-plain); }
-.pip-msg-detail summary { cursor: pointer; color: var(--teal-deep); font-family: var(--pip-font); font-size: 17px; }
-.pip-msg-detail pre { white-space: pre-wrap; margin: 6px 0 0; font-family: inherit; max-height: 220px; overflow: auto; }
-.pip-offline { font-size: 17px; color: var(--ink); background: var(--gold); padding: 6px 12px; border-top: 3px solid var(--ink); }
-.pip-input-row { display: flex; align-items: center; gap: 9px; padding: 9px 3px 3px; border-top: 3px solid var(--ink); }
-.pip-input { flex: 1; min-width: 0; color: var(--ink); font: 17px var(--pip-font); padding: 0; outline: none; }
+.pip-msg.companion.kind-status { border: 0; border-image: none; color: var(--pip-muted); padding: 0 6px; }
+.pip-msg.companion.kind-error .pip-msg-text::before { content: "! "; color: var(--red); }
+.pip-msg-text { margin: 0; }
+/* "More" opens the long version as plain paragraphs. */
+.pip-msg-detail { margin-top: 6px; }
+.pip-msg-detail summary { cursor: pointer; color: var(--teal-deep); font: 17px/21px var(--pip-font); list-style: none; display: flex; align-items: center; gap: 6px; }
+.pip-msg-detail summary::-webkit-details-marker { display: none; }
+.pip-msg-detail summary::before { content: ""; width: 9px; height: 9px; background: var(--teal-deep); flex-shrink: 0; }
+.pip-msg-detail[open] summary::before { background: none; box-shadow: inset 0 0 0 3px var(--teal-deep); }
+.pip-msg-more { margin-top: 6px; max-height: 240px; overflow: auto; font: 17px/24px var(--pip-font-plain); }
+.pip-msg-more p { margin: 0 0 9px; }
+.pip-msg-more p:last-child { margin-bottom: 0; }
+/* Offline and voice trouble: a gold strip above the input. */
+.pip-offline { display: flex; align-items: flex-start; gap: 9px; font-size: 17px; line-height: 21px; color: var(--ink); background: var(--gold); padding: 6px 9px; border-top: 3px solid var(--ink); }
+.pip-input-row { display: flex; align-items: center; gap: 6px; padding: 6px 3px 3px; border-top: 3px solid var(--ink); }
+.pip-input { flex: 1; min-width: 0; color: var(--ink); font: 17px/21px var(--pip-font); padding: 0; outline: none; }
 .pip-input:focus-visible { box-shadow: 0 0 0 3px var(--gold); }
 .pip-input::placeholder { color: var(--pip-muted); }
-.pip-mic, .pip-send { width: 42px; height: 42px; display: grid; place-items: center; flex-shrink: 0; padding: 0; }
+.pip-mic, .pip-send { width: 45px; height: 45px; display: grid; place-items: center; flex-shrink: 0; padding: 0; }
+.pip-mic { border-image-source: var(--ui-btn-quiet); }
 .pip-mic.on { border-image-source: var(--ui-btn-primary); color: var(--paper); }
 .pip-mic.starting { opacity: 0.6; }
-.pip-send { border-image-source: var(--ui-btn-primary); color: var(--paper); font-size: 17px; }
+.pip-send { border-image-source: var(--ui-btn-primary); color: var(--paper); }
 .pip-send:disabled { opacity: 0.45; cursor: default; }
 @keyframes pip-pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes pip-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
