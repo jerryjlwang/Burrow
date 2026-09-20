@@ -83,3 +83,9 @@ Status: heads-up, 2026-09-20. Two backend-lane files gained one announcement eac
 - `extension/src/actions/executor.ts`: `announceAction` dispatches `burrow:act` at the top of `executeAction` and waits for an optional `detail.hold` at most 900 ms. Nothing else about an action changed.
 - `extension/src/agent/loop.ts`: the loop runs `open_tab` itself (it needs the session's resume flag), so it calls the same `announceAction` before `openTab`. Please keep that call if the branch moves.
 - `extension/src/page-understanding/video.ts`: `announceVideo` dispatches `burrow:video` from `pause()` and `play()` (by us) and from the seeked, pause and play handlers (by them).
+
+## 10. Cross-tab handoff regressed in the smoke test
+
+Status: open, found 2026-09-20 by the front end.
+
+`e2e/smoke.mjs`'s check "the loop resumes on the tab it opened, with the conversation carried over (cross-tab handoff)" fails: no session in `chrome.storage.session` carries the resumed turn. It passed before `origin/frontend` brought in the answer-instead-of-look-up, the listener fix and the board role work, and it fails on that merge alone, before any front end change on top of it. The front end has not touched `agent/loop.ts` session handling or `content/session.ts`. Everything else in the suite passes (55 of 56).
