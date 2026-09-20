@@ -229,6 +229,13 @@
       "notes": "Oh dear, I'm late. Watch check, gasp, then hold the panic. The player follows it with the hole.",
       "hold": true
     },
+    "settle": {
+      "file": "rabbit_settle.png",
+      "frames": 2,
+      "fps": 12,
+      "loop": false,
+      "notes": "After a hop trip: the last squash eases up, then idle frame 0."
+    },
     "land": {
       "file": "rabbit_land.png",
       "frames": 3,

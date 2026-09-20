@@ -47,6 +47,7 @@ MAPS = {
     "wave": [N] * 8,
     "hop": [B, mv(0, -2), mv(0, -3), mv(0, -1), B],
     "land": [B, B, N],
+    "settle": [B, N],
     "panic": [N] * 3,
     "idle_tap": [N] * 8,
     "idle_watch": [N] * 7,

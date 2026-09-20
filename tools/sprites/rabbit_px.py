@@ -508,6 +508,8 @@ def build():
     glyph(pn2, "!", 38 + OFF, 4)
     glyph(pn2, "!", 44 + OFF, 3)
     S["panic"] = dict(frames=[pn0, pn1, pn2], fps=6, loop=False, hold=True)
+    # Settle after a hop trip: the last hop's squash eases up, then idle frame 0.
+    S["settle"] = dict(frames=[bob(rabbit(ear_dy=-1, watch_dy=1)), a], fps=12, loop=False)
     # Landing after a throw: impact squash with a startled face, recover, settle.
     S["land"] = dict(frames=[squash(rabbit(eyes="wide", mouth="open", ear_dy=-1, watch_dy=1), 2), bob(rabbit(watch_dx=2)), a],
                      fps=10, loop=False)
@@ -566,6 +568,7 @@ NOTES = {
     "wave": "He waves with his left ear, twice, then settles. Use for greetings.",
     "hop": "Travel hop. Loop while moving; move lists the sideways pixels per frame so he only travels in the air.",
     "land": "Landing after a throw: impact squash, recover, settle on idle frame 0.",
+    "settle": "After a hop trip: the last squash eases up, then idle frame 0.",
     "panic": "Oh dear, I'm late. Watch check, gasp, then hold the panic. The player follows it with the hole.",
     "idle_tap": "Idle variant. The right foot taps twice.",
     "idle_watch": "Idle variant. He lifts the pocket watch, checks it, and lets it drop.",

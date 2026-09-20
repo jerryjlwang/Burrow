@@ -24,9 +24,11 @@ Updated: 2026-09-19
 - Movement round, art: `hop` travel cycle with per frame `move` values and `land` for thrown landings; `wander_gap` and `wander_hops` in the manifest. `tools/pet/check.mjs` runs the on-page checks and saves screenshots to `tools/pet/shots`.
 - Pixel UI assets: `tools/sprites/ui_px.py` writes hand-placed 9-slice frames (bubble, tail, four button styles) to `extension/public/ui/`. Pixelify Sans (OFL) is in `extension/public/fonts/`. Design note in `docs/frontend/KID_UI.md`.
 
+- Movement round, player: `extension/src/components/pet/travel.ts` holds the pure movement rules (hop or hole choice, hop planning, wander gate with a hard minimum gap, where to stand beside a pointed element, throw physics, release velocity). The player accumulates `move` per frame; `SpritePet` applies it in whole multiples of the scale, flies thrown drags with gravity and one bounce, wanders only while quiet and never more than once per `wander_gap[0]` seconds, resizes 2x to 6x through the hole with the feet fixed, and hop trips end with the calm `settle` state while throws end with `land`. `CompanionRoot` sends him beside a newly pointed element when the panel is closed. Debug buttons: hop left and right, throw, go to headline, wander now, grow 4x, shrink 2x, normal 3x. `panic` art exists for the "I'm late" vignette but is not wired yet. Checked with `tools/pet/check.mjs`: 52 of 52 on light and dark, screenshots viewed. 107 unit tests pass.
+
 ## In progress
 
-- Movement round, player: hops, throw physics with a bounce, rare wander, resize through the hole, hop or hole to pointed elements, debug buttons. Being built in `extension/src/components/pet` and wired in `CompanionRoot`.
+- Nothing.
 
 ## Blocked
 
@@ -34,8 +36,8 @@ Updated: 2026-09-19
 
 ## Next three tasks
 
-1. Finish and verify the movement round on light and dark pages.
-2. Kid UI restyle with the pixel frames and font: bubble, hold to talk, panel.
+1. Kid UI restyle with the pixel frames and font: bubble, hold to talk, panel.
+2. Wire the "I'm late" vignette (panic, then a hole trip) as a rare idle event, and peeking from the edge.
 3. Parent UI, then wire `jumpOut` and `jumpIn` to the real handoff.
 
 ## Notes
