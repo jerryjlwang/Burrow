@@ -239,6 +239,9 @@ try {
   await page.check('input[name="q1"][value="a"]');
   await page.click("#continue");
   await new Promise((r) => setTimeout(r, 600));
+  // Answer Q2 too: with an incomplete quiz a capable model rightly refuses to submit
+  // ("answer Question 2 first") instead of clicking, and the gate never gets exercised.
+  await page.check('input[name="q2"][value="4"]');
   if ((await inShadow(".pip-panel").count()) === 0) {
     await page.evaluate(() => document.getElementById("pip-companion-host").shadowRoot.querySelector(".pip-char-btn").click());
     await inShadow(".pip-panel").waitFor({ timeout: 5000 });
