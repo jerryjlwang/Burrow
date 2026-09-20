@@ -24,3 +24,11 @@ Skills: `read_pages` (see what is on the page), `use_voice` (listen and talk), `
 ## `burrow.graph`
 
 A `GraphSnapshot` from `shared/src/graph.ts`, the latest one the rabbit carried over. The parent view reads it and falls back to a small sample graph when it is missing, so the page always has something to show in a demo.
+
+## The drawing board (2026-09-20)
+
+A third role, `board`, is any page on `excalidraw.com`: the window the tablet watcher opens with Alt+Shift+D. The background writes the jump records for it, the pages react exactly as for kid and parent:
+
+- On open: `{ to: "board", from: "kid", stage: "requested" }`. The visible kid page dives and writes `gone`; the board page starts hidden and pops out on `gone` (12 s at most). A board opened by hand with no jump in flight pops him out after 400 ms.
+- On stop: `{ to: "kid", from: "board", stage: "requested" }` when the board window is still open (it dives first), or `stage: "gone"` when it was closed (nothing left to dive).
+- While a jump to another role is `gone` or `arrived`, a page that loads keeps him in the hole and pauses its proactive engine; the engine resumes when he lands. Jump records carry `from` so the arrival line can differ ("I am back on the page." after the board).

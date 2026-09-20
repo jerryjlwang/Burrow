@@ -71,3 +71,5 @@ Status: heads-up, 2026-09-20. Micah asked for the tablet watcher end to end, so 
 - `extension/manifest.json`: the `system.display` permission and the `open-tablet` command (Alt+Shift+D).
 
 The judge is one Gemini call per check and returns text only; the rabbit speaks through Deepgram as before. `INK_DEBUG_DIR` on the server dumps judged frames for tuning.
+
+Also in `content/controller.ts`, one line you will want to keep: the runtime message listener now answers only the broadcast types it handles. It used to answer every message with `{ok: true}`, and on the extension's own pages (new tab, parent) that reply beat the background's, so with a meadow tab open the popup, chat, voice start and the graph all got a bare `{ok: true}`. Verdicts from the tablet judge go to the board tab now (the rabbit stands there while watching), see `background/tablet.ts`.
