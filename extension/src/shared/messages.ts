@@ -6,7 +6,7 @@ import type { StepPlan } from "@shared/plan";
 import type { WorkingJudgement } from "@shared/steps";
 import type { TranscriptSegment, WatchNote } from "@shared/video";
 import type { KeyChord } from "@shared/keys";
-import type { InkBox, InkJudgement, InkReason } from "@shared/ink";
+import type { InkBox, InkJudgement, InkReason, TabletContext } from "@shared/ink";
 import type { Settings } from "./settings";
 
 /**
@@ -131,6 +131,8 @@ export type BgRequest =
    * while too: the rabbit is about to hop, draw or write, and the mask cannot keep up frame by frame.
    */
   | { type: "tablet.mask"; rects: InkBox[]; quietMs?: number }
+  /** What the watcher knows right now, for the rabbit's own conversation on the board. */
+  | { type: "tablet.context" }
   | { type: "ping" };
 
 export interface ServerHealth {
@@ -175,6 +177,7 @@ export type BgResponseMap = {
   "tablet.stop": TabletState;
   "tablet.status": TabletState;
   "tablet.mask": { ok: boolean };
+  "tablet.context": TabletContext | null;
   ping: { ok: boolean; at: number };
 };
 

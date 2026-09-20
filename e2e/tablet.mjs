@@ -263,6 +263,30 @@ try {
   check("the judge saw the work solved", v?.solved === true, JSON.stringify({ status: v?.status, solved: v?.solved, lines: v?.lines }));
   await board.screenshot({ path: resolve(shots, "22-tablet-solved.png") });
 
+  // His own awareness on the board: he knows where he stands and what the laptop shows, without the judge's help.
+  {
+    const replies = () => inHost(board, () => [...(document.getElementById("pip-companion-host")?.shadowRoot?.querySelectorAll(".pip-msg.companion") ?? [])].map((m) => m.textContent ?? ""));
+    const ask = async (text) => {
+      const n = (await replies()).length;
+      await board.locator(".pip-input").fill(text);
+      await board.locator(".pip-send").click();
+      const reply = await until(async () => {
+        const r = await replies();
+        return r.length > n ? r[r.length - 1] : null;
+      }, 30000, 400);
+      return reply ?? "(no reply)";
+    };
+    await inHost(board, () => document.getElementById("pip-companion-host")?.shadowRoot?.querySelector(".pip-char-btn")?.click());
+    await board.locator(".pip-panel").waitFor({ timeout: 5000 }).catch(() => null);
+    const what = await ask("What problem was I working on?");
+    check("asked on the board, he names the problem from the laptop page", /3x|\b20\b|equation|solve for x/i.test(what), what);
+    check("he does not mistake the drawing app for the task", !/excalidraw|hand tool|keyboard shortcut|toolbar|canvas/i.test(what), what);
+    const where = await ask("Where are you right now?");
+    check("he knows he is on the tablet", /tablet|drawing board|whiteboard|your board|beside your (work|writing|ink)/i.test(where), where);
+    await inHost(board, () => document.getElementById("pip-companion-host")?.shadowRoot?.querySelector(".pip-char-btn")?.click());
+    await board.screenshot({ path: resolve(shots, "24-tablet-aware.png") });
+  }
+
   // Stop: he leaves the board and pops back out on the laptop page.
   await sw.evaluate(() => globalThis.__burrowTablet.stop(true));
   const back = await until(() => standing(kid), 20000);

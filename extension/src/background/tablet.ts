@@ -6,7 +6,7 @@
  * tab, where the rabbit reacts. Nothing here reads the drawing app itself, so any page in that
  * window works, and no screen-share picker is needed.
  */
-import { MAX_RUNG, parseInkBox, type InkBox, type InkJudgeInput, type InkJudgeOutput, type InkJudgement } from "@shared/ink";
+import { MAX_RUNG, parseInkBox, type InkBox, type InkJudgeInput, type InkJudgeOutput, type InkJudgement, type TabletContext } from "@shared/ink";
 import type { ContentBroadcast, TabletState } from "../shared/messages";
 import { DEFAULT_RULES, InkTrigger, maskedChangedPixels, toGray, type TriggerReason } from "./ink-trigger";
 import { log } from "../shared/logger";
@@ -162,6 +162,14 @@ function freshWatch(windowId: number, boardTabId: number | null, contextTabId: n
     context: null,
     busy: false,
   };
+}
+
+/** The rabbit's own conversation on the board asks for this each turn: the laptop task as last captured, the ink as read, the verdict. */
+export async function tabletContext(): Promise<TabletContext | null> {
+  const w = watch;
+  if (!w) return null;
+  const c = await refreshContext(w).catch(() => w.context);
+  return { title: c?.title ?? "", url: c?.url ?? "", laptop: c?.dataUrl ?? null, lines: w.previousLines, verdict: w.lastVerdict };
 }
 
 const MAX_MASK_RECTS = 12;

@@ -62,6 +62,20 @@ export interface InkJudgement {
   space: InkBox | null;
 }
 
+/**
+ * What the rabbit knows while he stands on the drawing tablet, for his own conversation there:
+ * the task on the laptop (title, URL and its latest picture), the ink as the judge last read it,
+ * and the latest verdict. Without this the model would take excalidraw's menus for the page.
+ */
+export interface TabletContext {
+  title: string;
+  url: string;
+  /** JPEG data URL of the laptop's screen, or null when it could not be captured. */
+  laptop: string | null;
+  lines: string[];
+  verdict: InkJudgement | null;
+}
+
 export interface InkJudgeOutput {
   judgement: InkJudgement;
   provider: string;

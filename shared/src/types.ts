@@ -179,6 +179,8 @@ export interface AgentInput {
   video?: VideoContext | null;
   /** `screenshot` is the frame read off the video element, not a viewport capture — its pixels are NOT click coordinates. */
   screenshotIsVideoFrame?: boolean;
+  /** Set while the rabbit stands on the drawing tablet: the laptop task, the ink as read, the verdict. */
+  tablet?: import("./ink").TabletContext | null;
 }
 
 export interface AgentOutput {

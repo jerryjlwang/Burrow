@@ -57,6 +57,8 @@ export interface LoopDeps {
   onError?: (message: string) => void;
   /** Step plan for the problem on screen (if one is ready) and how far the student's working has got. */
   getPlan?: () => { plan: StepPlan | null; planStep: number | null };
+  /** While he stands on the drawing tablet: the laptop task, the ink as read and the verdict, fetched once per request. */
+  getTablet?: () => Promise<AgentInput["tablet"]>;
   /** The drawing on screen as a numbered list, so the model can extend it or erase parts of it. */
   getBoard?: () => string | null;
   /** The video being watched, as the rabbit has followed it, and a way to grab the exact frame on screen. */
@@ -151,6 +153,7 @@ export class AgentLoop {
     const pendingOffer = opts.pendingOffer ?? opts.resume?.pendingOffer ?? null;
     let path: PathContext | null = opts.path ?? opts.resume?.path ?? null;
     const learner = formatDiagnostics(diagnose(session.graph, Date.now()));
+    const tablet = (await this.deps.getTablet?.().catch(() => null)) ?? null;
     if (opts.resume?.lastReferencedElementName) this.lastReferencedElementName = opts.resume.lastReferencedElementName;
     const taskType = classifyTask(utterance, store.getState().page);
     const videoWasInView = this.deps.videoInView?.() ?? false;
@@ -174,7 +177,7 @@ export class AgentLoop {
           const byName = this.lastReferencedElementName ? page.elements.find((e) => e.name === this.lastReferencedElementName) : undefined;
           this.lastReferencedElementId = byName?.id ?? null;
         }
-        const input = this.buildInput({ utterance, goal, conversation: session.recentTurns(10), page, history, pendingOffer, path, learner, step, maxStep, withFrame: firstStep && taskType !== "navigation" && taskType !== "administrative", resumed: !!opts.resume && step === (opts.resume?.step ?? 0) });
+        const input = this.buildInput({ utterance, goal, conversation: session.recentTurns(10), page, history, pendingOffer, path, learner, tablet, step, maxStep, withFrame: firstStep && taskType !== "navigation" && taskType !== "administrative", resumed: !!opts.resume && step === (opts.resume?.step ?? 0) });
         // A plain spoken request may already be half-answered: the decision started when speech
         // recognition first thought the student was done (see speculate()).
         const head = firstStep && !opts.resume && !opts.goal && !pendingOffer && !path ? this.speculator.take(speculationKey(utterance, page.url)) : null;
@@ -444,10 +447,11 @@ export class AgentLoop {
     return result;
   }
 
-  private buildInput(a: { utterance: string; goal: string; conversation: AgentInput["conversation"]; page: PageSummary; history: ActionRecord[]; pendingOffer: PendingOffer | null; path: PathContext | null; learner: string | null; step: number; maxStep: number; withFrame: boolean; resumed: boolean }): AgentInput {
+  private buildInput(a: { utterance: string; goal: string; conversation: AgentInput["conversation"]; page: PageSummary; history: ActionRecord[]; pendingOffer: PendingOffer | null; path: PathContext | null; learner: string | null; tablet?: AgentInput["tablet"]; step: number; maxStep: number; withFrame: boolean; resumed: boolean }): AgentInput {
     const video = this.deps.getVideo?.() ?? null;
     const frame = video && a.withFrame && !this.pendingScreenshot ? video.frame() : null;
     return {
+      tablet: a.tablet ?? null,
       utterance: a.utterance,
       goal: a.goal,
       conversation: a.conversation,

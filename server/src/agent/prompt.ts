@@ -192,6 +192,17 @@ export function formatDecisionContext(input: AgentInput): string {
     lines.push("DRAWING ON SCREEN (your sketch, still showing; numbers are for value:\"erase\", and value:\"add\" extends it):");
     lines.push(input.board.slice(0, 1500));
   }
+  if (input.tablet) {
+    const t = input.tablet;
+    const v = t.verdict;
+    lines.push("");
+    lines.push(`WHERE YOU ARE: standing on the student's drawing TABLET, beside their handwritten working. The PAGE below is only the drawing app (excalidraw); it is not their task and none of its buttons or menus matter. Never mention the drawing app's tools.`);
+    lines.push(`THE TASK is on their LAPTOP: "${t.title || "(untitled page)"}" (${t.url || "unknown url"}).${t.laptop ? " A picture of the laptop screen is attached: read the problem from it." : ""}`);
+    lines.push(t.lines.length ? `THEIR HANDWRITTEN LINES SO FAR, top to bottom, as last read: ${t.lines.map((l, i) => `${i + 1}. "${l}"`).join(" ")}` : "THEY HAVE NOT WRITTEN ANYTHING READABLE YET.");
+    if (v?.status === "off" && v.line) lines.push(`PRIVATE DIAGNOSIS: line ${v.line} is wrong: ${v.issue || "a slip in that step"}. Never say this outright, never give the corrected line, the missing number or the final answer, even if asked straight out.`);
+    else if (v?.solved) lines.push("Their work reaches a correct final answer.");
+    lines.push("Here you speak only (action speak, done true): no click, type, point, highlight or scroll. Be Socratic: one short question or one small observation per turn, then wait. If they are still stuck after two turns, sketch a similar example with different numbers.");
+  }
   if (input.video) {
     const v = input.video;
     lines.push("");
@@ -206,6 +217,7 @@ export function formatDecisionContext(input: AgentInput): string {
   }
   lines.push("");
   lines.push(formatPage(input.page));
+  if (input.tablet?.laptop) lines.push("\n(The picture of the student's LAPTOP screen, with the task, is attached" + (input.screenshot ? " after the drawing tablet's own screenshot" : "") + ". Its pixels are not click coordinates.)");
   if (input.screenshot) lines.push(input.screenshotIsVideoFrame && input.video ? `\n(The exact video frame at ${fmtTime(input.video.t)} is attached. It is the video picture only, NOT the viewport: never take x,y points from it.)` : "\n(A screenshot of the current viewport is attached.)");
   if (input.retryNote) lines.push(`\nYOUR PREVIOUS OUTPUT WAS INVALID: ${input.retryNote}. Return a corrected action (element actions need an elementId from the list above; otherwise use speak).`);
   return lines.join("\n");

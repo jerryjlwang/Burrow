@@ -5,6 +5,7 @@ import { slugify } from "@shared/graph";
 import { parsePlan, topicPlanKey } from "@shared/plan";
 import { describeSketch, eraseFromSketch, parseSketch } from "@shared/sketch";
 import { validateInkJudgement } from "@shared/ink";
+import { pageRole } from "../components/handoff";
 import { isVideoQuestion, pickRelated, videoQuery } from "@shared/related";
 import { planStepSuggestion } from "@shared/path";
 import type { PlanRoute } from "./store";
@@ -60,7 +61,8 @@ export class CompanionController {
       onFinalTranscript: (text) => void this.handleUserText(text, "voice"),
       // A pending yes/no or a stop command is answered locally, so there is nothing to get ahead on.
       onProbableEndOfTurn: (text) => {
-        if (!this.pendingConfirmation && !this.pendingOffer && !isStopCommand(text) && isExtensionContextValid()) this.loop.speculate(text);
+        // Not on the drawing board: a guess made there would lack the laptop task and the ink.
+        if (!this.pendingConfirmation && !this.pendingOffer && !isStopCommand(text) && isExtensionContextValid() && pageRole() !== "board") this.loop.speculate(text);
       },
       // Only while it is actually playing: a paused video says nothing the mic could pick up.
       ambientSpeech: () => {
@@ -152,6 +154,8 @@ export class CompanionController {
       onIdle: () => this.afterLoopIdle(),
       onError: (message) => this.showAgentError(message),
       getPlan: () => this.engine.planContext,
+      // On the drawing board his page is excalidraw; what he must know is the laptop task and the ink.
+      getTablet: async () => (pageRole() === "board" ? await sendToBackground({ type: "tablet.context" }, 2500).catch(() => null) : null),
       onHint: () => this.engine.notePlanEngaged(),
       getBoard: () => {
         const board = store.getState().board;
