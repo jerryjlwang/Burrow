@@ -55,6 +55,9 @@ function Popup() {
       <label className="t">
         <input type="checkbox" checked={settings.ttsEnabled} onChange={(e) => void update({ ttsEnabled: e.target.checked })} /> Speak replies out loud
       </label>
+      <label className="t" title="For hover menus, canvases and drag tools that ignore ordinary page events. While the rabbit uses it, Chrome shows a “started debugging this browser” bar.">
+        <input type="checkbox" checked={settings.trustedInput} onChange={(e) => void update({ trustedInput: e.target.checked })} /> Let the rabbit use the real mouse and keyboard when a page needs it
+      </label>
       <label className="t">
         <input type="checkbox" checked={settings.debugMode} onChange={(e) => void update({ debugMode: e.target.checked })} /> Developer panel
       </label>

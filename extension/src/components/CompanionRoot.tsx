@@ -11,6 +11,7 @@ import { PlanMap } from "./PlanMap";
 import { DebugPanel } from "./DebugPanel";
 import { escort, pageRole, readArrival, startHandoff, type Arrival } from "./handoff";
 import { armSounds, playCue, setSoundsEnabled } from "./sounds";
+import { isOwnKey } from "../actions/surface";
 
 /** Must match .pip-dock right/bottom/gap and .pip-panel width in styles.css. */
 const DOCK_EDGE = 18;
@@ -221,7 +222,7 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && store.getState().panelOpen) controller.closePanel();
+      if (e.key === "Escape" && !isOwnKey() && store.getState().panelOpen) controller.closePanel();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);

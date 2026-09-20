@@ -317,6 +317,7 @@ async function handle(msg: BgRequest, sender: chrome.runtime.MessageSender): Pro
     }
     case "input":
       if (tabId == null) return { ok: false, error: "no tab" };
+      if (!settings.trustedInput) return { ok: false, error: "real input is switched off" };
       return runInput(tabId, msg.ops);
     case "open.onboarding":
       await chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html") });

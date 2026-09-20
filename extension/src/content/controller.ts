@@ -12,6 +12,7 @@ import { ElementRegistry } from "../page-understanding/registry";
 import { extractPage, HOST_ID } from "../page-understanding/extract";
 import { PageWatcher, type ChangeReason } from "../page-understanding/watcher";
 import { OverlayController } from "../actions/overlay";
+import { isOwnKey } from "../actions/surface";
 import { AgentLoop } from "../agent/loop";
 import { Session } from "../agent/session";
 import { SignalTracker } from "../proactive/signals";
@@ -91,6 +92,7 @@ export class CompanionController {
           return parsePlan(r.plan, { key: topicPlanKey(topic), source: "llm" });
         },
         showPlan: () => this.showPlan(),
+        trustedInputEnabled: () => store.getState().settings.trustedInput,
         input: async (ops) => {
           try {
             return await sendToBackground({ type: "input", ops }, 8000);
@@ -178,7 +180,7 @@ export class CompanionController {
 
     // Escape is the universal interrupt: stop talking, stop acting, clear the overlay.
     const onKeydown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      if (e.key !== "Escape" || isOwnKey()) return;
       if (!this.voice.speaking && !this.loop.running && !store.getState().board) return;
       this.voice.stopSpeaking();
       this.loop.cancel();

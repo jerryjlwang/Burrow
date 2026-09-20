@@ -21,15 +21,26 @@ One coordinate space everywhere: CSS pixels from the viewport's top-left. The el
 
 After any action aimed at a raw point, the loop attaches a fresh screenshot to the next step. Aiming by eye without seeing the result is guessing.
 
-### Trusted input through `chrome.debugger` (`extension/src/background/trusted-input.ts`)
+### Page events first; real input is an opt-in escalation
 
-Events dispatched from a content script are untrusted. They never trigger CSS `:hover`, never start a native drag, and are ignored by any widget that checks `isTrusted`. Those are the cases this change exists for, so the new actions go to the background, which replays them through the DevTools protocol (`Input.dispatchMouseEvent`, `dispatchKeyEvent`, `insertText`). To the page they are the student's own hands.
+*Revised the same day. The first version sent every new action through `chrome.debugger`. That was heavier than the problem: on our own test page only one of seven behaviours needed it.*
 
-Native HTML5 drag-and-drop needs one more step: a real mouse press-and-move hands the pointer to the OS drag loop and never gives it back. The background turns on `Input.setInterceptDrags`, and if the move starts a native drag it finishes the gesture with `Input.dispatchDragEvent` instead. Pointer-driven widgets never start a native drag and just receive the mouse moves.
+The new actions are dispatched as ordinary DOM events from the content script (`extension/src/actions/surface.ts`). That needs no debugger session and no browser warning, and it reaches almost everything: canvas clicks at an exact pixel, double and right click, pointer-driven sliders, key listeners, and HTML5 drag-and-drop (a `DragEvent` sequence sharing one `DataTransfer`, which is all a drop target reads).
 
-The plain `click` on a listed element deliberately keeps its existing DOM path. It works, it is the most common action, and it needs no debugger session.
+Page events cannot do a short, specific list of things: CSS `:hover` (no event sets it); a key's default behaviour (Tab moving focus, arrows moving a caret, characters landing in a custom editor); calls gated on user activation (unmuted `play()`, `window.open`, fullscreen, clipboard); widgets that call `setPointerCapture`; explicit `isTrusted` checks. For those there is real input: the background replays the action through the DevTools protocol (`extension/src/background/trusted-input.ts`), indistinguishable from the student's hands. Native drags are intercepted with `Input.setInterceptDrags` and finished with `Input.dispatchDragEvent`, because a real press-and-move would hand the pointer to the OS drag loop.
 
-If the debugger cannot attach (a `chrome://` page, a policy block), the executor falls back to dispatched events at the exact point and says so in the action result, so the model knows the page may have ignored it.
+Real input is gated twice:
+
+1. **The student opts in.** `settings.trustedInput`, off by default, toggled in the toolbar popup. While off the background refuses `input` messages and no debugger session is ever opened. Attaching shows Chrome's "started debugging this browser" bar, which shifts the viewport and offers a Cancel button, so it must never appear unasked.
+2. **The model opts in per action.** `trusted: true` on a decision means "repeat this as real input". When a page-event action shows no visible change, the result says how to escalate (or that real input is switched off). The model decides from the page and screenshot whether the first attempt took. The executor never retries a click, drag or key by itself: those are not idempotent, and a second click on something that did react would undo it.
+
+The one automatic escalation is `hover`. Hovering twice is harmless, and an unanswered hover is the signature of a CSS `:hover` menu, so with real input on it gets the real mouse without being asked.
+
+The plain `click` on a listed element keeps its original DOM path throughout.
+
+Two bugs the debugger-first version had hidden, both fixed: an aimed click was finished with `el.click()`, which reports the click at (0,0), so a canvas saw the wrong spot; and a key the rabbit pressed for the page reached the rabbit's own Escape handlers, so pressing Escape cancelled its own loop and closed its panel (`noteOwnKey`/`isOwnKey`; `isTrusted` cannot separate the two under real input).
+
+`point_to` and `highlight` also take `x,y`, so the rabbit can show the student a spot that has no element. With real input off, that is how it hands a gesture back: "drag this handle yourself".
 
 ### Policy follows the point (`extension/src/agent/loop.ts`)
 
@@ -41,6 +52,6 @@ The extractor no longer cuts blocks, and its ceiling is 120,000 characters: a gu
 
 ## Consequences
 
-- The manifest gains the `debugger` permission. While a session is attached Chrome shows a "started debugging this browser" bar; the background detaches 25 seconds after the last input so it does not linger. Launching Chrome with `--silent-debugger-extension-api` hides it; `e2e/surface.mjs` does, and a demo launcher should too. This permission also draws Web Store review scrutiny; fine for a hackathon build, a real decision before publishing.
+- The manifest keeps the `debugger` permission as a required one, but nothing attaches unless the student has switched real input on. Before publishing, move it to `optional_permissions` and request it from the popup toggle (the request needs a user gesture in an extension page, and the install-time warning is a real cost). For a demo with real input on, launch Chrome with `--silent-debugger-extension-api` to hide the bar; the background also detaches 25 seconds after the last real input.
 - Prompt size now scales with the page. On a long article every decision carries the whole text, which costs latency on the voice path. If that bites, the fix is relevance-ranked text, not a return to a blind prefix cut.
-- `e2e/surface.mjs` drives `demo-pages/surface.html`, which logs `event.isTrusted`, so the suite proves input arrived as real input: CSS hover menu, native drag-and-drop, pointer slider, canvas click at an exact pixel, double/right click, key press, and screenshot sizing.
+- `e2e/surface.mjs` drives `demo-pages/surface.html`, which logs `event.isTrusted`, so the suite tells the two paths apart. It proves that by default everything runs on page events and the rabbit holds no debugger session (probed directly: an extension may hold one session per tab, so a second attach is refused exactly when one exists), that a CSS `:hover` menu is the known limit, and that with real input on the hover escalates by itself while clicks, drags and keys escalate only when asked.

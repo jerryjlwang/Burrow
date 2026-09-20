@@ -3,10 +3,11 @@ import { HOST_ID } from "../page-understanding/extract";
 import type { ElementRegistry } from "../page-understanding/registry";
 
 /**
- * Helpers for acting on the visible surface by point rather than by listed element, plus the
- * untrusted DOM-event fallbacks used when trusted input (the background's debugger session)
- * is unavailable. The fallbacks reach ordinary listeners but not :hover, native drag, or
- * isTrusted checks — callers say so in their result.
+ * Acting on the visible surface by point rather than by listed element, with page (DOM) events.
+ * This is the default path: no debugger session, no browser warning bar, and it reaches almost
+ * every widget. What it cannot do — CSS :hover, default key behaviour (Tab moving focus, arrows
+ * moving a caret), user-activation-gated calls, setPointerCapture widgets, isTrusted checks — is
+ * what the executor escalates to real input for.
  */
 
 export interface Point {
@@ -31,6 +32,14 @@ export function deepActiveElement(): Element | null {
   while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
   return el && el !== document.body && el !== document.documentElement ? el : null;
 }
+
+// Escape is the student's "stop everything". A key the rabbit presses for the page must not
+// trip that on itself, and with real input isTrusted cannot tell the two apart.
+let ownKeyUntil = 0;
+export const noteOwnKey = (): void => {
+  ownKeyUntil = Date.now() + 400;
+};
+export const isOwnKey = (): boolean => Date.now() < ownKeyUntil;
 
 export const isOwnUi = (el: Element | null): boolean => !!el && (el.id === HOST_ID || !!el.closest(`#${HOST_ID}`));
 
@@ -72,8 +81,23 @@ export function syntheticDoubleClick(el: Element, p: Point): void {
   fire(el, "dblclick", p, { detail: 2 });
 }
 
+/** Native drag-and-drop by events: one DataTransfer carried from dragstart to drop, which is all a drop target reads. */
+function syntheticNativeDrag(source: Element, from: Point, to: Point): void {
+  const dataTransfer = new DataTransfer();
+  const drag = (el: Element, type: string, p: Point) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, composed: true, clientX: p.x, clientY: p.y, dataTransfer }));
+  drag(source, "dragstart", from);
+  drag(source, "drag", from);
+  const target = elementAtPoint(to) ?? document.body;
+  drag(target, "dragenter", to);
+  drag(target, "dragover", to);
+  drag(target, "drop", to);
+  drag(source, "dragend", to);
+}
+
 export function syntheticDrag(from: Point, to: Point): void {
   const source = elementAtPoint(from) ?? document.body;
+  const draggable = source.closest('[draggable="true"]');
+  if (draggable && typeof DragEvent === "function" && typeof DataTransfer === "function") return syntheticNativeDrag(draggable, from, to);
   fire(source, "pointerdown", from, { buttons: 1 });
   fire(source, "mousedown", from, { buttons: 1 });
   const steps = 10;
