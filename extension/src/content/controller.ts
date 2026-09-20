@@ -32,8 +32,8 @@ import { sendToBackground, isExtensionContextValid, type ContentBroadcast, type 
 import { log, onLog, setDebugLogging } from "../shared/logger";
 
 const logger = log("ui");
-/** How long the chosen chapter stays ringed in the list before the page goes back up to the player: just long enough to see which one it was. */
-const CHAPTER_SHOWN_MS = 1200;
+/** How long the chosen chapter stays ringed in the list before the video jumps and the page goes back up: long enough to see which one it was. */
+const CHAPTER_SHOWN_MS = 2400;
 
 /** Composes page understanding, actions, the agent loop, voice and proactivity for one tab. */
 export class CompanionController {
@@ -535,8 +535,8 @@ export class CompanionController {
 
   /**
    * The chapter path, fixed rather than left to the model to improvise: open the description, go
-   * down to the chapter list, choose the chapter that covers what they asked for, set the video to
-   * its time, show them the chapter in the list, and come back up to the player. Only the choosing is a
+   * down to the chapter list, choose the chapter that covers what they asked for, show it to them
+   * in the list, set the video to its time, and come back up to the player. Only the choosing is a
    * model call. Returns false, having said nothing, when there is no chapter list or no chapter
    * fits — the ordinary agent loop then takes the request.
    */
@@ -560,12 +560,11 @@ export class CompanionController {
       const chapter = chapters[index];
       const { el, locator } = chapterTarget(chapter);
       store.setState({ characterState: "acting", status: "" });
-      // The video moves the moment the chapter is known; the ring is only there to show which one it was.
-      this.video.control("seek", String(chapter.t));
       await this.overlay.pointAt(this.registry.idFor(el), { locator, durationMs: CHAPTER_SHOWN_MS + 1500 });
-      this.reply(`"${truncate(chapter.title, 80)}" is at ${chapter.stamp}. You're there now.`);
+      this.reply(`"${truncate(chapter.title, 80)}" starts at ${chapter.stamp}. Jumping there.`);
       await new Promise((r) => setTimeout(r, CHAPTER_SHOWN_MS));
       if (this.disposed) return true;
+      this.video.control("seek", String(chapter.t));
       this.overlay.clear();
       this.video.watcher.element?.scrollIntoView({ behavior: "smooth", block: "center" });
       return true;
