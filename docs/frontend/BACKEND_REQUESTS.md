@@ -31,3 +31,11 @@ The jump is a two-step handoff. The receiving laptop confirms it is ready, then 
 Status: heads-up, not needed yet. Will be mocked with a debug panel button.
 
 The demo needs a parent approval to arrive on the kid's laptop and unlock a skill. The front end needs a pushed event with the skill name. The parent UI will send the grant, the kid's extension reacts.
+
+## 4. Housekeeping from the merge on 2026-09-19
+
+Status: open.
+
+- `e2e/.profile-anysite/` (about 800 files of a Chrome profile) was committed to main. It should be removed from git and added to `.gitignore` next to `e2e/.profile/`.
+- The new tab page and its smoke test labels still say Pip. The front end changed the new tab page's default name to White Rabbit; the test labels in `e2e/smoke.mjs` are yours to rename.
+
