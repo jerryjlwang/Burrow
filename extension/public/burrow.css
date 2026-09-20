@@ -1,0 +1,102 @@
+/* Burrow: shared look for the extension's own pages (new tab, onboarding, popup, parent view).
+   Same palette, font and hand-placed 9-slice frames as the on-page pet. These pages are extension
+   pages, so relative urls and @font-face both work here. Frames are drawn at 3x (15px = 5 source
+   pixels, 12px = 4) and never scale by anything but a whole number. */
+@font-face {
+  font-family: "Burrow Pixel";
+  src: url("fonts/PixelifySans.ttf") format("truetype");
+  font-weight: 400 700;
+  font-display: swap;
+}
+:root {
+  color-scheme: light;
+  --ink: #3b2a23;
+  --cream: #fff8e7;
+  --paper: #fffdf5;
+  --teal: #2f8f83;
+  --teal-deep: #236e65;
+  --gold: #f2c14e;
+  --gold-deep: #b57f2c;
+  --red: #d9534f;
+  --muted: #7a6458;
+  --font: "Burrow Pixel", "Pixelify Sans", "Segoe UI", system-ui, sans-serif;
+  --font-plain: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --shadow: 3px 3px 0 rgba(59, 42, 35, 0.25);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 17px;
+  line-height: 1.3;
+  color: var(--ink);
+  /* Cream paper with a faint 3px dot grid, like graph paper for pixels. */
+  background-color: var(--cream);
+  background-image: radial-gradient(rgba(59, 42, 35, 0.07) 1.5px, transparent 1.5px);
+  background-size: 24px 24px;
+}
+h1, h2, h3 { font-weight: 400; margin: 0; line-height: 1.15; }
+h1 { font-size: 32px; }
+h2 { font-size: 24px; }
+p { margin: 0 0 12px; }
+a { color: var(--teal-deep); }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+
+/* Cream frame, 5 source pixels of border. */
+.px-frame {
+  border: 15px solid transparent;
+  border-image: url("ui/bubble.png") 5 fill / 15px repeat;
+  image-rendering: pixelated;
+  background: none;
+  box-shadow: var(--shadow);
+}
+.px-frame.teal { border-image-source: url("ui/bubble_teal.png"); color: var(--paper); }
+/* Buttons, 4 source pixels of border. */
+.px-btn {
+  display: inline-grid;
+  place-items: center;
+  border: 12px solid transparent;
+  border-image: url("ui/button.png") 4 fill / 12px repeat;
+  image-rendering: pixelated;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 0 6px;
+  min-height: 42px;
+  font-size: 17px;
+  line-height: 1;
+  text-decoration: none;
+  box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.2);
+}
+.px-btn:active { transform: translate(3px, 3px); box-shadow: none; }
+.px-btn:disabled { opacity: 0.5; cursor: default; }
+.px-btn.primary { border-image-source: url("ui/button_primary.png"); color: var(--paper); }
+.px-btn.quiet { border-image-source: url("ui/button_quiet.png"); }
+.px-btn.alert { border-image-source: url("ui/button_alert.png"); color: var(--paper); }
+/* Text input in a cream frame. */
+.px-input {
+  border: 15px solid transparent;
+  border-image: url("ui/bubble.png") 5 fill / 15px repeat;
+  image-rendering: pixelated;
+  background: none;
+  padding: 0;
+  outline: none;
+  width: 100%;
+}
+.px-input:focus { box-shadow: 0 0 0 3px var(--gold); }
+.px-input::placeholder { color: var(--muted); }
+/* Teal band with a gold rule, for headers inside a frame. */
+.px-band { background: var(--teal); color: var(--paper); border-bottom: 3px solid var(--gold); padding: 6px 9px; }
+.px-muted { color: var(--muted); }
+.px-ok { color: var(--teal-deep); }
+.px-err { color: var(--red); }
+/* Flat pixel toggle. */
+.px-toggle { display: flex; align-items: center; gap: 9px; cursor: pointer; }
+.px-toggle input { accent-color: var(--teal); width: 18px; height: 18px; margin: 0; }
+/* Progress steps: gold bars. */
+.px-steps { display: flex; gap: 6px; }
+.px-steps span { height: 9px; flex: 1; background: var(--paper); border: 3px solid var(--ink); }
+.px-steps span.on { background: var(--gold); }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

@@ -400,6 +400,24 @@ try {
   check("onboarding renders the rabbit at a whole scale", obCanvas && obCanvas.width === 128 && obCanvas.height === 116, JSON.stringify(obCanvas));
   await ob.screenshot({ path: resolve(out, "onboarding.png") });
   await ob.close();
+
+  // The extension's own pages wear the same frames and font.
+  const nt = await context.newPage();
+  await nt.setViewportSize({ width: 1280, height: 800 });
+  await nt.goto(`chrome-extension://${extId}/newtab.html`);
+  await nt.locator(".pet-canvas").waitFor({ timeout: 8000 }).catch(() => null);
+  await wait(800);
+  const ntFont = await nt.evaluate(() => document.fonts.check('17px "Burrow Pixel"'));
+  check("new tab page loads the Burrow font", ntFont);
+  check("new tab page has the rabbit", (await nt.locator(".pet-canvas").count()) > 0);
+  await nt.screenshot({ path: resolve(out, "newtab.png") });
+  await nt.close();
+  const pp = await context.newPage();
+  await pp.setViewportSize({ width: 360, height: 520 });
+  await pp.goto(`chrome-extension://${extId}/popup.html`);
+  await wait(800);
+  await pp.screenshot({ path: resolve(out, "popup.png") });
+  await pp.close();
 } catch (e) {
   check("run completed without exceptions", false, String(e?.stack ?? e));
 } finally {

@@ -254,6 +254,14 @@ export function SpritePet({ character = DEFAULT_CHARACTER, state, speaking = fal
 
   const clampBox = useCallback((left: number, top: number): PetBox => clampFor(geoRef.current!, left, top), []);
 
+  // Report the starting footprint once the art is measured, so the owner can size the stack above
+  // the pet from the first frame, not only after a drag.
+  useEffect(() => {
+    if (!onPosition || !geo) return;
+    const r = rootRef.current?.getBoundingClientRect();
+    if (r && r.width > 0) onPosition(clampBox(r.left, r.top));
+  }, [onPosition, geo, clampBox]);
+
   // Keep the body on screen when the window changes size, and keep the owner's copy of the box fresh.
   useEffect(() => {
     if (!onPosition || !geo) return;

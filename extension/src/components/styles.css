@@ -184,6 +184,7 @@
   max-height: min(560px, 72vh);
   display: flex;
   flex-direction: column;
+  min-height: 0;
   color: var(--ink);
   box-shadow: var(--shadow);
   overflow: hidden;
