@@ -55,9 +55,12 @@ Run through this before a demo. Server: `npm run dev:server` (or `DEMO_MODE=1 np
 
 ## Tablet watcher (needs GEMINI_API_KEY in .env; a second touch display is optional)
 - [ ] On any page press Alt+Shift+D (or popup, "Watch the tablet") → the rabbit says "To your drawing board!" and dives; excalidraw.com opens fullscreen on the touch display (beside you on one screen) and he pops out of a hole in its corner; he is gone from the laptop page. Popup shows "Watching the tablet".
-- [ ] Open the demo practice page on the laptop, write `3x + 5 = 20` then `3x = 25` on the board → within about 5 s the rabbit on the board shows and speaks a nudge that names the step, never `15` or `x = 5`.
-- [ ] Say or click "Yes, please" → a hint conversation starts from the nudge.
-- [ ] Fix the line and finish with `x = 5` → the rabbit celebrates once.
-- [ ] Draw something unrelated → no nudge (verdict "unclear" in the popup). Slow, messy or unfinished work → no nudge.
+- [ ] Open the show-your-work page on the laptop, write `3x + 5 = 20` then `3x = 25` on the board → within about 8 s the rabbit hops (a hole for a long trip) to stand beside that line, a teal ring is drawn around the `25`, and then he speaks a question that names the step, never `15` or `x = 5`, with Yes and No under the bubble.
+- [ ] Leave the pen still for about 20 s → he goes to the empty part of the board, his chalkboard rises beside him with a similar example in other numbers (or a question or a small diagram), and he says one line.
+- [ ] Rewrite the same wrong line, still wrong, and wait → the next nudge names the exact part to look at; the one after gives a tiny example with different numbers. A new mistake starts again at a question.
+- [ ] Say or click "Yes, please" → the conversation knows the lines he read; he speaks only (one question or one small observation a turn) and never gives the corrected line or the answer, even when asked straight out.
+- [ ] Fix the line → the ring fades. Finish with `x = 5` → the rabbit celebrates once and the note board goes.
+- [ ] Draw something unrelated → no nudge (verdict "unclear" in the popup). Slow, messy or unfinished work → no nudge. His own bubble, hop and board do not trigger checks (popup check count stays put while he moves).
+- [ ] Developer panel on any page: "ink: slip", "ink: slip, rung 2", "ink: stall note", "ink: solved" rehearse the beats without a tablet (on the board page he moves and draws; elsewhere only the words). `node e2e/tablet.mjs` with the server running walks the whole beat against the live judge.
 - [ ] Press Alt+Shift+D again → the board comes forward and the context follows the tab you pressed it on. "Stop watching" in the popup stops and he dives back to the laptop page; closing the board window also stops and he pops back out on the laptop.
 - [ ] Server without a Gemini key → the mock cycles fine, slip, solved so the beat still rehearses.

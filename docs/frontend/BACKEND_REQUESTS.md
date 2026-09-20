@@ -72,6 +72,14 @@ Status: heads-up, 2026-09-20. Micah asked for the tablet watcher end to end, so 
 
 The judge is one Gemini call per check and returns text only; the rabbit speaks through Deepgram as before. `INK_DEBUG_DIR` on the server dumps judged frames for tuning.
 
+Tablet coach, 2026-09-20, the same lane crossing continued (see `STATUS.md`, "Tablet coach"):
+
+- `shared/src/ink.ts`: the judgement gained `box`, `mark` and `space` (fractions of the frame, parsed from Gemini's `[ymin, xmin, ymax, xmax]`) and `note`; the input gained `reason`, `rung` and `lastWrongLine`. `server/src/api/ink.ts`: the prompt asks for the boxes, applies the rung and answers a stall with a note; a note is kept only for a stall.
+- `extension/src/background/tablet.ts`: rung bookkeeping per wrong line, the stall arming, the UI mask and quiet spell (`setTabletMask`), and `lastReason` and `lastRung` in `TabletState`. `ink-trigger.ts`: the `stall` reason and `maskedChangedPixels`. `background/index.ts`: one more request, `tablet.mask`.
+- `extension/src/shared/messages.ts`: `tablet.mask`, the `ink.judgement` broadcast now carries `reason`, `rung` and `task`, and the `InkMeta` and `InkStageDetail` types.
+- `extension/src/proactive/engine.ts`: `onInkJudgement(j, meta)` stages the picture through a `burrow:ink` window event before it speaks (`stage`), handles a stall note, and `inkGoal` builds the Socratic follow-up goal. `content/controller.ts`: the broadcast case passes the meta, and a `burrow:judge` window listener feeds validated verdicts to the engine for rehearsal (developer panel, e2e).
+- Front end only: `components/InkCoach.tsx` (the hop, the ring, the note board, the mask reporter), mounted in `CompanionRoot.tsx`; ring styles in `styles.css`; `e2e/tablet.mjs`.
+
 Also in `content/controller.ts`, one line you will want to keep: the runtime message listener now answers only the broadcast types it handles. It used to answer every message with `{ok: true}`, and on the extension's own pages (new tab, parent) that reply beat the background's, so with a meadow tab open the popup, chat, voice start and the graph all got a bare `{ok: true}`. Verdicts from the tablet judge go to the board tab now (the rabbit stands there while watching), see `background/tablet.ts`.
 
 One line changed in `e2e/smoke.mjs` (2026-09-20): the chalkboard close check now waits up to 2.5 s for `.pip-board` to detach, because Krishiv's framed board sinks for 330 ms before it unmounts. Jerry's newest overlay code (video regions, outlined strokes) lives in `components/SketchOverlay.tsx` after the split; `Board.tsx` is the framed chalkboard for unanchored sketches, and its label text now carries `pip-board-label` for the stroke check.
