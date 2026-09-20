@@ -1744,6 +1744,8 @@ def export(out=OUT):
     man["sign"] = {"file": "sign.png", "size": [len(SIGN[0]), len(SIGN)], "slice": 5, "note": "Painted plank, 9-slice for border-image."}
     save(os.path.join(out, "post.png"), image(POST_TILE))
     man["post"] = {"file": "post.png", "size": [len(POST_TILE[0]), len(POST_TILE)], "note": "Repeats vertically under a sign."}
+    save(os.path.join(out, "carrot.png"), image(CARROT))
+    man["carrot"] = {"file": "carrot.png", "size": [len(CARROT[0]), len(CARROT)], "note": "The enter key on the search plank. Draw at a whole-number scale."}
     man["icons"] = {}
     for name, (art, hot) in ICONS.items():
         im = image(art)

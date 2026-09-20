@@ -2100,6 +2100,14 @@
     ],
     "note": "Repeats vertically under a sign."
   },
+  "carrot": {
+    "file": "carrot.png",
+    "size": [
+      7,
+      12
+    ],
+    "note": "The enter key on the search plank. Draw at a whole-number scale."
+  },
   "icons": {
     "cursor_arrow": {
       "file": "cursor_arrow.png",

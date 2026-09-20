@@ -209,10 +209,43 @@ function Clock({ now, hour, boot }: { now: Date; hour: number; boot: Boot }) {
   );
 }
 
+/** Prompts the empty plank types out, one at a time, so the kid sees what it is for. */
+const PROMPTS = ["Ask the meadow", "Why do we have seasons?", "What is a moat?", "Teach him about castles"];
+const PROMPT_TYPE_MS = 60;
+const PROMPT_HOLD_MS = 4200;
+
 function Search({ boot }: { boot: Boot }) {
   const [value, setValue] = useState("");
   const [pops, setPops] = useState(0);
   const [tail, setTail] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [plucked, setPlucked] = useState(false);
+  const [nudge, setNudge] = useState<"" | "shake" | "stamp">("");
+  // The typed-out prompt: which one, and how much of it is showing.
+  const [prompt, setPrompt] = useState({ i: 0, n: PROMPTS[0].length });
+  useEffect(() => {
+    if (reducedMotion || !boot.done || value || focused) return;
+    let timer = 0;
+    let i = prompt.i;
+    let n = prompt.n;
+    const step = () => {
+      if (n < PROMPTS[i].length) {
+        n += 1;
+        setPrompt({ i, n });
+        timer = window.setTimeout(step, PROMPT_TYPE_MS);
+      } else {
+        timer = window.setTimeout(() => {
+          i = (i + 1) % PROMPTS.length;
+          n = 0;
+          setPrompt({ i, n });
+          timer = window.setTimeout(step, PROMPT_TYPE_MS * 4);
+        }, PROMPT_HOLD_MS);
+      }
+    };
+    timer = window.setTimeout(step, n < PROMPTS[i].length ? PROMPT_TYPE_MS : PROMPT_HOLD_MS);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boot.done, value, focused]);
   const board = useRef<HTMLDivElement>(null);
   const mirror = useRef<HTMLSpanElement>(null);
   const inner = useRef<HTMLSpanElement>(null);
@@ -245,6 +278,7 @@ function Search({ boot }: { boot: Boot }) {
     setValue(v);
   };
   const onFocus = () => {
+    setFocused(true);
     const b = board.current?.getBoundingClientRect();
     const body = petBody();
     if (b) {
@@ -258,13 +292,27 @@ function Search({ boot }: { boot: Boot }) {
     }
     send("burrow:play", { state: "listening" });
   };
-  const onBlur = () => send("burrow:play", { state: "idle" });
+  const onBlur = () => {
+    setFocused(false);
+    send("burrow:play", { state: "idle" });
+  };
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const q = value.trim();
-    if (!q) return;
+    if (!q) {
+      // Nothing to ask yet: the plank shakes its head.
+      setNudge("");
+      window.requestAnimationFrame(() => setNudge("shake"));
+      input.current?.focus();
+      return;
+    }
+    if (plucked) return;
     const url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
-    send("burrow:leave", { url, line: "Let's go find out!", arriveLine: "Here's what I found." });
+    // The carrot is plucked and the plank stamps, then he dives with the question.
+    setPlucked(true);
+    setNudge("stamp");
+    blip(9);
+    window.setTimeout(() => send("burrow:leave", { url, line: "Let's go find out!", arriveLine: "Here's what I found." }), reducedMotion ? 0 : 260);
   };
 
   const head = value.slice(0, -1);
@@ -272,7 +320,7 @@ function Search({ boot }: { boot: Boot }) {
   const drop = boot.mode === "full" && !boot.done ? dropClass(boot.elapsed, 1780) : "";
   return (
     <form className={`search ${drop}`} role="search" data-pops={pops} onSubmit={onSubmit}>
-      <div className="board" ref={board}>
+      <div className={`board${nudge ? ` ${nudge}` : ""}`} ref={board} onAnimationEnd={() => setNudge("")}>
         <span className={`mirror${tail ? " tail" : ""}`} ref={mirror} aria-hidden="true">
           <span className="inner" ref={inner}>
             {value ? (
@@ -283,11 +331,13 @@ function Search({ boot }: { boot: Boot }) {
                 </b>
               </>
             ) : (
-              <span className="ph">Ask the meadow</span>
+              <span className="ph">{focused || reducedMotion ? "Ask the meadow" : PROMPTS[prompt.i].slice(0, prompt.n)}</span>
             )}
             <i className="caret" />
           </span>
         </span>
+        <span className={`dirt${plucked ? " puff" : ""}`} aria-hidden="true" />
+        <button type="submit" className={`carrot${value.trim() ? " ready" : ""}${plucked ? " plucked" : ""}`} aria-label="Ask" title="Ask" tabIndex={-1} />
         <input
           ref={input}
           name="q"
