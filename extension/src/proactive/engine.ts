@@ -165,12 +165,13 @@ export class ProactiveEngine {
     if (now - n.at > 10 * 60_000 || location.pathname !== n.pathname) return;
     // Engaged nudge → the hint did it (rung 1). Shown-but-not-engaged or declined → they did it themselves.
     const method = n.outcome === "accepted" ? "hint" : "self";
-    const resolved = this.deps.session.graph.resolveMisconception(n.m.concept, n.m.belief, now, {
-      method,
-      rung: method === "hint" ? 1 : undefined,
-      note: n.question,
-    });
-    if (resolved) logger.info("misconception resolved", { concept: n.m.concept, method, occurrences: resolved.occurrences });
+    const resolution = { method, rung: method === "hint" ? 1 : undefined, note: n.question } as const;
+    const resolved = this.deps.session.graph.resolveMisconception(n.m.concept, n.m.belief, now, resolution);
+    if (resolved) {
+      logger.info("misconception resolved", { concept: n.m.concept, method, occurrences: resolved.occurrences });
+      // Mirror to the background's canonical persisted graph — this is what future sessions recall.
+      void sendToBackground({ type: "graph.event", event: { kind: "resolve", concept: n.m.concept, belief: n.m.belief, at: now, resolution } }, 5000).catch(() => undefined);
+    }
     this.activeNudge = null;
     this.lastNudge = null;
   }

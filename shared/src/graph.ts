@@ -82,6 +82,8 @@ export interface Misconception {
   evidence?: string;
   /** Most recent resolution, if any. */
   resolution?: MisconceptionResolution;
+  /** Every resolution over time, oldest first, capped — provenance over repeated fixes. */
+  resolutionHistory?: MisconceptionResolution[];
 }
 
 export interface ConceptNode {
@@ -122,6 +124,8 @@ const CAP = {
   sourcesPerNode: 12,
   /** Hard ceiling on nodes to bound persisted size; LRU-evicted by lastSeenAt on prune(). */
   nodes: 2000,
+  /** Resolutions kept per misconception (provenance for the rung bandit). */
+  resolutionsPerMisconception: 5,
 } as const;
 
 // --- Snapshot validation, hand-written to match validate.ts house style (no zod dependency).
@@ -170,6 +174,10 @@ function parseMisconception(v: unknown): Misconception | null {
   if (typeof v.evidence === "string") m.evidence = v.evidence;
   const resolution = parseResolution(v.resolution);
   if (resolution) m.resolution = resolution;
+  if (Array.isArray(v.resolutionHistory)) {
+    const history = v.resolutionHistory.map(parseResolution).filter((r): r is MisconceptionResolution => r !== null);
+    if (history.length) m.resolutionHistory = history;
+  }
   m.status = deriveStatus(m); // derive, never trust the stored status
   return m;
 }
@@ -376,6 +384,7 @@ export class KnowledgeGraph {
     if (!m) return null;
     m.lastSeenAt = now;
     m.resolution = { at: now, method: resolution.method, rung: resolution.rung, note: resolution.note.trim() };
+    m.resolutionHistory = [...(m.resolutionHistory ?? []), m.resolution].slice(-CAP.resolutionsPerMisconception);
     m.status = deriveStatus(m);
     node.state.lastSeenAt = now;
     node.state.mastery = clamp01(node.state.mastery + (1 - node.state.mastery) * MASTERY.successGain);
@@ -532,6 +541,10 @@ export class KnowledgeGraph {
       mm.lastSeenAt = Math.max(mm.lastSeenAt, om.lastSeenAt);
       if (om.evidence) mm.evidence = om.evidence;
       if (om.resolution && (!mm.resolution || om.resolution.at > mm.resolution.at)) mm.resolution = structuredClone(om.resolution);
+      // Union resolution histories by timestamp so provenance survives a merge.
+      const byAt = new Map<number, MisconceptionResolution>();
+      for (const r of [...(mm.resolutionHistory ?? []), ...(om.resolutionHistory ?? [])]) byAt.set(r.at, structuredClone(r));
+      if (byAt.size) mm.resolutionHistory = [...byAt.values()].sort((a, b) => a.at - b.at).slice(-CAP.resolutionsPerMisconception);
       mm.status = deriveStatus(mm);
     }
   }

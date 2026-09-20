@@ -1,6 +1,17 @@
 import type { AgentInput, AgentOutput, InterventionInput, InterventionOutput, ConversationTurn, StudentSessionState, ActionRecord, PendingOffer } from "@shared/types";
-import type { ConceptExtraction, ExtractionInput } from "@shared/concepts";
+import type { ApplyContext, ConceptExtraction, ExtractionInput } from "@shared/concepts";
+import type { GraphSnapshot, ResolutionMethod } from "@shared/graph";
 import type { Settings } from "./settings";
+
+/**
+ * A graph mutation forwarded from a tab to the background, which owns the canonical persisted
+ * learner graph. Tabs keep a hydrated in-RAM copy for sync reads; the background replays these
+ * events through the same shared functions, so one writer persists and tabs can't clobber
+ * each other.
+ */
+export type GraphEvent =
+  | { kind: "extraction"; extraction: ConceptExtraction; ctx: ApplyContext; at: number }
+  | { kind: "resolve"; concept: string; belief: string; at: number; resolution: { method: ResolutionMethod; rung?: number; note: string } };
 
 export interface VoiceState {
   mode: "off" | "starting" | "listening" | "error";
@@ -68,6 +79,9 @@ export type BgRequest =
   | { type: "open.demo" }
   | { type: "offscreen.event"; event: OffscreenEvent }
   | { type: "extract"; input: ExtractionInput }
+  | { type: "graph.get" }
+  | { type: "graph.event"; event: GraphEvent }
+  | { type: "graph.clear" }
   | { type: "ping" };
 
 export interface ServerHealth {
@@ -98,6 +112,9 @@ export type BgResponseMap = {
   "open.demo": { ok: boolean };
   "offscreen.event": { ok: boolean };
   extract: ConceptExtraction;
+  "graph.get": GraphSnapshot | null;
+  "graph.event": { ok: boolean };
+  "graph.clear": { ok: boolean };
   ping: { ok: boolean; at: number };
 };
 

@@ -1,4 +1,6 @@
 import type { AgentInput, InterventionInput, PageSummary } from "@shared/types";
+import { detectProblem } from "@shared/hints";
+import { rungConstraint, rungForStudent } from "@shared/ladder";
 
 export const SYSTEM_PROMPT = `You are Pip, a browser-based learning companion for students. You live as a small character in the corner of the student's browser. You can see a compact model of the student's current webpage and act on it with a constrained set of browser actions.
 
@@ -123,6 +125,11 @@ export function formatDecisionContext(input: AgentInput): string {
   lines.push(`STRUGGLE SIGNALS: ${input.signals.summary.length ? input.signals.summary.join("; ") : "none"}`);
   const s = input.student;
   lines.push(`STUDENT STATE: hints given on this problem: ${s.hintsForCurrentProblem} (total ${s.hintsGiven}); help preference: ${s.helpPreference}; declined proactive help ${s.declinedProactiveCount}×; concept: ${s.currentConcept ?? "unknown"}${s.recentErrors.length ? `; recent errors: ${s.recentErrors.slice(-3).map((e) => `"${e}"`).join(", ")}` : ""}`);
+  // A teaching context gets the hint ladder as a hard constraint at the student's current rung.
+  if (input.page.hasQuizUi || input.pendingOffer || detectProblem(input.page).kind !== "generic") {
+    lines.push("");
+    lines.push(rungConstraint(rungForStudent(s, input.signals)));
+  }
   lines.push("");
   lines.push(formatPage(input.page));
   if (input.screenshot) lines.push("\n(A screenshot of the current viewport is attached.)");
