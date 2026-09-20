@@ -4,6 +4,7 @@ import type { GraphSnapshot, Misconception } from "@shared/graph";
 import { mountCompanion } from "../content/mount";
 import { getSettings } from "../shared/settings";
 import { GRANTS_KEY, GRAPH_KEY, JUMP_KEY, SKILLS, ago, isGraph, isJump, sampleGraph, type Grants, type Jump, type SkillId } from "./data";
+import { Graph } from "./Graph";
 
 /** Below this the rabbit has forgotten the room (MASTERY.unseenThreshold in shared/src/graph.ts). */
 const FORGOTTEN = 0.3;
@@ -53,6 +54,14 @@ function Parent() {
   const [jump, setJump] = useState<Jump | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+  /** The room card a click on the map just pointed at; it flashes gold for a moment. */
+  const [flash, setFlash] = useState<{ id: string; at: number } | null>(null);
+
+  useEffect(() => {
+    if (!flash) return;
+    const t = setTimeout(() => setFlash(null), 1500);
+    return () => clearTimeout(t);
+  }, [flash]);
 
   useEffect(() => {
     void getSettings().then((s) => setKid(kidNameFrom(s as unknown as Record<string, unknown>)));
@@ -110,6 +119,13 @@ function Parent() {
     void writeGrant(skill, granted);
   };
 
+  const jumpToRoom = (id: string) => {
+    const el = document.getElementById(`room-${id}`);
+    if (!el) return;
+    el.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    setFlash({ id, at: Date.now() });
+  };
+
   if (!graph) return null;
 
   const rooms = [...graph.nodes].sort((a, b) => b.state.mastery - a.state.mastery || b.state.lastSeenAt - a.state.lastSeenAt);
@@ -135,6 +151,14 @@ function Parent() {
         </p>
       </header>
 
+      <section aria-labelledby="map-h">
+        <h2 id="map-h">Map of the burrow</h2>
+        <p className="lede plain">
+          One room for each thing he learned, bigger the more it came up. Brown tunnels run from what he needed first to what came next. Teal ones join rooms that go together. Drag a room to move it, rest on one for the details, click one to find its card.
+        </p>
+        <Graph graph={graph} onPick={jumpToRoom} />
+      </section>
+
       <section aria-labelledby="rooms-h">
         <h2 id="rooms-h">What {kid} taught the rabbit</h2>
         <p className="lede plain">Strongest first. He forgets on a schedule, so a faded room is one {kid} will teach him again.</p>
@@ -143,7 +167,7 @@ function Parent() {
             const faded = n.state.mastery < FORGOTTEN;
             const pct = Math.round(n.state.mastery * 100);
             return (
-              <article key={n.id} className={`room px-frame${faded ? " faded" : ""}`}>
+              <article key={n.id} id={`room-${n.id}`} className={`room px-frame${faded ? " faded" : ""}${flash?.id === n.id ? " flash" : ""}`}>
                 <div className="room-top">
                   <span className="door" aria-hidden="true" />
                   <h3>{n.label}</h3>
