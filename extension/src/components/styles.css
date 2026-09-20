@@ -103,21 +103,23 @@
 }
 .pip-mini-dot { width: 9px; height: 9px; background: var(--ink); }
 
-/* ---------- Hold to talk: a cream pill at the rabbit's side that says what it is ---------- */
+/* ---------- Push to talk: a small cream button at the rabbit's side; teal and pulsing while he listens ---------- */
 .pip-talk {
-  position: absolute; right: 100%; bottom: 51px; margin-right: 9px; height: 69px; padding: 0 12px 0 9px;
-  pointer-events: auto; display: flex; align-items: center; gap: 9px; touch-action: none;
-  -webkit-user-select: none; user-select: none; overflow: hidden; white-space: nowrap;
+  position: absolute; right: 100%; bottom: 27px; margin-right: 9px; width: 51px; height: 51px;
+  pointer-events: auto; padding: 0; display: grid; place-items: center; overflow: hidden;
+  -webkit-user-select: none; user-select: none; color: var(--ink);
   border-image-source: var(--ui-btn-quiet);
 }
 .pip-talk.right { right: auto; left: 100%; margin-right: 0; margin-left: 9px; }
-.pip-talk.on { border-image-source: var(--ui-btn-primary); color: var(--paper); }
+.pip-talk svg { position: relative; display: block; }
+.pip-talk:hover { transform: translateY(-3px); }
 .pip-talk.starting { opacity: 0.7; }
-/* The loudness meter rises behind the ear and the words, as a tint so they stay readable. */
-.pip-talk-meter { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: var(--teal); opacity: 0.35; }
-.pip-talk-ear { position: relative; flex-shrink: 0; width: 24px; height: 45px; background: var(--ui-ear) no-repeat; background-size: 24px 45px; image-rendering: pixelated; }
-.pip-talk-label { position: relative; font-size: 17px; line-height: 21px; color: inherit; }
-.pip-talk.on .pip-talk-meter { opacity: 0.45; }
+.pip-talk.on { border-image-source: var(--ui-btn-primary); color: var(--paper); animation: pip-talk-pulse 1s steps(2) infinite; }
+.pip-talk.on:hover { transform: none; }
+/* The loudness meter rises behind the glyph as a tint. */
+.pip-talk-meter { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: var(--gold); opacity: 0.5; }
+@keyframes pip-talk-pulse { 0%, 100% { box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.2); } 50% { box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.2), 0 0 0 3px var(--gold); } }
+.pip-root.reduced .pip-talk.on { animation: none; box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.2), 0 0 0 3px var(--gold); }
 
 /* ---------- Pet (sprite player; the art comes from public/characters) ---------- */
 /* The footprint is as wide as the body box and as tall as the cell. The canvas overflows it on both
