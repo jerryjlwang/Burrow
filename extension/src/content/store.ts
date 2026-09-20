@@ -83,7 +83,6 @@ export interface UIState {
   pointer: { from: { x: number; y: number }; to: { x: number; y: number } } | null;
   busy: boolean;
   status: string;
-  offline: boolean;
   page: PageSummary | null;
   signals: StruggleSignals;
   debug: DebugInfo;
@@ -111,7 +110,6 @@ export const initialState: UIState = {
   pointer: null,
   busy: false,
   status: "",
-  offline: false,
   page: null,
   signals: emptySignals(),
   debug: { lastDecision: null, lastResult: null, provider: null, degraded: false, goal: null, lastTranscript: null, loopStep: 0, latencyMs: null, proactiveLevel: 0 },

@@ -78,6 +78,8 @@ export function validateDecision(raw: unknown): DecisionValidation {
       d.quote = null;
       d.line = null;
     } else {
+      // observe reads whole regions; only quote/elementId target it — a stray line is noise, not an error.
+      if (d.action === "observe") d.line = null;
       if (d.quote !== null) d.quote = d.quote.trim().slice(0, 200) || null;
       if (d.line !== null && d.line < 1) return { ok: false, error: "line must be >= 1" };
       if (d.line !== null && d.elementId === null) return { ok: false, error: "line anchoring requires an elementId" };

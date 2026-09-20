@@ -59,4 +59,10 @@ describe("observe region targets", () => {
     const click = validateDecision({ action: "click", elementId: 1, quote: "stray", reason: "r" });
     expect(click.ok && click.decision.quote).toBeNull();
   });
+
+  it("quashes a stray line on observe instead of rejecting the decision", () => {
+    const v = validateDecision({ action: "observe", quote: "the description", line: 2, reason: "r" });
+    expect(v.ok && v.decision.line).toBeNull();
+    expect(v.ok && v.decision.quote).toBe("the description");
+  });
 });

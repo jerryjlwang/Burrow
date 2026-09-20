@@ -168,7 +168,7 @@ export class AgentLoop {
         // This page lived long enough to get a decision: the handoff is consumed.
         if (opts.resume && step === opts.resume.step) await session.setPendingLoop(null);
         const decision = output.decision;
-        store.setState({ debug: { ...store.getState().debug, lastDecision: decision, provider: output.provider, degraded: output.degraded, latencyMs: output.latencyMs }, offline: output.provider === "local-mock" });
+        store.setState({ debug: { ...store.getState().debug, lastDecision: decision, provider: output.provider, degraded: output.degraded, latencyMs: output.latencyMs } });
         logger.info("decision", { step, action: decision.action, elementId: decision.elementId, say: decision.say, provider: output.provider, latencyMs: output.latencyMs });
 
         const element = decision.elementId != null ? page.elements.find((e) => e.id === decision.elementId) ?? null : null;

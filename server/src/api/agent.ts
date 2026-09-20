@@ -71,7 +71,7 @@ export class AgentService {
       ? v.decision
       : { action: "speak" as const, say: "I'm having trouble thinking right now. Try me again in a moment.", elementId: null, text: null, url: null, direction: null, amount: null, value: null, quote: null, line: null, tabId: null, pendingAction: null, taskType: "chat" as const, reason: "fallback", done: true };
     logger.info("decide", { provider: "mock", action: decision.action, elementId: decision.elementId, ms: Date.now() - started, utterance: input.utterance.slice(0, 80) });
-    return { decision, provider: this.primary === this.fallback ? "mock" : "mock-fallback", degraded: this.primary !== this.fallback, latencyMs: Date.now() - started, taskType: decision.taskType };
+    return { decision, provider: "mock", degraded: false, latencyMs: Date.now() - started, taskType: decision.taskType };
   }
 
   /**
@@ -138,6 +138,6 @@ export class AgentService {
     const v = validateIntervention(raw);
     const decision = v.ok ? v.decision : { intervene: false, confidence: 0, type: "none" as const, message: null, elementId: null, reason: "invalid" };
     logger.info("intervene", { provider: "mock", intervene: decision.intervene, type: decision.type });
-    return { decision, provider: this.primary === this.fallback ? "mock" : "mock-fallback", degraded: this.primary !== this.fallback };
+    return { decision, provider: "mock", degraded: false };
   }
 }
