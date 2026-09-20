@@ -161,7 +161,7 @@ function Search() {
             <i className="caret" />
           </span>
         </span>
-        <input ref={input} name="q" value={value} onChange={onChange} onKeyDown={armBlip} onFocus={onFocus} onBlur={onBlur} placeholder="Ask the meadow" aria-label="Ask the meadow" autoComplete="off" spellCheck={false} />
+        <input ref={input} name="q" value={value} onChange={onChange} onKeyDown={armBlip} onFocus={onFocus} onBlur={onBlur} placeholder="Ask the meadow" aria-label="Search box" autoComplete="off" spellCheck={false} />
       </div>
       <div className="legs">
         <span className="leg" />
