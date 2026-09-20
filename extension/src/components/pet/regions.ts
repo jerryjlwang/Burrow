@@ -27,6 +27,11 @@ export const LINE_LUMA = 100;
 /** At most this many regions get numbers; the rest are specks that keep their paper colour. */
 export const MAX_REGIONS = 40;
 const MIN_SIZE = 6;
+/**
+ * A pixel joins a region only while it is within this colour distance of the region's mean, so a
+ * cheek with no outline stays its own region and a soft edge cannot creep from one colour to the next.
+ */
+const SAME_COLOUR = 70;
 
 function luma(d: Uint8ClampedArray, i: number): number {
   return d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
@@ -38,7 +43,7 @@ export function isLine(r: Raster, x: number, y: number, threshold = LINE_LUMA): 
   return r.data[i + 3] > 0 && luma(r.data, i) < threshold;
 }
 
-/** Splits the opaque, non-line pixels into 4-connected regions, biggest first. */
+/** Splits the opaque, non-line pixels into 4-connected regions of one colour, biggest first. */
 export function splitRegions(r: Raster, threshold = LINE_LUMA, maxRegions = MAX_REGIONS): Split {
   const { width: w, height: h, data } = r;
   const labels = new Int32Array(w * h);
@@ -49,11 +54,22 @@ export function splitRegions(r: Raster, threshold = LINE_LUMA, maxRegions = MAX_
     const pixels: number[] = [];
     let sx = 0;
     let sy = 0;
+    const sum = [0, 0, 0];
     const stack = [start];
     labels[start] = id;
+    const near = (i: number) => {
+      const n = pixels.length;
+      const dr = data[i] - sum[0] / n;
+      const dg = data[i + 1] - sum[1] / n;
+      const db = data[i + 2] - sum[2] / n;
+      return dr * dr + dg * dg + db * db < SAME_COLOUR * SAME_COLOUR;
+    };
     while (stack.length) {
       const k = stack.pop()!;
       pixels.push(k);
+      sum[0] += data[k * 4];
+      sum[1] += data[k * 4 + 1];
+      sum[2] += data[k * 4 + 2];
       const x = k % w;
       const y = (k - x) / w;
       sx += x;
@@ -68,7 +84,7 @@ export function splitRegions(r: Raster, threshold = LINE_LUMA, maxRegions = MAX_
         const ny = y + dy;
         if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
         const nk = ny * w + nx;
-        if (labels[nk] !== 0 || data[nk * 4 + 3] === 0 || luma(data, nk * 4) < threshold) continue;
+        if (labels[nk] !== 0 || data[nk * 4 + 3] === 0 || luma(data, nk * 4) < threshold || !near(nk * 4)) continue;
         labels[nk] = id;
         stack.push(nk);
       }

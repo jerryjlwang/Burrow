@@ -26,6 +26,8 @@ export interface PaintOutput {
   /** Region id to "#rrggbb". */
   colors: Record<string, string>;
   provider: "openai" | "mock";
+  /** Why the stand-in palette was used, when it was. */
+  reason?: string;
 }
 
 const SYSTEM = `You colour in a kid's drawing so it becomes a small pixel-art character.
@@ -37,12 +39,12 @@ Rules: a colour for every number you can see; bold saturated colours that read a
 
 const MOCK_PALETTE = ["#f2c14e", "#2f8f83", "#d9534f", "#ffffff", "#3b2a23", "#6fb7e8", "#e884b7", "#8fd16a"];
 
-export function paintMock(input: PaintInput): PaintOutput {
+export function paintMock(input: PaintInput, reason = "no model key on the server"): PaintOutput {
   const colors: Record<string, string> = {};
   input.regions.forEach((r, i) => {
     colors[String(r.id)] = MOCK_PALETTE[i % MOCK_PALETTE.length];
   });
-  return { name: input.hint?.trim() || "Mystery friend", colors, provider: "mock" };
+  return { name: input.hint?.trim() || "Mystery friend", colors, provider: "mock", reason };
 }
 
 export function validatePaint(raw: unknown, regions: { id: number }[]): { name: string; colors: Record<string, string> } | null {
@@ -88,16 +90,21 @@ export class CharacterService {
           { role: "user", content: parts },
         ],
         response_format: { type: "json_object" },
-        max_completion_tokens: 800,
+        // A reasoning model spends some of this thinking before the JSON.
+        max_completion_tokens: 6000,
       });
       const text = res.choices[0]?.message?.content ?? "";
       const parsed = validatePaint(JSON.parse(text), input.regions);
-      logger.info("painted", { ms: Date.now() - started, regions: input.regions.length, coloured: parsed ? Object.keys(parsed.colors).length : 0, name: parsed?.name });
-      if (!parsed) return paintMock(input);
+      logger.info("painted", { ms: Date.now() - started, model: this.model, regions: input.regions.length, coloured: parsed ? Object.keys(parsed.colors).length : 0, name: parsed?.name });
+      if (!parsed) {
+        logger.warn("paint reply had no usable colours", { text: text.slice(0, 300) });
+        return paintMock(input, "the model's reply had no usable colours");
+      }
       return { ...parsed, provider: "openai" };
     } catch (e) {
-      logger.warn("paint failed, using mock", { error: e instanceof Error ? e.message : String(e) });
-      return paintMock(input);
+      const error = e instanceof Error ? e.message : String(e);
+      logger.warn("paint failed, using mock", { model: this.model, error });
+      return paintMock(input, `the model call failed (${error.slice(0, 120)})`);
     }
   }
 }

@@ -31,6 +31,8 @@ export const MAX_SPRITE_W = 44;
 export const MAX_SPRITE_H = 44;
 
 export const INK: RGB = [59, 42, 35];
+/** Below this luminance a source pixel counts as drawn ink when shrinking. */
+const INK_LUMA = 90;
 export const CREAM: RGB = [255, 250, 240];
 const HOLE_DARK: RGB = [38, 26, 22];
 const HOLE_EDGE: RGB = [110, 78, 52];
@@ -224,6 +226,9 @@ export function shrink(r: Raster, width: number, height: number): Raster {
       const x1 = Math.max(x0 + 1, Math.floor((x + 1) * sx));
       let n = 0;
       let on = 0;
+      let dark = 0;
+      let darkest = -1;
+      let darkestLuma = 256;
       const votes = new Map<number, number>();
       for (let yy = y0; yy < y1 && yy < r.height; yy++) {
         for (let xx = x0; xx < x1 && xx < r.width; xx++) {
@@ -233,17 +238,28 @@ export function shrink(r: Raster, width: number, height: number): Raster {
           on++;
           const key = (r.data[i] << 16) | (r.data[i + 1] << 8) | r.data[i + 2];
           votes.set(key, (votes.get(key) ?? 0) + 1);
+          const l = r.data[i] * 0.299 + r.data[i + 1] * 0.587 + r.data[i + 2] * 0.114;
+          if (l < INK_LUMA) {
+            dark++;
+            if (l < darkestLuma) {
+              darkestLuma = l;
+              darkest = key;
+            }
+          }
         }
       }
       if (!n || on * 2 < n) continue;
       let best = -1;
       let count = 0;
-      for (const [key, c] of votes) {
-        if (c > count) {
-          count = c;
-          best = key;
+      // A drawn line thinner than a source box would lose a fair vote; ink wins from a quarter.
+      if (dark * 4 >= on && darkest >= 0) best = darkest;
+      else
+        for (const [key, c] of votes) {
+          if (c > count) {
+            count = c;
+            best = key;
+          }
         }
-      }
       set(out, x, y, [(best >> 16) & 255, (best >> 8) & 255, best & 255]);
     }
   }

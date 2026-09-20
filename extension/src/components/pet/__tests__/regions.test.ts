@@ -39,6 +39,17 @@ describe("splitRegions", () => {
   });
 });
 
+describe("splitRegions on a coloured drawing", () => {
+  it("makes a cheek with no outline its own region", () => {
+    const d = drawing();
+    fill(d, 7, 7, 33, 19, [240, 200, 60]);
+    fill(d, 10, 12, 16, 17, [220, 70, 70]);
+    const { labels, regions } = splitRegions(d);
+    expect(regions.length).toBe(3);
+    expect(labels[14 * 40 + 12]).not.toBe(labels[14 * 40 + 25]);
+  });
+});
+
 describe("paintRegions", () => {
   it("fills only the coloured rooms and keeps the lines", () => {
     const d = drawing();

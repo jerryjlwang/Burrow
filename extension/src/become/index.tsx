@@ -116,6 +116,7 @@ interface PaintResult {
   name: string;
   colors: Record<string, string>;
   provider: string;
+  reason?: string;
 }
 
 function Maker() {
@@ -184,8 +185,8 @@ function Maker() {
 
   // Show the photo and the sprite.
   useEffect(() => {
-    if (photo && photoCanvas.current) canvasFromRaster(photo, photoCanvas.current);
-  }, [photo]);
+    if (original && photoCanvas.current) canvasFromRaster(original, photoCanvas.current);
+  }, [original]);
   useEffect(() => {
     const c = spriteCanvas.current;
     if (!c || !made) return;
@@ -259,10 +260,12 @@ function Maker() {
       });
       if (!res.ok) throw new Error(`The server said ${res.status}`);
       const out = (await res.json()) as PaintResult;
+      // For the check scripts and for anyone curious in devtools.
+      (window as unknown as { __lastPaint?: unknown }).__lastPaint = { regions, colors: out.colors, name: out.name, provider: out.provider };
       setPhoto(paintRegions(original, labels, out.colors));
       if (!name.trim() && out.name) setName(out.name);
       setPainting("done");
-      setPaintNote(out.provider === "mock" ? "Coloured with the server's stand-in palette (no model key)." : `Coloured as ${out.name}.`);
+      setPaintNote(out.provider === "mock" ? `Stand-in colours: ${out.reason ?? "no model on the server"}.` : `Coloured as ${out.name}.`);
     } catch (e) {
       setPainting("failed");
       setPaintNote(`Could not colour it: ${(e as Error).message}. Is the server running?`);
