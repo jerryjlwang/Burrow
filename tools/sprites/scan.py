@@ -566,9 +566,9 @@ def main():
     ap.add_argument("--name", default="")
     ap.add_argument("--out", default="")
     ap.add_argument("--no-model", action="store_true")
-    ap.add_argument("--no-mirror", action="store_true")
+    ap.add_argument("--mirror", action="store_true", help="snap the drawing to left right symmetry")
     ap.add_argument("--line-art", action="store_true", help="pen only: fill what the strokes enclose")
-    ap.add_argument("--keep-face", action="store_true", help="leave the eyes exactly as drawn, with no shine")
+    ap.add_argument("--face", action="store_true", help="redraw the face from the model's coordinates instead of keeping the drawn one")
     ap.add_argument("--body", default="", help="hex for the filled body when the drawing has no colour")
     args = ap.parse_args()
 
@@ -592,12 +592,17 @@ def main():
     art_is_lines = bool(facts.get("line_art")) or args.line_art
     art = rasterise(im, mask, pal, line_art=art_is_lines)
     art = clean(art)
-    mirrored = bool(facts.get("symmetric")) and not args.no_mirror
+    # Mirroring is a rewrite too: it copies one half of the drawing over the other and the nose,
+    # the mouth and anything else the hand put slightly off centre go with it. Off unless asked for.
+    mirrored = args.mirror
     if mirrored:
         # The body is made symmetric before the face goes on, never after: mirroring a placed face
         # copies one eye over the other and the whole point of asking where they were is lost.
         art = mirror(art)
-    if not args.keep_face:
+    if args.face:
+        # Off by default. The drawn face is the point: it is the thing the judge watched being made,
+        # and a tidier one placed from the model's coordinates is a different drawing, not the same
+        # one improved. The flag is kept because a rushed sketch sometimes loses its eyes entirely.
         strokes = mask if art_is_lines else ink_lines(im, mask)
         art = place_face(art, pool_max(interior(strokes), art.width, art.height), facts, mirrored)
     art = outline(art)

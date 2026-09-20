@@ -101,5 +101,11 @@ The vision model has already read the drawing, so it is asked where the face is:
 levelled with each other and, on a body that was mirrored, centred on it. Order matters: the body is
 made symmetric *before* the face goes on, because mirroring afterwards copies one eye over the other.
 
-Still open: the cheek patches do not paint. The coordinates come back and the accent colour is in
-the palette, so the placement test is what rejects them.
+Both of those are off by default now, and so is mirroring. The drawing is the point: it is the thing
+the judge watched being made, and a tidier face placed from coordinates, or a half copied over the
+other half, is a different drawing rather than the same one improved. Mirroring was the worse of the
+two, because it took the nose and the mouth with it and left a blank face. `--face` and `--mirror`
+turn them back on for a rushed sketch that lost its eyes, or a shape that really is symmetric.
+
+Still open: the cheek patches do not paint when `--face` is used. The coordinates come back and the
+accent colour is in the palette, so the placement test is what rejects them.
