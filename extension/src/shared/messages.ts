@@ -131,9 +131,11 @@ export type BgRequest =
    * viewport, so the watcher does not read it as ink. `quietMs` asks it to ignore changes for a
    * while too: the rabbit is about to hop, draw or write, and the mask cannot keep up frame by frame.
    */
-  | { type: "tablet.mask"; rects: InkBox[]; quietMs?: number }
+  | { type: "tablet.mask"; rects: InkBox[]; quietMs?: number; viewport?: { w: number; h: number; dpr: number } }
   /** What the watcher knows right now, for the rabbit's own conversation on the board. */
   | { type: "tablet.context" }
+  /** Find a part of the handwriting ("the 25 on line 2") so the rabbit can circle it on request. */
+  | { type: "tablet.locate"; part: string }
   | { type: "ping" };
 
 export interface ServerHealth {
@@ -180,6 +182,7 @@ export type BgResponseMap = {
   "tablet.status": TabletState;
   "tablet.mask": { ok: boolean };
   "tablet.context": TabletContext | null;
+  "tablet.locate": { mark: InkBox | null; box: InkBox | null; error?: string };
   ping: { ok: boolean; at: number };
 };
 

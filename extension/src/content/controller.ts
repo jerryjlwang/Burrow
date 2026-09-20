@@ -6,6 +6,7 @@ import { parsePlan, topicPlanKey } from "@shared/plan";
 import { describeSketch, eraseFromSketch, parseSketch } from "@shared/sketch";
 import { validateInkJudgement } from "@shared/ink";
 import { pageRole } from "../components/handoff";
+import { markInkAt } from "../components/InkCoach";
 import { isVideoQuestion, pickRelated, videoQuery } from "@shared/related";
 import { planStepSuggestion } from "@shared/path";
 import type { PlanRoute } from "./store";
@@ -111,6 +112,18 @@ export class CompanionController {
             return await sendToBackground({ type: "input", ops }, 8000);
           } catch (e) {
             return { ok: false, error: String(e) };
+          }
+        },
+        // "Point out where I went wrong" on the drawing board: the watcher finds the part, the coach hops and rings it.
+        markInk: async (target) => {
+          if (pageRole() !== "board") return { ok: false, error: "not on the drawing board" };
+          try {
+            const r = await sendToBackground({ type: "tablet.locate", part: target }, 20_000);
+            if (!r?.mark) return { ok: false, error: r?.error ?? "not found in the handwriting" };
+            await markInkAt(r.mark, r.box);
+            return { ok: true };
+          } catch (e) {
+            return { ok: false, error: String(e).slice(0, 120) };
           }
         },
         sketch: (spec, opts) => {

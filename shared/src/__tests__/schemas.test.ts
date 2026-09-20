@@ -12,10 +12,14 @@ describe("validateDecision", () => {
     }
   });
   it("rejects element actions without an element id", () => {
-    for (const action of ["click", "double_click", "right_click", "hover", "point_to", "highlight", "focus", "select", "scroll_to", "clear"]) {
+    for (const action of ["click", "double_click", "right_click", "hover", "highlight", "focus", "select", "scroll_to", "clear"]) {
       const r = validateDecision({ action, reason: "x", text: "hello", value: "v" });
       expect(r.ok, action).toBe(false);
     }
+    // point_to may name a described part in text (the handwriting on the drawing tablet has no elements); with nothing at all it is still rejected.
+    expect(validateDecision({ action: "point_to", reason: "x" }).ok).toBe(false);
+    expect(validateDecision({ action: "point_to", reason: "x", text: "   " }).ok).toBe(false);
+    expect(validateDecision({ action: "point_to", reason: "x", text: "the 25 on line 2" }).ok).toBe(true);
   });
   it("lets pointer actions aim at a viewport point instead of an element", () => {
     for (const action of ["click", "double_click", "right_click", "hover"]) {

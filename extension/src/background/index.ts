@@ -3,7 +3,7 @@ import { getSettings, setSettings, DEFAULT_SETTINGS } from "../shared/settings";
 import { emptyStudentState } from "@shared/types";
 import type { GraphSnapshot } from "@shared/graph";
 import { GraphHost } from "./graph-host";
-import { initTablet, openTablet, setTabletMask, stopTablet, tabletContext, tabletStatus } from "./tablet";
+import { initTablet, locateInk, openTablet, setTabletMask, stopTablet, tabletContext, tabletStatus } from "./tablet";
 import type { InkJudgeInput, InkJudgeOutput } from "@shared/ink";
 import { fitToViewport, runInput } from "./trusted-input";
 import { log } from "../shared/logger";
@@ -372,9 +372,11 @@ async function handle(msg: BgRequest, sender: chrome.runtime.MessageSender): Pro
     case "tablet.status":
       return tabletStatus();
     case "tablet.mask":
-      return { ok: setTabletMask(sender.tab?.id ?? null, msg.rects, msg.quietMs) };
+      return { ok: setTabletMask(sender.tab?.id ?? null, msg.rects, msg.quietMs, msg.viewport) };
     case "tablet.context":
       return tabletContext();
+    case "tablet.locate":
+      return locateInk(msg.part);
     case "input":
       if (tabId == null) return { ok: false, error: "no tab" };
       if (!settings.trustedInput) return { ok: false, error: "real input is switched off" };

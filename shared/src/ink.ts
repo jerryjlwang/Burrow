@@ -26,6 +26,8 @@ export interface InkJudgeInput {
   rung: number;
   /** The line last judged wrong, as read, so the rung only applies while that same line is still wrong. */
   lastWrongLine: string | null;
+  /** Not a check: find this part of the ink ("the 25 on line 2", "line 1") and return its box as `mark`. */
+  locate?: string | null;
 }
 
 export type InkStatus = "ok" | "off" | "unclear";
@@ -120,7 +122,7 @@ export function parseInkBox(raw: unknown): InkBox | null {
   return w >= MIN_BOX && h >= MIN_BOX ? { x: r4(x1), y: r4(y1), w: r4(w), h: r4(h) } : null;
 }
 
-export function validateInkJudgement(raw: unknown): { ok: true; judgement: InkJudgement } | { ok: false; error: string } {
+export function validateInkJudgement(raw: unknown, opts: { keepMark?: boolean } = {}): { ok: true; judgement: InkJudgement } | { ok: false; error: string } {
   if (!isObj(raw)) return { ok: false, error: "judgement is not an object" };
   const status = typeof raw.status === "string" ? raw.status.trim().toLowerCase() : "";
   if (!STATUS.has(status)) return { ok: false, error: "invalid status" };
@@ -145,7 +147,8 @@ export function validateInkJudgement(raw: unknown): { ok: true; judgement: InkJu
     : [];
   if (status === "off" && !nudge) return { ok: false, error: "off requires a nudge" };
   const off = status === "off";
-  const box = off ? parseInkBox(raw.box) : null;
+  // Boxes belong to a wrong line, except when the caller asked where something is (locate).
+  const box = off || opts.keepMark ? parseInkBox(raw.box) : null;
   return {
     ok: true,
     judgement: {
@@ -154,7 +157,7 @@ export function validateInkJudgement(raw: unknown): { ok: true; judgement: InkJu
       line: off ? line : null,
       box,
       // A mark without its line is still a place to circle; a line without a mark is circled whole.
-      mark: off ? (parseInkBox(raw.mark) ?? box) : null,
+      mark: off || opts.keepMark ? (parseInkBox(raw.mark) ?? box) : null,
       issue: off ? issue : "",
       nudge: off || note.length ? nudge : "",
       confidence,
@@ -204,6 +207,7 @@ const MOCK_NOTE = ["A similar one:", "y + 2 = 9", "take 2 from both sides", "y =
  */
 export function judgeInkMock(input: InkJudgeInput): InkJudgement {
   const blank = { box: null, mark: null, note: [] as string[], space: MOCK_SPACE };
+  if (input.locate) return { lines: ["3x + 5 = 20", "3x = 25"], status: "ok", line: null, box: MOCK_BOX, mark: MOCK_MARK, issue: "", nudge: "", confidence: 0.9, solved: false, note: [], space: MOCK_SPACE };
   if (input.reason === "stall") {
     return {
       lines: ["3x + 5 = 20", "3x = 25"],

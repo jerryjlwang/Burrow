@@ -95,8 +95,10 @@ export function validateDecision(raw: unknown): DecisionValidation {
       if (d.line !== null && d.elementId === null) return { ok: false, error: "line anchoring requires an elementId" };
     }
     // point_to/highlight may target a quote instead of an element; everything else needs the element.
+    // point_to may also name a described part in text ("the 25 on line 2"): on the drawing tablet the handwriting has no elements.
     const elementSatisfied = d.elementId !== null && d.elementId >= 0;
-    if (ELEMENT_ACTIONS.has(d.action) && !elementSatisfied && !(ANCHOR_ACTIONS.has(d.action) && (d.quote || d.x !== null))) {
+    const described = d.action === "point_to" && typeof d.text === "string" && d.text.trim().length > 0;
+    if (ELEMENT_ACTIONS.has(d.action) && !elementSatisfied && !(ANCHOR_ACTIONS.has(d.action) && (d.quote || d.x !== null)) && !described) {
       return { ok: false, error: `${d.action} requires a valid elementId` };
     }
     if (ELEMENT_ACTIONS.has(d.action) && d.elementId !== null && d.elementId < 0) return { ok: false, error: `${d.action} requires a valid elementId` };

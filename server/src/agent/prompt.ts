@@ -201,7 +201,9 @@ export function formatDecisionContext(input: AgentInput): string {
     lines.push(t.lines.length ? `THEIR HANDWRITTEN LINES SO FAR, top to bottom, as last read: ${t.lines.map((l, i) => `${i + 1}. "${l}"`).join(" ")}` : "THEY HAVE NOT WRITTEN ANYTHING READABLE YET.");
     if (v?.status === "off" && v.line) lines.push(`PRIVATE DIAGNOSIS: line ${v.line} is wrong: ${v.issue || "a slip in that step"}. Never say this outright, never give the corrected line, the missing number or the final answer, even if asked straight out.`);
     else if (v?.solved) lines.push("Their work reaches a correct final answer.");
-    lines.push("Here you speak only (action speak, done true): no click, type, point, highlight or scroll. Be Socratic: one short question or one small observation per turn, then wait. If they are still stuck after two turns, sketch a similar example with different numbers.");
+    lines.push(
+      'Here you can do three things: speak; sketch a similar example in different numbers; or CIRCLE a part of their handwriting with action point_to, text = what to circle in plain words ("the 25 on line 2", "the plus sign in line 1", "line 3", "the final answer"), elementId null, no x or y. The tablet finds it and rings it while your say line is spoken. Circle when they ask you to point out, show or find something in their work, and at hint rung 2 to name the part to look at. No click, type, highlight or scroll here. Be Socratic: one short question or one small observation per turn, then wait; if they are still stuck after two turns, sketch.',
+    );
   }
   if (input.video) {
     const v = input.video;

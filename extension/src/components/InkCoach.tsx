@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import type { InkBox } from "@shared/ink";
+import type { InkBox, InkJudgement } from "@shared/ink";
 import { parseSketch } from "@shared/sketch";
 import type { Rect } from "@shared/types";
 import { sendToBackground, type InkStageDetail } from "../shared/messages";
@@ -28,7 +28,7 @@ const MARK_PAD = 10;
 const MARK_TTL_MS = 20_000;
 /** Must match pip-inkmark-out in styles.css. */
 const MARK_OUT_MS = 300;
-const RING_DRAW_MS = 550;
+const RING_DRAW_MS = 680;
 const NOTE_RISE_MS = 600;
 /** He does not bother moving for a target this close to where he already stands. */
 const STAY_PX = 40;
@@ -40,7 +40,8 @@ const QUIET_NOTE_MS = 8000;
 
 /** Tells the watcher where the companion's UI is right now, and optionally to look away for a while. */
 function reportMask(quietMs?: number): void {
-  sendToBackground({ type: "tablet.mask", rects: ownUiRects(), ...(quietMs ? { quietMs } : {}) }, 2000).catch(() => undefined);
+  const viewport = { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio || 1 };
+  sendToBackground({ type: "tablet.mask", rects: ownUiRects(), viewport, ...(quietMs ? { quietMs } : {}) }, 2000).catch(() => undefined);
 }
 /** The parts of the companion's UI the watcher must not read as ink. */
 const MASK_SELECTORS = [".pip-dock", ".pip-board", ".pip-inkmark", ".pip-sketch", ".pip-plan"];
@@ -85,10 +86,12 @@ export function ringPath(w: number, h: number, seed = 1): string {
   const cy = h / 2;
   const rx = Math.max(6, w / 2 - 3);
   const ry = Math.max(6, h / 2 - 3);
-  const start = 2.6;
-  const sweep = Math.PI * 2 * 1.12;
+  // Where the pen lands and how far past the turn it runs vary with the seed, so no two rings look stamped.
+  const u = (Math.abs(seed) % 997) / 997;
+  const start = 2.2 + u * 0.9;
+  const sweep = Math.PI * 2 * (1.06 + u * 0.14);
   const n = 56;
-  const phase = ((Math.abs(seed) % 997) / 997) * Math.PI * 2;
+  const phase = u * Math.PI * 2;
   const pts: string[] = [];
   for (let i = 0; i <= n; i++) {
     const t = start + (sweep * i) / n;
@@ -104,6 +107,36 @@ export function ringPath(w: number, h: number, seed = 1): string {
 interface Mark {
   id: number;
   rect: Rect;
+}
+
+/** How long a stage may take before the caller goes on without it (a hole trip is about 2.5 s). */
+const STAGE_TIMEOUT_MS = 4000;
+
+/**
+ * Hands a stage (the hop to the ink, the ring, the note board) to the coach through a cancelable
+ * `burrow:ink` event and resolves once its picture is in place, so the voice lands on it. A page
+ * with no coach (the kid's laptop) resolves at once.
+ */
+export function stageInk(detail: Omit<InkStageDetail, "done">): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer = 0;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      resolve();
+    };
+    timer = window.setTimeout(done, STAGE_TIMEOUT_MS);
+    const claimed = !window.dispatchEvent(new CustomEvent<InkStageDetail>("burrow:ink", { cancelable: true, detail: { ...detail, done } }));
+    if (!claimed) done();
+  });
+}
+
+/** Ring a part of the handwriting on request (the model's point_to on the board): the hop and the ring, no words of the coach's own. */
+export function markInkAt(mark: InkBox, box: InkBox | null): Promise<void> {
+  const judgement: InkJudgement = { lines: [], status: "off", line: null, box: box ?? mark, mark, issue: "", nudge: "", confidence: 1, solved: false, note: [], space: null };
+  return stageInk({ phase: "nudge", judgement, rung: 1 });
 }
 
 export function InkCoach({ pet }: { pet: RefObject<PetController | null> }) {
@@ -206,7 +239,7 @@ export function InkCoach({ pet }: { pet: RefObject<PetController | null> }) {
   const d = ringPath(w, h, mark.id);
   return (
     <div className="pip-inkcoach" aria-hidden="true">
-      <svg key={mark.id} className={`pip-inkmark${reduced ? " reduced" : ""}${leaving ? " leaving" : ""}`} style={{ left: r.x - MARK_PAD, top: r.y - MARK_PAD, width: w, height: h }} viewBox={`0 0 ${w} ${h}`} overflow="visible">
+      <svg key={mark.id} className={`pip-inkmark${reduced ? " reduced" : ""}${leaving ? " leaving" : ""}`} style={{ left: r.x - MARK_PAD, top: r.y - MARK_PAD, width: w, height: h, transform: `rotate(${((Math.abs(mark.id) % 7) - 3) * 1.3}deg)` }} viewBox={`0 0 ${w} ${h}`} overflow="visible">
         <path d={d} pathLength={100} className="pip-inkmark-rim" />
         <path d={d} pathLength={100} className="pip-inkmark-ink" />
       </svg>

@@ -57,6 +57,13 @@ interface Watch {
   prevMask: InkBox[];
   /** Until when frame changes are ignored (the rabbit is hopping, drawing or writing). */
   quietUntil: number;
+  /**
+   * The board page's viewport in CSS px and its pixel ratio, and the captured frame's pixel size.
+   * They agree on a plain window, but not under zoom, a display with another pixel ratio, or a
+   * test's emulated viewport; boxes and masks are converted between the two spaces.
+   */
+  viewport: { w: number; h: number; dpr: number } | null;
+  frame: { w: number; h: number } | null;
   error?: string;
   context: { dataUrl: string | null; title: string; url: string; at: number } | null;
   busy: boolean;
@@ -72,7 +79,7 @@ const CAPTURE_GAP_MS = 520;
 export function initTablet(d: Deps): void {
   deps = d;
   // Test hook: lets an automated run drive the watcher from the service worker context.
-  (globalThis as unknown as { __burrowTablet?: unknown }).__burrowTablet = { open: openTablet, stop: stopTablet, status: tabletStatus };
+  (globalThis as unknown as { __burrowTablet?: unknown }).__burrowTablet = { open: openTablet, stop: stopTablet, status: tabletStatus, locate: locateInk };
   chrome.windows.onRemoved.addListener((windowId) => {
     if (watch && watch.windowId === windowId) void stopTablet(false);
   });
@@ -159,9 +166,31 @@ function freshWatch(windowId: number, boardTabId: number | null, contextTabId: n
     mask: [],
     prevMask: [],
     quietUntil: 0,
+    viewport: null,
+    frame: null,
     context: null,
     busy: false,
   };
+}
+
+/** Page fraction to frame fraction (and back): the page's CSS viewport times its pixel ratio against the frame's pixels. */
+function scales(w: Watch): { x: number; y: number } {
+  if (!w.viewport || !w.frame || w.frame.w <= 0 || w.frame.h <= 0) return { x: 1, y: 1 };
+  return { x: (w.viewport.w * w.viewport.dpr) / w.frame.w, y: (w.viewport.h * w.viewport.dpr) / w.frame.h };
+}
+function pageToFrame(w: Watch, b: InkBox): InkBox {
+  const s = scales(w);
+  return { x: b.x * s.x, y: b.y * s.y, w: b.w * s.x, h: b.h * s.y };
+}
+function frameToPage(w: Watch, b: InkBox | null): InkBox | null {
+  if (!b) return null;
+  const s = scales(w);
+  const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
+  return { x: r4(b.x / s.x), y: r4(b.y / s.y), w: r4(b.w / s.x), h: r4(b.h / s.y) };
+}
+/** A verdict with its boxes in the board page's own fractions, which is what the page draws with. */
+function inPageSpace(w: Watch, j: InkJudgement): InkJudgement {
+  return { ...j, box: frameToPage(w, j.box), mark: frameToPage(w, j.mark), space: frameToPage(w, j.space) };
 }
 
 /** The rabbit's own conversation on the board asks for this each turn: the laptop task as last captured, the ink as read, the verdict. */
@@ -172,6 +201,34 @@ export async function tabletContext(): Promise<TabletContext | null> {
   return { title: c?.title ?? "", url: c?.url ?? "", laptop: c?.dataUrl ?? null, lines: w.previousLines, verdict: w.lastVerdict };
 }
 
+/**
+ * The rabbit was asked to point something out in the handwriting: a fresh frame goes to the judge
+ * in locate mode and the part's box comes back, or nulls when it is not there. Not a check: the
+ * rung, the stall and the previous lines are untouched.
+ */
+export async function locateInk(target: string): Promise<{ mark: InkBox | null; box: InkBox | null; error?: string }> {
+  const w = watch;
+  if (!w || !deps || !target.trim()) return { mark: null, box: null, error: !w ? "not watching" : "empty target" };
+  // Hold the sampling tick: Chrome allows two captures a second, and a third in the same second throws.
+  contextCapturing = true;
+  try {
+    const gap = CAPTURE_GAP_MS - (Date.now() - lastCaptureAt);
+    if (gap > 0) await new Promise((r) => setTimeout(r, gap));
+    lastCaptureAt = Date.now();
+    const frame = await chrome.tabs.captureVisibleTab(w.windowId, { format: "jpeg", quality: 70 });
+    contextCapturing = false;
+    const context = await refreshContext(w);
+    const out = await deps.postJudge({ frame, context: context?.dataUrl ?? null, contextTitle: context?.title ?? "", contextUrl: context?.url ?? "", previousLines: w.previousLines, seq: w.seq, reason: "ink", rung: 1, lastWrongLine: null, locate: target.slice(0, 120) });
+    logger.info("locate", { target, found: !!out.judgement.mark, ms: out.latencyMs });
+    return { mark: frameToPage(w, out.judgement.mark), box: frameToPage(w, out.judgement.box) };
+  } catch (e) {
+    logger.warn("locate failed", { error: String(e) });
+    return { mark: null, box: null, error: String(e).slice(0, 200) };
+  } finally {
+    contextCapturing = false;
+  }
+}
+
 const MAX_MASK_RECTS = 12;
 const MAX_QUIET_MS = 12_000;
 
@@ -180,8 +237,9 @@ const MAX_QUIET_MS = 12_000;
  * hops, draws or writes (changes then go untracked, though the frame keeps being followed so the
  * first diff afterwards is against the latest picture). Only the board tab may, and only while it is watched.
  */
-export function setTabletMask(tabId: number | null, rects: unknown, quietMs?: number): boolean {
+export function setTabletMask(tabId: number | null, rects: unknown, quietMs?: number, viewport?: { w: number; h: number; dpr: number }): boolean {
   if (!watch || tabId == null || tabId !== watch.boardTabId) return false;
+  if (viewport && viewport.w > 0 && viewport.h > 0 && viewport.dpr > 0) watch.viewport = viewport;
   const list = Array.isArray(rects) ? rects.slice(0, MAX_MASK_RECTS).map(parseInkBox).filter((b): b is InkBox => !!b) : [];
   watch.mask = list;
   if (typeof quietMs === "number" && Number.isFinite(quietMs) && quietMs > 0) watch.quietUntil = Math.max(watch.quietUntil, Date.now() + Math.min(MAX_QUIET_MS, quietMs));
@@ -332,6 +390,7 @@ async function tick(): Promise<void> {
     w.frames++;
     const gray = await downsample(dataUrl);
     if (!gray) return;
+    w.frame = gray.full;
     if (!w.trigger || !w.small || w.small.w !== gray.w || w.small.h !== gray.h) {
       w.trigger = new InkTrigger(gray.w * gray.h, DEFAULT_RULES);
       w.small = { w: gray.w, h: gray.h };
@@ -339,7 +398,7 @@ async function tick(): Promise<void> {
       return;
     }
     // The rabbit, his bubble, his board and his rings are on this tab too; wherever they are now or were a frame ago is not the kid's ink.
-    const changed = w.prev ? maskedChangedPixels(w.prev, gray.data, gray.w, gray.h, w.prevMask.concat(w.mask)) : 0;
+    const changed = w.prev ? maskedChangedPixels(w.prev, gray.data, gray.w, gray.h, w.prevMask.concat(w.mask).map((b) => pageToFrame(w, b))) : 0;
     w.prev = gray.data;
     w.prevMask = w.mask;
     const now = Date.now();
@@ -351,10 +410,11 @@ async function tick(): Promise<void> {
   }
 }
 
-async function downsample(dataUrl: string): Promise<{ w: number; h: number; data: Uint8Array } | null> {
+async function downsample(dataUrl: string): Promise<{ w: number; h: number; data: Uint8Array; full: { w: number; h: number } } | null> {
   try {
     const blob = await (await fetch(dataUrl)).blob();
     const bmp = await createImageBitmap(blob);
+    const full = { w: bmp.width, h: bmp.height };
     const w = SMALL_W;
     const h = Math.max(1, Math.round((bmp.height / bmp.width) * w));
     const canvas = new OffscreenCanvas(w, h);
@@ -362,7 +422,7 @@ async function downsample(dataUrl: string): Promise<{ w: number; h: number; data
     if (!ctx) return null;
     ctx.drawImage(bmp, 0, 0, w, h);
     bmp.close();
-    return { w, h, data: toGray(ctx.getImageData(0, 0, w, h).data) };
+    return { w, h, data: toGray(ctx.getImageData(0, 0, w, h).data), full };
   } catch (e) {
     logger.warn("downsample failed", { error: String(e) });
     return null;
@@ -448,7 +508,7 @@ async function judge(w: Watch, frame: string, reason: TriggerReason, now: number
     };
     const out = await deps.postJudge(input);
     if (watch !== w) return;
-    const j = out.judgement;
+    const j = inPageSpace(w, out.judgement);
     w.checks++;
     w.lastCheckAt = Date.now();
     w.lastVerdict = j;

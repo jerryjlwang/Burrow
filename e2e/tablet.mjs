@@ -156,6 +156,12 @@ try {
   await board.waitForSelector("canvas", { timeout: 20000 });
   await board.locator("#pip-companion-host").waitFor({ state: "attached", timeout: 15000 });
   logBubbles(board);
+  // The loop logs every decision and result to the console: kept for the report on a failed step.
+  const decisions = [];
+  board.on("console", (m) => {
+    const t = m.text();
+    if (/\b(decision|result|locate|run)\b/.test(t) && /pip:(agent|tablet|ui)/.test(t)) decisions.push(t.replace(/%c|color:[^ ]+;font-weight:600 /g, "").slice(0, 300));
+  });
 
   // He pops out on the board once the laptop says he is gone (the tunnel, then his ears, about four seconds).
   const out = await until(() => standing(board), 20000);
@@ -283,6 +289,13 @@ try {
     check("he does not mistake the drawing app for the task", !/excalidraw|hand tool|keyboard shortcut|toolbar|canvas/i.test(what), what);
     const where = await ask("Where are you right now?");
     check("he knows he is on the tablet", /tablet|drawing board|whiteboard|your board|beside your (work|writing|ink)/i.test(where), where);
+    // Circling on request: the model asks the tablet to find the part, and the coach rings it.
+    const t2 = Date.now();
+    const circled = await ask("Circle my final answer for me.");
+    const ringOnAsk = await until(() => markBox(board), 20000);
+    check("asked to circle something, he rings it in the handwriting", !!ringOnAsk, ringOnAsk ? `${Math.round((Date.now() - t2) / 1000)} s, ring at ${fmt(ringOnAsk)}; said "${circled}"` : `no ring; said "${circled}"; decisions: ${decisions.slice(-6).join(" || ")}`);
+    // "x = 5" was written at (320, 380): its ring should sit around y 380, not on the earlier lines.
+    check("the requested ring sits on the final answer's line", !!ringOnAsk && Math.abs(ringOnAsk.y + ringOnAsk.height / 2 - 380) < 40, ringOnAsk ? fmt(ringOnAsk) : "none");
     await inHost(board, () => document.getElementById("pip-companion-host")?.shadowRoot?.querySelector(".pip-char-btn")?.click());
     await board.screenshot({ path: resolve(shots, "24-tablet-aware.png") });
   }

@@ -4,6 +4,7 @@ import type { InterventionDecision } from "@shared/actions";
 import type { Misconception } from "@shared/graph";
 import type { InkJudgement } from "@shared/ink";
 import type { InkMeta, InkStageDetail } from "../shared/messages";
+import { stageInk } from "../components/InkCoach";
 import { composeMisconceptionNudge } from "@shared/nudge";
 import { suggestNext, suggestionKey, type PathKind } from "@shared/path";
 import { findAnswerInput } from "@shared/mock-agent";
@@ -27,8 +28,14 @@ const logger = log("proactive");
 const INK_SPEAK_CONFIDENCE = 0.6;
 /** The same tablet issue is not nudged twice inside this window. */
 const INK_COOLDOWN_MS = 25_000;
-/** The board coach gets this long to hop to the ink and draw before the voice starts anyway. */
-const INK_STAGE_TIMEOUT_MS = 4000;
+/** Said the instant a slip is spotted, before he even sets off: the kid should stop and look up. */
+const INK_INTERJECTIONS = ["Hold on.", "Wait, wait.", "Hang on a second.", "Oh, hold on."];
+let lastInterjection = "";
+function interjection(): string {
+  const pool = INK_INTERJECTIONS.filter((s) => s !== lastInterjection);
+  lastInterjection = pool[Math.floor(Math.random() * pool.length)];
+  return lastInterjection;
+}
 
 /**
  * The goal for the conversation that follows a tablet nudge or note: the model stands on the
@@ -573,19 +580,7 @@ export class ProactiveEngine {
    * on the picture. A page with no coach (the kid's laptop page) proceeds at once.
    */
   private stage(detail: Omit<InkStageDetail, "done">): Promise<void> {
-    return new Promise((resolve) => {
-      let settled = false;
-      let timer = 0;
-      const done = () => {
-        if (settled) return;
-        settled = true;
-        window.clearTimeout(timer);
-        resolve();
-      };
-      timer = window.setTimeout(done, INK_STAGE_TIMEOUT_MS);
-      const claimed = !window.dispatchEvent(new CustomEvent<InkStageDetail>("burrow:ink", { cancelable: true, detail: { ...detail, done } }));
-      if (!claimed) done();
-    });
+    return stageInk(detail);
   }
 
   private async handleInk(j: InkJudgement, meta: InkMeta): Promise<void> {
@@ -633,10 +628,11 @@ export class ProactiveEngine {
       this.inkCooldownUntil = now + INK_COOLDOWN_MS;
       this.inkOff = true;
       logger.info("ink nudge", { line: j.line, issue: j.issue, confidence: j.confidence, rung: meta.rung });
-      // The offer slot is his from here, so nothing ambient slips in during the hop. He goes to the
-      // line and circles the part first; the words follow once the circle is drawn.
+      // The offer slot is his from here, so nothing ambient slips in during the hop. He calls out
+      // at once so the pen stops, goes to the line and circles the part, and the nudge follows the ring.
       this.offerActive = true;
       this.activeOffer = { kind: "ink", key };
+      if (s.settings.ttsEnabled) void this.deps.speak(interjection());
       this.inkStaging = true;
       try {
         await this.stage({ phase: "nudge", judgement: j, rung: meta.rung });

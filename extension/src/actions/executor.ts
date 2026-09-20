@@ -16,6 +16,8 @@ const logger = log("action");
 export interface ExecutorDeps {
   registry: ElementRegistry;
   overlay: OverlayController;
+  /** On the drawing tablet: find the described part of the handwriting and ring it. Resolves false when it is not there. */
+  markInk?: (target: string) => Promise<{ ok: boolean; error?: string }>;
   /** Re-extracts the page model right now. */
   rescan: () => PageSummary;
   /** Resolves when the DOM/URL changed or the timeout elapsed. */
@@ -340,6 +342,11 @@ export async function executeAction(decision: AgentDecision, deps: ExecutorDeps)
 
       case "highlight":
       case "point_to": {
+        // On the drawing tablet the handwriting has no elements: a described part ("the 25 on line 2") is found and ringed there.
+        if (deps.markInk && decision.elementId == null && !decision.quote && decision.x == null && decision.text) {
+          const found = await deps.markInk(decision.text);
+          return found.ok ? { ok: true, message: "circled it in their handwriting" } : { ok: false, message: `I couldn't circle "${decision.text.slice(0, 60)}": ${found.error ?? "not found"}`, elementFound: false };
+        }
         // Sub-element anchors: a line of a field's working, or a verbatim quote. Quotes resolve
         // within the target element when given, else anywhere on the page; an unresolvable quote
         // fails honestly instead of pointing at nothing.

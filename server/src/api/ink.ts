@@ -44,7 +44,8 @@ STALL (only when the request says the reason is "stall": the pen has been still 
 - If the work is unfinished, stuck or wrong, fill "note" with a small chalk note that helps them take the next step on their own: an analogous example with different numbers, a question, or a small diagram. Never the corrected line, never their answer.
 - Note lines: plain text lines (at most 4, each under 24 characters), and shape lines on a 100 by 100 board: "line x1 y1 x2 y2", "arrow x1 y1 x2 y2", "circle cx cy r", "rect x y w h", "label x y words". At most 6 shapes. An optional first line ending with ":" is the title.
 - With a note, "nudge" is the one spoken sentence that goes with it, like "Here is a similar one."
-- If a note would not help (the work is solved, or unclear), leave "note" empty.`;
+- If a note would not help (the work is solved, or unclear), leave "note" empty.
+LOCATE (only when the request says LOCATE): this is not a check. Find the part of the ink the request describes ("the 25 on line 2", "the plus sign in line 1", "line 3", "the final answer") and return its box in "mark" (and its whole line in "box"), tight around it. Read the lines as usual, set status "ok", leave issue, nudge and note empty. If it is not there, set mark and box to null.`;
 
 interface GeminiPart {
   text?: string;
@@ -123,7 +124,8 @@ export class InkService {
     const memory = input.previousLines.length ? ` Last time you read these lines, possibly mid-stroke, so re-read every line from the image and trust the image over this list: ${JSON.stringify(input.previousLines.slice(-12))}.` : "";
     const rung = Math.min(MAX_RUNG, Math.max(1, Math.floor(input.rung) || 1));
     const rungNote = input.lastWrongLine ? ` This is nudge ${rung} on the line "${input.lastWrongLine.slice(0, 60)}" if that line is still wrong; a different mistake is nudge 1.` : " This is nudge 1.";
-    parts.push({ text: `The tablet now. Reason for this check: ${input.reason}.${rungNote}${memory}${correction ? ` ${correction}` : ""}` }, frame);
+    const locate = input.locate ? ` LOCATE: "${input.locate.slice(0, 120)}".` : "";
+    parts.push({ text: `The tablet now. Reason for this check: ${input.reason}.${locate}${rungNote}${memory}${correction ? ` ${correction}` : ""}` }, frame);
     const body = {
       systemInstruction: { parts: [{ text: SYSTEM }] },
       contents: [{ role: "user", parts }],
@@ -144,7 +146,7 @@ export class InkService {
     } catch {
       throw new Error(`gemini returned non-JSON: ${text.slice(0, 120)}`);
     }
-    const v = validateInkJudgement(raw);
+    const v = validateInkJudgement(raw, { keepMark: !!input.locate });
     if (!v.ok) throw new Error(`invalid judgement: ${v.error}`);
     // A note is a stall's answer only; on an ordinary check the nudge alone is the help.
     return input.reason === "stall" ? v.judgement : { ...v.judgement, note: [] };
