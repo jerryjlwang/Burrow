@@ -22,6 +22,22 @@ import type { SignalTracker } from "../proactive/signals";
 
 const logger = log("agent");
 export const MAX_STEPS = 6;
+
+/**
+ * Spoken while a slow first decision is still in flight, so thinking never sounds like a hang.
+ * On a video the rabbit is already watching, so "looking" phrasing would be a lie there — those
+ * turns draw from the thinking pool only.
+ */
+const LOOK_FILLERS = ["Let me take a look.", "Let me see…", "One sec, looking now.", "Ooh, let me check.", "Okay, looking…"];
+const THINK_FILLERS = ["Hmm, good question.", "Hmm, let me think.", "Give me a second.", "Ooh, hang on."];
+let lastFiller = "";
+function pickFiller(pool: string[]): string {
+  const options = pool.filter((f) => f !== lastFiller);
+  lastFiller = options[Math.floor(Math.random() * options.length)];
+  return lastFiller;
+}
+/** The first decision must be slower than this before a filler speaks; fast answers stay clean. */
+const FILLER_DELAY_MS = 800;
 /** Hard ceiling across navigations and new tabs, so a resumed chain can't run away. */
 export const MAX_TOTAL_STEPS = 14;
 
@@ -47,6 +63,9 @@ export interface LoopDeps {
   getVideo?: () => { context: VideoContext; frame: () => string | null } | null;
   /** A learning hint was just given on the problem on screen. */
   onHint?: () => void;
+  /** Is the page's video on screen, and bring it back if not. */
+  videoInView?: () => boolean;
+  returnToVideo?: () => void;
 }
 
 export interface RunOptions {
@@ -134,6 +153,7 @@ export class AgentLoop {
     const learner = formatDiagnostics(diagnose(session.graph, Date.now()));
     if (opts.resume?.lastReferencedElementName) this.lastReferencedElementName = opts.resume.lastReferencedElementName;
     const taskType = classifyTask(utterance, store.getState().page);
+    const videoWasInView = this.deps.videoInView?.() ?? false;
     let firstStep = true;
     session.updateStudent({ currentGoal: goal });
     store.setState({ busy: true, characterState: "thinking", status: "Thinking…", debug: { ...store.getState().debug, goal, loopStep: step, lastTranscript: utterance } });
@@ -166,12 +186,25 @@ export class AgentLoop {
 
         const requestId = head?.tag || this.newRequestId();
         this.listenFor(requestId);
+        // Latency mask: if nothing has been voiced by then — no streamed sentence, no speculation
+        // hit — a short filler line fills the silence. Latest-wins speech keeps the order sane.
+        let fillerTimer: number | null = null;
+        if (step === (opts.resume?.step ?? 0) && !opts.resume && (opts.source === "voice" || opts.source === "text") && store.getState().settings.ttsEnabled) {
+          fillerTimer = window.setTimeout(() => {
+            if (!signal.aborted && this.spokenEarly === null) void this.deps.speak(pickFiller(this.deps.getVideo?.() ? THINK_FILLERS : [...THINK_FILLERS, ...LOOK_FILLERS]));
+          }, FILLER_DELAY_MS);
+        }
         // A head start that failed isn't worth keeping; ask properly.
-        let output = head ? await head.promise.catch(() => null) : null;
-        if (output && !output.degraded) logger.info("speculation hit", { headStartMs: head!.headStartMs });
-        else {
-          if (head) this.listenFor(this.newRequestId());
-          output = await this.decide(input, signal, this.activeRequestId!);
+        let output: AgentOutput | null = null;
+        try {
+          output = head ? await head.promise.catch(() => null) : null;
+          if (output && !output.degraded) logger.info("speculation hit", { headStartMs: head!.headStartMs });
+          else {
+            if (head) this.listenFor(this.newRequestId());
+            output = await this.decide(input, signal, this.activeRequestId!);
+          }
+        } finally {
+          if (fillerTimer !== null) window.clearTimeout(fillerTimer);
         }
         this.activeRequestId = null;
         check();
@@ -324,6 +357,7 @@ export class AgentLoop {
         }
       }
       if (opts.resume) await session.setPendingLoop(null);
+      this.bringVideoBack(videoWasInView, taskType, history[history.length - 1]?.decision.action ?? null);
     } catch (e) {
       if (e instanceof Cancelled) {
         logger.debug("loop cancelled");
@@ -340,6 +374,26 @@ export class AgentLoop {
         this.deps.onIdle?.();
       }
     }
+  }
+
+  /**
+   * Reading a video's description or chapters means scrolling the player off screen, and the model
+   * reliably forgets to scroll back. So it isn't asked to: if this run took the video out of view,
+   * the loop returns to it when the run ends. Two exceptions — the student asked to go somewhere
+   * ("scroll to the comments"), and the rabbit is pointing at something down there, in which case
+   * the return waits for the pointer to finish and is abandoned if the student scrolls or speaks.
+   */
+  private bringVideoBack(wasInView: boolean, taskType: string | null, lastAction: string | null): void {
+    if (!wasInView || taskType === "navigation" || this.deps.videoInView?.() !== false) return;
+    if (lastAction !== "point_to" && lastAction !== "highlight") {
+      this.deps.returnToVideo?.();
+      return;
+    }
+    const run = this.runCount;
+    const y = window.scrollY;
+    window.setTimeout(() => {
+      if (this.runCount === run && Math.abs(window.scrollY - y) < 60 && this.deps.videoInView?.() === false) this.deps.returnToVideo?.();
+    }, 7000);
   }
 
   /** A resource opened for a path suggestion is remembered against its concept, so later attempts can say whether it helped. */
@@ -427,7 +481,8 @@ export class AgentLoop {
    * otherwise it is discarded unseen. This only computes — it never speaks, acts or records.
    */
   speculate(utterance: string): void {
-    if (this.running || !utterance.trim()) return;
+    // A pause two words in ("The most…") is not the end of a thought; a guess there is a wasted model call.
+    if (this.running || utterance.trim().split(/\s+/).length < 3) return;
     const { session } = this.deps;
     const page = this.deps.observe();
     const taskType = classifyTask(utterance, page);
@@ -449,11 +504,6 @@ export class AgentLoop {
     logger.debug("speculating", { utterance });
     const requestId = this.newRequestId();
     this.speculator.start(speculationKey(utterance, page.url), () => this.decide(input, new AbortController().signal, requestId), requestId);
-  }
-
-  /** The student kept talking: whatever was guessed is about the wrong sentence. */
-  dropSpeculation(): void {
-    this.speculator.drop();
   }
 
   private newRequestId(): string {
