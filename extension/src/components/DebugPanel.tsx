@@ -80,6 +80,8 @@ function PetControls({ pet }: { pet?: RefObject<PetController | null> }) {
           show bubble
         </button>
         <button type="button" onClick={() => store.setState({ bubble: null })}>hide bubble</button>
+        <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("burrow:teach", { detail: { heard: "So a moat is a ditch with water?", concept: "moats" } }))}>teach card</button>
+        <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("burrow:forget", { detail: { concept: "moats" } }))}>forget</button>
       </div>
       <div className="pip-debug-pet">
         <button type="button" onClick={() => void grant("use_voice")}>grant voice</button>
