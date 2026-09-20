@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { store, useStore } from "../content/store";
 import type { CompanionController } from "../content/controller";
 import { Character } from "./Character";
-import type { PetBox, PetController } from "./pet";
+import { besidePoint, type PetBox, type PetController } from "./pet";
 import { Panel } from "./Panel";
 import { Bubble } from "./Bubble";
 import { Overlay } from "./Overlay";
@@ -28,6 +28,7 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
   const settings = useStore((s) => s.settings);
   const voice = useStore((s) => s.voice);
   const busy = useStore((s) => s.busy);
+  const highlights = useStore((s) => s.highlights);
 
   const onAnchor = useCallback((getCenter: () => { x: number; y: number }) => {
     controller.overlay.characterAnchor = getCenter;
@@ -40,6 +41,25 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
   const onController = useCallback((c: PetController | null) => {
     petRef.current = c;
   }, []);
+
+  // Nothing going on: the pet may wander now and then.
+  const quiet = !panelOpen && !bubble && characterState === "idle" && voice.mode === "off";
+
+  // When a new "point" highlight appears while the panel is closed, go stand beside it.
+  const seenPoints = useRef(new Set<string>());
+  useEffect(() => {
+    const points = highlights.filter((h) => h.kind === "point");
+    const key = (h: (typeof points)[number]) => `${h.id}:${h.expiresAt}`;
+    const fresh = points.filter((h) => !seenPoints.current.has(key(h)));
+    seenPoints.current = new Set(points.map(key));
+    if (panelOpen || !fresh.length) return;
+    const pet = petRef.current;
+    const body = pet?.getBodyRect();
+    if (!pet || !body) return;
+    const target = besidePoint(fresh[fresh.length - 1].rect, body.width, body.height, window.innerWidth);
+    if (Math.hypot(target.x - (body.left + body.width / 2), target.y - (body.top + body.height / 2)) < 60) return;
+    void pet.goTo(target.x, target.y);
+  }, [highlights, panelOpen]);
 
   // Show the latest short companion reply as a bubble while the panel is closed.
   useEffect(() => {
@@ -104,7 +124,7 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
           {voice.mode === "listening" && <span className="pip-mic-badge" title="Microphone is on" aria-hidden="true" />}
           {unread > 0 && !panelOpen && <span className="pip-unread" aria-hidden="true">{unread}</span>}
           <button type="button" className={`pip-char-btn${busy ? " busy" : ""}`} onClick={() => controller.togglePanel()} aria-label={label} aria-expanded={panelOpen} title={panelOpen ? "Close" : `Talk to ${settings.characterName}`}>
-            <Character state={characterState} level={level} lookAt={lookAt} attention={attention} reducedMotion={reduced} onAnchor={onAnchor} onPosition={onPosition} onController={onController} />
+            <Character state={characterState} level={level} lookAt={lookAt} attention={attention} reducedMotion={reduced} onAnchor={onAnchor} onPosition={onPosition} onController={onController} quiet={quiet} />
           </button>
         </div>
       </div>

@@ -24,6 +24,8 @@ export interface StateDef {
   exit?: string;
   /** Idle only: one-shot flourishes picked at random between idle loops. */
   variants?: { state: string; weight: number }[];
+  /** Per frame sideways travel in source pixels while this state plays as a travel loop. */
+  move?: number[];
 }
 
 export interface JumpStep {
@@ -41,6 +43,10 @@ export interface CharacterManifest {
   body?: [number, number, number, number];
   jump_sequence?: { sending?: JumpStep[]; receiving?: JumpStep[] };
   idle_variant_gap?: [number, number];
+  /** Seconds of quiet idle before the character wanders a few hops on its own. */
+  wander_gap?: [number, number];
+  /** Hops per wander. */
+  wander_hops?: [number, number];
   states: Record<string, StateDef>;
 }
 

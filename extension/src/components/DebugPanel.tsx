@@ -1,6 +1,6 @@
 import type { RefObject } from "react";
 import { store, useStore, type CharacterState } from "../content/store";
-import type { PetController } from "./pet";
+import { besidePoint, type PetController } from "./pet";
 
 const STATES: { label: string; state: CharacterState; level?: number }[] = [
   { label: "idle", state: "idle" },
@@ -28,6 +28,19 @@ function PetControls({ pet }: { pet?: RefObject<PetController | null> }) {
     void c.moveTo(onRight ? 160 : window.innerWidth - 160, window.innerHeight - 150);
   };
   const jumpIn = () => void pet?.current?.jumpIn(new Promise((r) => setTimeout(r, 1500)));
+  const hopBy = (dx: number) => {
+    const c = pet?.current;
+    const r = c?.getBodyRect();
+    if (c && r) void c.hopTo(r.left + r.width / 2 + dx);
+  };
+  const toHeadline = () => {
+    const c = pet?.current;
+    const body = c?.getBodyRect();
+    const h = document.querySelector("h1, h2, h3");
+    if (!c || !body || !h) return;
+    const t = besidePoint(h.getBoundingClientRect(), body.width, body.height, window.innerWidth);
+    void c.goTo(t.x, t.y);
+  };
   return (
     <details open>
       <summary>Pet</summary>
@@ -47,6 +60,18 @@ function PetControls({ pet }: { pet?: RefObject<PetController | null> }) {
         <button type="button" onClick={() => void pet?.current?.jumpOut()}>jump out</button>
         <button type="button" onClick={jumpIn}>jump in (1.5 s)</button>
         <button type="button" onClick={() => pet?.current?.play("wave")}>wave</button>
+      </div>
+      <div className="pip-debug-pet">
+        <button type="button" onClick={() => hopBy(-150)}>hop left</button>
+        <button type="button" onClick={() => hopBy(150)}>hop right</button>
+        <button type="button" onClick={() => void pet?.current?.fling(-900, -700)}>throw</button>
+        <button type="button" onClick={toHeadline}>go to headline</button>
+        <button type="button" onClick={() => void pet?.current?.wanderNow()}>wander now</button>
+      </div>
+      <div className="pip-debug-pet">
+        <button type="button" onClick={() => void pet?.current?.resize(4)}>grow 4x</button>
+        <button type="button" onClick={() => void pet?.current?.resize(2)}>shrink 2x</button>
+        <button type="button" onClick={() => void pet?.current?.resize(3)}>normal 3x</button>
       </div>
     </details>
   );

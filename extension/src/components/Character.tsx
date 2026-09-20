@@ -21,6 +21,8 @@ export interface CharacterProps {
   onPosition?: (box: PetBox) => void;
   /** Receives the imperative pet API once the art is loaded, null on unmount. */
   onController?: (controller: PetController | null) => void;
+  /** Nothing is going on (panel closed, no bubble, idle, voice off). Lets the pet wander now and then. */
+  quiet?: boolean;
 }
 
 /** Store state to manifest state. Speaking is idle plus the mouth overlay. */
@@ -44,7 +46,7 @@ export function mapCharacterState(state: CharacterState, attention: 0 | 1 | 2): 
 }
 
 /** The White Rabbit: a manifest-driven sprite. Art and playback live in ./pet; only the mapping lives here. */
-export function Character({ state, level, attention, reducedMotion, size, scale, character, onAnchor, onPosition, onController }: CharacterProps) {
+export function Character({ state, level, attention, reducedMotion, size, scale, character, onAnchor, onPosition, onController, quiet }: CharacterProps) {
   const mapped = mapCharacterState(state, attention);
   return (
     <SpritePet
@@ -58,6 +60,7 @@ export function Character({ state, level, attention, reducedMotion, size, scale,
       onAnchor={onAnchor}
       onPosition={onPosition}
       onController={onController}
+      quiet={quiet}
     />
   );
 }

@@ -23,6 +23,8 @@ function manifest(): CharacterManifest {
       celebrate: { file: "c.png", frames: 6, fps: 10, loop: false },
       wave: { file: "w.png", frames: 4, fps: 10, loop: false },
       dragged: { file: "d.png", frames: 2, fps: 4, loop: true },
+      hop: { file: "hp.png", frames: 5, fps: 10, loop: true, move: [0, 4, 6, 4, 0] },
+      land: { file: "ld.png", frames: 3, fps: 10, loop: false },
       hole_only: { file: "h.png", frames: 3, fps: 10, loop: false },
       hole_open: { file: "ho.png", frames: 3, fps: 10, loop: false },
       dive: { file: "dv.png", frames: 7, fps: 10, loop: false },
@@ -131,6 +133,55 @@ describe("SpritePlayer", () => {
     expect(p.current).toBe("to_listening");
     run(p, 0.25);
     expect(p.current).toBe("listening");
+  });
+
+  it("accumulates move per entered frame while travelling and counts cycles", () => {
+    const p = new SpritePlayer(manifest(), null, noVariants);
+    expect(p.travel(1, "hop")).toBe(true);
+    expect(p.current).toBe("hop");
+    expect(p.takeTravel()).toBe(0);
+    run(p, 0.11);
+    expect(p.frame).toBe(1);
+    expect(p.takeTravel()).toBe(4);
+    run(p, 0.2);
+    expect(p.takeTravel()).toBe(10);
+    run(p, 0.2);
+    expect(p.cycle).toBe(1);
+    expect(p.frame).toBe(0);
+    expect(p.takeTravel()).toBe(0);
+    p.travel(-1, "hop");
+    run(p, 0.5);
+    expect(p.cycle).toBe(2);
+    expect(p.takeTravel()).toBe(-14);
+    p.setState("thinking");
+    expect(p.current).toBe("hop");
+  });
+
+  it("stopTravel with a landing state plays it once, then resumes the requested state", async () => {
+    const p = new SpritePlayer(manifest(), null, noVariants);
+    p.travel(1, "hop");
+    run(p, 0.3);
+    p.setState("listening");
+    let settled = false;
+    const done = p.stopTravel("land").then(() => {
+      settled = true;
+    });
+    expect(p.current).toBe("land");
+    expect(p.travelling).toBe(false);
+    run(p, 0.31);
+    await done;
+    expect(settled).toBe(true);
+    expect(p.current).toBe("to_listening");
+    // Without a landing state the requested state comes straight back.
+    p.travel(1, "hop");
+    await p.stopTravel();
+    expect(p.current).toBe("to_listening");
+    // A drag that interrupts a landing still resolves the landing promise.
+    p.travel(1, "hop");
+    const cut = p.stopTravel("land");
+    p.override("dragged");
+    await cut;
+    expect(p.current).toBe("dragged");
   });
 
   it("runs the manifest jump steps, loops the wait step until ready, then resumes the request", async () => {

@@ -11,6 +11,8 @@ interface Shown {
   loop: boolean;
   /** A non-looping play reached its last frame. */
   ended: boolean;
+  /** Times a looping play wrapped back to its first frame. */
+  cycles: number;
 }
 
 type Mode = "normal" | "override" | "sequence";
@@ -52,6 +54,13 @@ export class SpritePlayer {
   private stepDone: (() => void) | null = null;
   private sequenceTail: Promise<void> = Promise.resolve();
   private sequenceQueued = 0;
+  /** Override that returns to the requested state when its one-shot ends (landing). */
+  private settling = false;
+  private settleDone: (() => void) | null = null;
+  /** Travel direction while a `move` state plays; 0 means no travel. */
+  private travelDir: -1 | 0 | 1 = 0;
+  /** Source pixels moved since the owner last took them. */
+  private travelAcc = 0;
 
   private speaking = false;
   private mouthFrame = 0;
@@ -87,6 +96,13 @@ export class SpritePlayer {
   }
   get inSequence(): boolean {
     return this.mode === "sequence";
+  }
+  /** Full loops of the shown state since it started. */
+  get cycle(): number {
+    return this.shown.cycles;
+  }
+  get travelling(): boolean {
+    return this.travelDir !== 0;
   }
   get isHidden(): boolean {
     return this.hidden;
@@ -128,6 +144,9 @@ export class SpritePlayer {
   /** Take over the picture immediately (dragging). Pass null to resume the requested state. */
   override(name: string | null): void {
     if (this.mode === "sequence") return;
+    this.travelDir = 0;
+    this.travelAcc = 0;
+    this.finishSettle();
     if (name === null) {
       if (this.mode !== "override") return;
       this.mode = "normal";
@@ -142,6 +161,52 @@ export class SpritePlayer {
   }
 
   /**
+   * Loop a travel state (`hop`) and accumulate its `move` values in `direction`.
+   * Calling again while the same state travels only changes the direction.
+   */
+  travel(direction: -1 | 1, state: string): boolean {
+    if (this.mode === "sequence") return false;
+    const resolved = this.resolve(state);
+    if (this.mode === "override" && this.shown.name === resolved && this.travelDir !== 0) {
+      this.travelDir = direction;
+      return true;
+    }
+    this.override(resolved);
+    this.travelDir = direction;
+    return true;
+  }
+
+  /** Source pixels travelled since the last call. The owner scales and applies them. */
+  takeTravel(): number {
+    const t = this.travelAcc;
+    this.travelAcc = 0;
+    return t;
+  }
+
+  /**
+   * End travel or any override. With `settleWith`, play that one-shot first (landing) and resume
+   * the requested state when it ends. Resolves when the requested state is back.
+   */
+  stopTravel(settleWith?: string): Promise<void> {
+    if (this.mode === "sequence") return Promise.resolve();
+    this.travelDir = 0;
+    this.travelAcc = 0;
+    const settle = settleWith !== undefined && this.has(settleWith) && !this.manifest.states[settleWith].loop ? settleWith : null;
+    if (!settle) {
+      this.override(null);
+      return Promise.resolve();
+    }
+    this.mode = "override";
+    this.chain = [];
+    this.pending = null;
+    this.show(settle, false, false);
+    this.settling = true;
+    return new Promise<void>((done) => {
+      this.settleDone = done;
+    });
+  }
+
+  /**
    * Plays manifest steps in order and resolves when they are done. A step with `loop: true`
    * plays until `until` resolves. Requests made meanwhile apply after the last step.
    * Sequences queue behind each other.
@@ -152,6 +217,9 @@ export class SpritePlayer {
         this.mode = "sequence";
         this.chain = [];
         this.pending = null;
+        this.travelDir = 0;
+        this.travelAcc = 0;
+        this.finishSettle();
         this.hidden = false;
         this.dirty = true;
         const last = steps.length - 1;
@@ -230,6 +298,7 @@ export class SpritePlayer {
         if (nf < 0 || nf >= s.def.frames) {
           if (s.loop) {
             nf = (nf + s.def.frames) % s.def.frames;
+            s.cycles++;
           } else {
             this.onEnded();
             break;
@@ -237,6 +306,7 @@ export class SpritePlayer {
         }
         if (nf !== s.frame) this.dirty = true;
         s.frame = nf;
+        if (this.travelDir !== 0 && s.def.move) this.travelAcc += (s.def.move[nf] ?? 0) * this.travelDir;
       }
     }
     this.tickBlink(dt);
@@ -316,7 +386,13 @@ export class SpritePlayer {
       done?.();
       return;
     }
-    if (this.mode === "override") return;
+    if (this.mode === "override") {
+      if (!this.settling) return;
+      this.mode = "normal";
+      this.resume();
+      this.finishSettle();
+      return;
+    }
     if (this.chain.length) {
       this.advance();
       return;
@@ -336,9 +412,17 @@ export class SpritePlayer {
     this.flushPending();
   }
 
+  /** Resolve whoever waits on a landing, whether it finished or was cut short. */
+  private finishSettle(): void {
+    const done = this.settleDone;
+    this.settling = false;
+    this.settleDone = null;
+    done?.();
+  }
+
   private make(name: string, reverse: boolean, loop: boolean): Shown {
     const def = this.manifest.states[name];
-    return { name, def, frame: reverse ? Math.max(0, def.frames - 1) : 0, acc: 0, reverse, loop, ended: false };
+    return { name, def, frame: reverse ? Math.max(0, def.frames - 1) : 0, acc: 0, reverse, loop, ended: false, cycles: 0 };
   }
 
   private show(name: string, reverse: boolean, loop: boolean): void {
