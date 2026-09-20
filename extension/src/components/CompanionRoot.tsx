@@ -209,7 +209,39 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
   useEffect(() => setSoundsEnabled(settings.ttsEnabled), [settings.ttsEnabled]);
   const onShown = useCallback((s: string) => playCue(s), []);
   // On the parent's laptop he arrives one size bigger: the hero moment.
-  const petScale = pageRole() === "parent" ? 4 : 3;
+  // Chrome keeps a zoom per site. He is not page content, so a zoomed out site should not shrink him:
+  // the draw scale is divided by the zoom and rounded to a whole number, which is what pixel art needs.
+  const base = pageRole() === "parent" ? 4 : 3;
+  const [zoom, setZoom] = useState(1);
+  useEffect(() => {
+    let live = true;
+    const ask = () => {
+      try {
+        chrome.runtime.sendMessage({ type: "zoom.get" }, (r?: { zoom?: number }) => {
+          void chrome.runtime.lastError;
+          const z = Number(r?.zoom);
+          if (live && Number.isFinite(z) && z > 0) setZoom(z);
+        });
+      } catch {
+        // The page keeps whatever scale it has.
+      }
+    };
+    ask();
+    // Chrome does not tell a content script its tab was zoomed, but zooming changes the layout
+    // viewport, so a resize is the signal. Debounced, because a window drag fires many of them.
+    let timer = 0;
+    const onResize = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(ask, 180);
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
+  const petScale = Math.max(2, Math.min(6, Math.round(base / zoom)));
 
   // Grants, the jump between laptops, and the "I'm late" vignette. See docs/frontend/HANDOFF.md.
   const quietRef = useRef(quiet);

@@ -1,6 +1,7 @@
 import { spawn, wait, type ActDetail, type Piece, type PieceContext } from "./common";
 import { burst, confetti, gather, trail, CREAM, GOLD, TEAL, WHITE } from "./particles";
 import { dig, holeOf, tunnelIn, whoosh } from "../tunnel";
+import { ARRIVE_KEY } from "../handoff";
 import { assetUrl } from "../pet";
 import { FLIGHT } from "../pet/travel";
 
@@ -146,7 +147,7 @@ async function openTab(d: ActDetail, ctx: PieceContext): Promise<void> {
     const { home, timer, lift } = ready;
     window.clearTimeout(timer);
     ready = null;
-    await burrow(ctx, pet, text, home, lift);
+    await burrow(ctx, pet, d, text, home, lift);
     return;
   }
   if (!pet || !r0 || ctx.reduced) {
@@ -156,11 +157,11 @@ async function openTab(d: ActDetail, ctx: PieceContext): Promise<void> {
   const home = { x: r0.x + r0.width / 2, y: r0.y + r0.height / 2 };
   const lift = dim(ctx);
   await charge(ctx, pet, r0);
-  await burrow(ctx, pet, text, home, lift);
+  await burrow(ctx, pet, d, text, home, lift);
 }
 
 /** The dig, the signpost, the dive and the earth closing. Resolves when the page is covered. */
-async function burrow(ctx: PieceContext, pet: NonNullable<PieceContext["pet"]>, text: string, home: { x: number; y: number }, lift: () => void): Promise<void> {
+async function burrow(ctx: PieceContext, pet: NonNullable<PieceContext["pet"]>, d: ActDetail, text: string, home: { x: number; y: number }, lift: () => void): Promise<void> {
   const hole = holeOf(pet);
   if (!hole) {
     await tabCard(ctx, home.x, text, "away");
@@ -180,6 +181,14 @@ async function burrow(ctx: PieceContext, pet: NonNullable<PieceContext["pet"]>, 
   whoosh("down");
   // He goes down after it, and the earth closes over the page from the edges in.
   const earth = tunnelIn(hole, ctx.reduced);
+  // He is on his way: the tab that is about to open reads this and pops him out of its own hole
+  // instead of just appearing in the corner. Any page loading in the next 15 s takes it, which is
+  // the same bargain `escort` makes for a navigation.
+  try {
+    chrome.storage.local.set({ [ARRIVE_KEY]: { at: Date.now(), url: d.url ?? "", line: "Here we are!" } });
+  } catch {
+    // No storage means he simply appears there, as before.
+  }
   post.down();
   await Promise.all([pet.jumpOut(), wait(TUNNEL_CLOSE_MS)]);
   post.gone();
