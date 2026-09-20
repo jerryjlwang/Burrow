@@ -1,8 +1,11 @@
-import { PlaybackTracker, type TranscriptSegment, type VideoSignals } from "@shared/video";
+import { PlaybackTracker, emptiestRegion, type FrameRegion, type TranscriptSegment, type VideoSignals } from "@shared/video";
 
 /** Smaller than this is a thumbnail preview or a decorative loop, not something being watched. */
 const MIN_AREA = 200 * 150;
 const FRAME_MAX_WIDTH = 768;
+/** Grid the frame is reduced to when looking for empty space: coarse enough to ignore noise, fine enough to place a drawing. */
+const REGION_COLS = 96;
+const REGION_ROWS = 54;
 
 export interface VideoWatcherEvents {
   /** A different video is now the one being watched (also fires for the first). */
@@ -174,6 +177,29 @@ export class VideoWatcher {
       canvas.height = Math.round(v.videoHeight * scale);
       canvas.getContext("2d")!.drawImage(v, 0, 0, canvas.width, canvas.height);
       return canvas.toDataURL("image/jpeg", 0.6);
+    } catch {
+      return null;
+    }
+  }
+
+  get element(): HTMLVideoElement | null {
+    return this.active ? this.video : null;
+  }
+
+  /** The emptiest part of the frame on screen right now — where a drawing can sit as if it were part of the video. */
+  emptyRegion(): FrameRegion | null {
+    const v = this.video;
+    if (!v || !v.videoWidth || v.readyState < 2) return null;
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = REGION_COLS;
+      canvas.height = REGION_ROWS;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
+      ctx.drawImage(v, 0, 0, REGION_COLS, REGION_ROWS);
+      const rgba = ctx.getImageData(0, 0, REGION_COLS, REGION_ROWS).data;
+      const luma = new Uint8ClampedArray(REGION_COLS * REGION_ROWS);
+      for (let i = 0; i < luma.length; i++) luma[i] = 0.299 * rgba[i * 4] + 0.587 * rgba[i * 4 + 1] + 0.114 * rgba[i * 4 + 2];
+      return emptiestRegion(luma, REGION_COLS, REGION_ROWS);
     } catch {
       return null;
     }

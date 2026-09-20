@@ -302,5 +302,6 @@
 }
 
 /* ---------- Chalkboard strokes ---------- */
-@keyframes pip-chalk { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+/* The dash pattern lives only in the keyframes: left on the element it would keep a long stroke dashed after the draw-in. */
+@keyframes pip-chalk { from { stroke-dasharray: 100; stroke-dashoffset: 100; } to { stroke-dasharray: 100; stroke-dashoffset: 0; } }
 @keyframes pip-chalk-fade { from { opacity: 0; } to { opacity: 1; } }

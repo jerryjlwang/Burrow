@@ -1,41 +1,61 @@
 import { useEffect, useRef, useState } from "react";
 import type { Stroke } from "@shared/sketch";
 import type { Rect } from "@shared/types";
+import { EMPTY_BUSY } from "@shared/video";
 import { store, useStore } from "../content/store";
 
 /**
  * The rabbit's drawing surface: text lines and freeform strokes overlaid directly on the page —
- * white chalk with drop shadows, no box, so the content underneath stays visible. Anchored
- * sketches wrap their 100×100 stroke space onto a page element (a video, the problem text) and
- * track it as it moves; unanchored ones float in the corner. `add` sketches extend the drawing
- * and the staged reveal continues instead of restarting. Dismiss with the ✕ or Escape.
+ * white chalk with a dark outline, no box, so the content underneath stays visible and the ink
+ * reads on light and dark backgrounds alike. Anchored sketches wrap their 100×100 stroke space
+ * onto a page element and track it as it moves; with a `region` they sit inside one part of it
+ * (a video's empty space), words and all, so the drawing looks like part of the picture.
+ * Unanchored ones float in the corner. `add` sketches extend the drawing and the staged reveal
+ * continues instead of restarting. Dismiss with the ✕ or Escape.
  */
 const INK = "#fff";
-const TEXT_SHADOW = "0 1px 2px rgba(0,0,0,.95), 0 0 8px rgba(0,0,0,.55)";
-const STROKE_FILTER = "drop-shadow(0 1px 1.5px rgba(0,0,0,.9)) drop-shadow(0 0 4px rgba(0,0,0,.45))";
+const OUTLINE = "rgba(0,0,0,.78)";
+// A glow, not an offset outline: offsets close up the counters of the pixel font and the words turn to blobs.
+const TEXT_SHADOW = "0 0 2px #000, 0 0 4px rgba(0,0,0,.95), 0 0 7px rgba(0,0,0,.8), 0 1px 10px rgba(0,0,0,.55)";
+/** A diagram keeps its proportions up to this stretch; past it the space is left unused rather than flattening the drawing. */
+const MAX_STRETCH = 1.5;
 
 const textStyle: React.CSSProperties = { whiteSpace: "pre-wrap", color: INK, textShadow: TEXT_SHADOW, fontWeight: 600, fontSize: 17, lineHeight: 1.5 };
 
-/** One stroke as SVG. pathLength=100 makes the draw-in uniform; non-scaling strokes survive anchored stretch. */
-function StrokeShape({ stroke, animate }: { stroke: Stroke; animate: boolean }) {
-  const s = { stroke: INK, strokeWidth: 3, fill: "none", strokeLinecap: "round" as const, vectorEffect: "non-scaling-stroke" as const };
-  const anim = animate ? { strokeDasharray: 100, style: { animation: "pip-chalk 500ms ease-out both" } } : {};
+interface Size {
+  w: number;
+  h: number;
+}
+
+/**
+ * One stroke as SVG, in the canvas's own pixels. Board units are mapped here rather than by a
+ * stretched viewBox: that needs vector-effect="non-scaling-stroke", under which Chrome measures
+ * dashes in screen pixels and ignores pathLength — the draw-in's dash pattern then shows as gaps.
+ */
+function StrokeShape({ stroke, size, animate }: { stroke: Stroke; size: Size; animate: boolean }) {
+  const unit = Math.min(size.w, size.h) / 100;
+  const X = (v: number) => (v * size.w) / 100;
+  const Y = (v: number) => (v * size.h) / 100;
   const [a, b, c, d] = stroke.n;
+  // Every shape is drawn twice: a wide dark pass, then the chalk on top.
+  const passes = [{ stroke: OUTLINE, strokeWidth: 6.5 }, { stroke: INK, strokeWidth: 3 }];
+  const common = { fill: "none", strokeLinecap: "round" as const, strokeLinejoin: "round" as const, pathLength: 100, style: animate ? { animation: "pip-chalk 500ms ease-out backwards" } : undefined };
   switch (stroke.kind) {
     case "line":
-      return <path d={`M ${a} ${b} L ${c} ${d}`} pathLength={100} {...s} {...anim} />;
+      return <>{passes.map((p, i) => <path key={i} d={`M ${X(a)} ${Y(b)} L ${X(c)} ${Y(d)}`} {...common} {...p} />)}</>;
     case "arrow": {
       // Head drawn as two short flicks at the tip, angled off the shaft.
-      const ang = Math.atan2(d - b, c - a);
-      const flick = (off: number) => `M ${c} ${d} L ${c - 4 * Math.cos(ang + off)} ${d - 4 * Math.sin(ang + off)}`;
-      return <path d={`M ${a} ${b} L ${c} ${d} ${flick(0.5)} ${flick(-0.5)}`} pathLength={100} {...s} {...anim} />;
+      const ang = Math.atan2(Y(d) - Y(b), X(c) - X(a));
+      const len = Math.max(9, 4 * unit);
+      const flick = (off: number) => `M ${X(c)} ${Y(d)} L ${X(c) - len * Math.cos(ang + off)} ${Y(d) - len * Math.sin(ang + off)}`;
+      return <>{passes.map((p, i) => <path key={i} d={`M ${X(a)} ${Y(b)} L ${X(c)} ${Y(d)} ${flick(0.5)} ${flick(-0.5)}`} {...common} {...p} />)}</>;
     }
     case "circle":
-      return <circle cx={a} cy={b} r={c} pathLength={100} {...s} {...anim} />;
+      return <>{passes.map((p, i) => <circle key={i} cx={X(a)} cy={Y(b)} r={c * unit} {...common} {...p} />)}</>;
     case "rect":
-      return <rect x={a} y={b} width={c} height={d} pathLength={100} {...s} {...anim} />;
+      return <>{passes.map((p, i) => <rect key={i} x={X(a)} y={Y(b)} width={X(c)} height={Y(d)} {...common} {...p} />)}</>;
     case "dot":
-      return <circle cx={a} cy={b} r={1.3} fill={INK} stroke="none" />;
+      return <circle cx={X(a)} cy={Y(b)} r={Math.max(4, 1.3 * unit)} fill={INK} stroke={OUTLINE} strokeWidth={2} />;
     default:
       return null;
   }
@@ -63,6 +83,24 @@ function useAnchorRect(anchor: Element | null): Rect | null {
     return () => cancelAnimationFrame(raf);
   }, [anchor]);
   return rect;
+}
+
+/** The stroke canvas's size in CSS pixels, so strokes can be laid out in its own coordinates. */
+function useSize(): [(el: HTMLDivElement | null) => void, Size | null] {
+  const [el, setEl] = useState<HTMLDivElement | null>(null);
+  const [size, setSize] = useState<Size | null>(null);
+  useEffect(() => {
+    if (!el) return;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      setSize((old) => (old && Math.abs(old.w - r.width) < 0.5 && Math.abs(old.h - r.height) < 0.5 ? old : { w: r.width, h: r.height }));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [el]);
+  return [setEl, size];
 }
 
 export function Board() {
@@ -94,38 +132,40 @@ export function Board() {
     return () => window.clearInterval(timer);
   }, [board, reduced]);
 
-  const rect = useAnchorRect(board?.anchor ?? null);
+  const anchorRect = useAnchorRect(board?.anchor ?? null);
+  const [canvasRef, size] = useSize();
   if (!board) return null;
 
   const shown = board.items.slice(0, revealed);
-  const hasShapes = shown.some((it) => it.kind === "stroke" && it.stroke.kind !== "label");
-  const hasStrokeItems = shown.some((it) => it.kind === "stroke");
-  const anchored = rect !== null;
+  const hasStrokeItems = board.items.some((it) => it.kind === "stroke");
+  const region = anchorRect ? board.region ?? null : null;
+  // Inside a region the whole sketch — words too — lives within that part of the anchor.
+  const rect = anchorRect && region ? { x: anchorRect.x + region.x * anchorRect.width, y: anchorRect.y + region.y * anchorRect.height, width: region.w * anchorRect.width, height: region.h * anchorRect.height } : anchorRect;
 
-  const canvas = (
-    <svg
-      className="pip-board-canvas"
-      viewBox="0 0 100 100"
-      preserveAspectRatio={anchored ? "none" : "xMidYMid meet"}
-      style={anchored ? { position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible", filter: STROKE_FILTER } : { display: "block", width: "100%", aspectRatio: "1 / 1", marginTop: 6, overflow: "visible", filter: STROKE_FILTER }}
-      aria-hidden="true"
-    >
-      {shown.map((item, i) => (item.kind === "stroke" && item.stroke.kind !== "label" ? <StrokeShape key={`${board.id}-s${i}`} stroke={item.stroke} animate={!reduced} /> : null))}
-    </svg>
-  );
-
-  // Labels render as HTML at percentage positions: crisp text, no stretch under anchored mapping.
-  const labels = (host: React.CSSProperties) => (
-    <div style={{ ...host, pointerEvents: "none" }}>
-      {shown.map((item, i) =>
-        item.kind === "stroke" && item.stroke.kind === "label" ? (
-          <div key={`${board.id}-l${i}`} className="pip-board-label" style={{ position: "absolute", left: `${item.stroke.n[0]}%`, top: `${item.stroke.n[1]}%`, transform: "translateY(-50%)", ...textStyle, fontSize: 15, fontWeight: 700, animation: reduced ? undefined : "pip-chalk-fade 400ms ease-out both" }}>
-            {item.stroke.text}
+  // An element wrap maps onto the element exactly (that is the point of it); anywhere else the
+  // 100×100 space keeps its shape, so a triangle drawn into a wide strip is still a triangle.
+  const canvas = (host: React.CSSProperties, fit: "stretch" | "proportional") => {
+    const box = size && fit === "proportional" ? { w: Math.min(size.w, size.h * MAX_STRETCH), h: Math.min(size.h, size.w * MAX_STRETCH) } : size;
+    return (
+      <div ref={canvasRef} style={{ ...host, pointerEvents: "none" }}>
+        {box && box.w > 0 && box.h > 0 && (
+          // Strokes in the box's own pixels; labels as HTML at percentage positions, so text stays crisp.
+          <div style={{ position: "absolute", left: 0, top: 0, width: box.w, height: box.h }}>
+            <svg className="pip-board-canvas" width={box.w} height={box.h} viewBox={`0 0 ${box.w} ${box.h}`} style={{ position: "absolute", inset: 0, overflow: "visible" }} aria-hidden="true">
+              {shown.map((item, i) => (item.kind === "stroke" && item.stroke.kind !== "label" ? <StrokeShape key={`${board.id}-s${i}`} stroke={item.stroke} size={box} animate={!reduced} /> : null))}
+            </svg>
+            {shown.map((item, i) =>
+              item.kind === "stroke" && item.stroke.kind === "label" ? (
+                <div key={`${board.id}-l${i}`} className="pip-board-label" style={{ position: "absolute", left: `${item.stroke.n[0]}%`, top: `${item.stroke.n[1]}%`, transform: "translateY(-50%)", ...textStyle, fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", animation: reduced ? undefined : "pip-chalk-fade 400ms ease-out both" }}>
+                  {item.stroke.text}
+                </div>
+              ) : null,
+            )}
           </div>
-        ) : null,
-      )}
-    </div>
-  );
+        )}
+      </div>
+    );
+  };
 
   const textLines = shown.filter((it) => it.kind === "text");
   const textBlock = (textLines.length > 0 || board.title) && (
@@ -146,12 +186,24 @@ export function Board() {
     </button>
   );
 
-  if (anchored) {
-    // Wrapped to the page region: strokes span its rect; words sit just below it.
+  const frame: React.CSSProperties = { position: "fixed", zIndex: 2147483000, pointerEvents: "none", fontFamily: "inherit" };
+
+  if (rect && region) {
+    // Inside the video's empty space: words on top, the diagram filling what is left beneath them.
     return (
-      <div className="pip-board" role="figure" aria-label="drawing" style={{ position: "fixed", left: rect.x, top: rect.y, width: rect.width, height: rect.height, zIndex: 2147483000, pointerEvents: "none" }}>
-        {hasShapes && canvas}
-        {labels({ position: "absolute", inset: 0 })}
+      <div className="pip-board" role="figure" aria-label="drawing" data-placement="video" style={{ ...frame, left: rect.x, top: rect.y, width: rect.width, height: rect.height, display: "flex", flexDirection: "column", gap: 6, padding: 8, boxSizing: "border-box", borderRadius: 10, background: region.busy > EMPTY_BUSY ? "rgba(0,0,0,.5)" : undefined }}>
+        {textBlock}
+        {hasStrokeItems && canvas({ position: "relative", flex: 1, minHeight: 0 }, "proportional")}
+        {close}
+      </div>
+    );
+  }
+
+  if (rect) {
+    // Wrapped to a page element: strokes span its rect; words sit just below it.
+    return (
+      <div className="pip-board" role="figure" aria-label="drawing" data-placement="element" style={{ ...frame, left: rect.x, top: rect.y, width: rect.width, height: rect.height }}>
+        {hasStrokeItems && canvas({ position: "absolute", inset: 0 }, "stretch")}
         {textBlock && <div style={{ position: "absolute", left: 0, top: "100%", paddingTop: 8, maxWidth: Math.max(rect.width, 320) }}>{textBlock}</div>}
         {close}
       </div>
@@ -159,9 +211,9 @@ export function Board() {
   }
 
   return (
-    <div className="pip-board" role="figure" aria-label="drawing" style={{ position: "fixed", left: 20, bottom: 20, width: 380, zIndex: 2147483000, pointerEvents: "none", fontFamily: "inherit" }}>
+    <div className="pip-board" role="figure" aria-label="drawing" data-placement="corner" style={{ ...frame, left: 20, bottom: 20, width: 380 }}>
       {textBlock}
-      {hasStrokeItems && <div style={{ position: "relative" }}>{canvas}{labels({ position: "absolute", inset: 0 })}</div>}
+      {hasStrokeItems && canvas({ position: "relative", width: "100%", aspectRatio: "1 / 1", marginTop: 6 }, "proportional")}
       {close}
     </div>
   );

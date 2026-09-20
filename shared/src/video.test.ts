@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { PlaybackTracker, TranscriptBuffer, WatchLog, decideSurface, heuristicNotes, parseWatchNote, stampedTranscript, type VideoSignals, type WatchNote } from "./video";
+import { EMPTY_BUSY, PlaybackTracker, TranscriptBuffer, WatchLog, decideSurface, emptiestRegion, heuristicNotes, parseWatchNote, stampedTranscript, type VideoSignals, type WatchNote } from "./video";
 
 const T0 = 1_700_000_000_000;
 
@@ -190,5 +190,48 @@ describe("stampedTranscript", () => {
   it("groups captions into timestamped lines a model can cite", () => {
     const segs = [0, 5, 10, 15, 20, 70].map((s) => ({ start: s, end: s + 5, text: `line ${s}` }));
     expect(stampedTranscript(segs)).toBe("[0:00] line 0 line 5 line 10\n[0:15] line 15 line 20\n[1:10] line 70");
+  });
+});
+
+describe("emptiestRegion", () => {
+  const COLS = 48;
+  const ROWS = 27;
+  /** A frame that is flat paper everywhere except a block of busy "content". */
+  const frame = (content: { x0: number; x1: number; y0: number; y1: number }) => {
+    const luma = new Uint8ClampedArray(COLS * ROWS).fill(230);
+    for (let y = content.y0; y < content.y1; y++) for (let x = content.x0; x < content.x1; x++) luma[y * COLS + x] = (x + y) % 2 ? 20 : 240;
+    return luma;
+  };
+
+  it("puts the drawing on the empty side of the frame, never over the lesson or the controls", () => {
+    const contentLeft = emptiestRegion(frame({ x0: 0, x1: 24, y0: 0, y1: ROWS }), COLS, ROWS)!;
+    expect(contentLeft.x).toBeGreaterThanOrEqual(0.5);
+    expect(contentLeft.busy).toBeLessThan(1);
+    const contentRight = emptiestRegion(frame({ x0: 24, x1: COLS, y0: 0, y1: ROWS }), COLS, ROWS)!;
+    expect(contentRight.x + contentRight.w).toBeLessThanOrEqual(0.5);
+    for (const r of [contentLeft, contentRight]) expect(r.y + r.h).toBeLessThanOrEqual(0.85);
+  });
+
+  it("prefers a smaller blank area over a bigger one that clips the lesson's own writing", () => {
+    // Writing fills the left 60%: the blank right side is narrower than the biggest candidate, and must still win.
+    const r = emptiestRegion(frame({ x0: 0, x1: 29, y0: 0, y1: ROWS }), COLS, ROWS)!;
+    expect(r.busy).toBeLessThanOrEqual(EMPTY_BUSY);
+    expect(r.x * COLS).toBeGreaterThanOrEqual(29);
+  });
+
+  it("says so when only slivers are blank, so the board can lay a scrim under the drawing", () => {
+    // A slide with a band of writing across the middle: blank strips above and below, neither tall enough to draw in.
+    const slide = emptiestRegion(frame({ x0: 4, x1: 44, y0: 9, y1: 17 }), COLS, ROWS)!;
+    expect(slide.h).toBeGreaterThanOrEqual(0.4);
+    expect(slide.busy).toBeGreaterThan(EMPTY_BUSY);
+  });
+
+  it("takes the biggest canvas a blank frame allows, and reports when nothing is empty", () => {
+    const blank = emptiestRegion(new Uint8ClampedArray(COLS * ROWS).fill(40), COLS, ROWS)!;
+    expect(blank.w).toBeGreaterThan(0.55);
+    expect(blank.h).toBeGreaterThan(0.7);
+    const noisy = emptiestRegion(frame({ x0: 0, x1: COLS, y0: 0, y1: ROWS }), COLS, ROWS)!;
+    expect(noisy.busy).toBeGreaterThan(EMPTY_BUSY);
+    expect(emptiestRegion(new Uint8ClampedArray(4), 2, 2)).toBeNull();
   });
 });
