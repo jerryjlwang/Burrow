@@ -43,6 +43,7 @@ export function Bubble({ bubble, onAction }: { bubble: BubbleModel; onAction: (v
     <div className={`pip-bubble kind-${bubble.kind}${done ? "" : " typing"}`} role={bubble.kind === "confirmation" ? "alertdialog" : "status"} aria-live="polite" onClick={done ? undefined : skip}>
       <p className="pip-bubble-text">
         {head}
+        {!done && <span className="pip-bubble-caret" aria-hidden="true" />}
         {tail && <span className="pip-bubble-rest">{tail}</span>}
       </p>
       {bubble.actions && bubble.actions.length > 0 && (
