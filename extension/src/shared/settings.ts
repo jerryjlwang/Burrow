@@ -20,7 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   debugMode: false,
   onboarded: false,
   micGranted: false,
-  characterName: "Pip",
+  characterName: "White Rabbit",
   hiddenOnHosts: [],
   voiceAutoResume: true,
   reducedMotion: "auto",

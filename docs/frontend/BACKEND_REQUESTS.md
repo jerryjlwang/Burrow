@@ -1,0 +1,45 @@
+# Requests for the backend team
+
+Things the front end needs from backend-owned code. Anything not done yet is mocked on the front end so work is not blocked.
+
+## 1. Finish the rename from Pip to Burrow
+
+Status: open. Requested 2026-09-19.
+
+Front end files now say Burrow, and the default character name is White Rabbit. These strings live in backend-owned files:
+
+- `server/src/agent/prompt.ts`: the persona still tells the model it is Pip. The pet should be the White Rabbit: curious, a little naive, asks the kid questions, forgets on a schedule and asks to be re-taught.
+- `extension/src/background/index.ts`: context menu titles "Pip", "Explain this with Pip", "Summarize this with Pip".
+- `extension/src/content/controller.ts`: the "Pip was updated" status string.
+- `extension/src/offscreen/offscreen.html`: page title.
+- `server/src/index.ts`: startup log line.
+- `demo-pages/*.html`: footer text.
+- `README.md` and `CHECKLIST.md`.
+
+Internal identifiers can stay as they are: `pip-` CSS classes, the `pip.settings` storage key, `__PIP_VERSION__`, and the `[pip:*]` logger namespaces.
+
+One line in `e2e/smoke.mjs` was changed by the front end to match the new onboarding heading ("Meet the White Rabbit"). Please keep that in sync if the heading changes again.
+
+## 2. Cross-laptop jump handoff
+
+Status: the front end is done for one machine. `docs/frontend/HANDOFF.md` defines three `chrome.storage.local` records: `burrow.grants`, `burrow.jump` and `burrow.graph`. Every page with the rabbit reacts to them already, so the parent view and the kid's page hand him back and forth in two tabs today.
+
+Needed from the backend for two laptops: relay those three records between the two machines. Simplest shape: the extension's background posts each write to `POST /api/burrow/state/<key>` and subscribes to `WS /ws/burrow` for the other side's writes, then mirrors them into `chrome.storage.local`. Pair the two laptops with a short code the parent view shows. No other front end change is needed.
+
+## 3. Parent approval event
+
+Status: covered by the `burrow.grants` record above. The parent view writes it, the kid's rabbit celebrates and says what he can do now. The same relay carries it between laptops.
+
+## 4. Housekeeping from the merge on 2026-09-19
+
+Status: open.
+
+- `e2e/.profile-anysite/` (about 800 files of a Chrome profile) was committed to main. It should be removed from git and added to `.gitignore` next to `e2e/.profile/`.
+- The new tab page and its smoke test labels still say Pip. The front end changed the new tab page's default name to White Rabbit; the test labels in `e2e/smoke.mjs` are yours to rename.
+
+## 5. Unhandled rejection in `runExtract` with two extension pages open
+
+Status: open. Found 2026-09-19 while building the parent view.
+
+With any two extension pages open (two new tabs is enough), `extension/src/content/controller.ts` line 209 throws `TypeError: Cannot read properties of undefined (reading 'length')` because the `{ type: "extract" }` reply comes back without `concepts`. A guard such as `if (!extraction?.concepts?.length && !extraction?.misconceptions?.length) return;` fixes it. Nothing visible breaks, the rejection is just noise in the console.
+

@@ -20,6 +20,7 @@ const entryPoints = {
   onboarding: join(here, "src/onboarding/index.tsx"),
   popup: join(here, "src/popup/index.tsx"),
   newtab: join(here, "src/newtab/index.tsx"),
+  parent: join(here, "src/parent/index.tsx"),
 };
 
 function copyStatic() {
@@ -27,7 +28,7 @@ function copyStatic() {
   cpSync(join(here, "manifest.json"), join(outdir, "manifest.json"));
   const pub = join(here, "public");
   if (existsSync(pub)) cpSync(pub, outdir, { recursive: true });
-  for (const html of ["offscreen", "onboarding", "popup", "newtab"]) {
+  for (const html of ["offscreen", "onboarding", "popup", "newtab", "parent"]) {
     const src = join(here, `src/${html}/${html}.html`);
     if (existsSync(src)) cpSync(src, join(outdir, `${html}.html`));
   }

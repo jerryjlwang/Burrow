@@ -23,7 +23,7 @@ function greeting(d: Date): string {
 function NewTab() {
   const [now, setNow] = useState(new Date());
   const [sites, setSites] = useState<Site[]>([]);
-  const [name, setName] = useState("Pip");
+  const [name, setName] = useState("White Rabbit");
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 15_000);
@@ -67,7 +67,7 @@ function NewTab() {
         <p className="empty">Your most visited sites will show up here.</p>
       )}
       <p className="hint">
-        <b>{name}</b> is in the corner. Ask where something is, or just start working.
+        <b>{name}</b> is here. Ask him anything, or teach him something new.
       </p>
     </main>
   );

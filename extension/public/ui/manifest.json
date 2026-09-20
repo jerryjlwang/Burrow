@@ -1,0 +1,71 @@
+{
+  "scale_note": "Draw with border-image at a whole-number scale. slice is in source pixels.",
+  "pieces": {
+    "bubble": {
+      "file": "bubble.png",
+      "size": [
+        14,
+        14
+      ],
+      "slice": 5
+    },
+    "bubble_teal": {
+      "file": "bubble_teal.png",
+      "size": [
+        14,
+        14
+      ],
+      "slice": 5
+    },
+    "button": {
+      "file": "button.png",
+      "size": [
+        10,
+        10
+      ],
+      "slice": 4
+    },
+    "button_primary": {
+      "file": "button_primary.png",
+      "size": [
+        10,
+        10
+      ],
+      "slice": 4
+    },
+    "button_quiet": {
+      "file": "button_quiet.png",
+      "size": [
+        10,
+        10
+      ],
+      "slice": 4
+    },
+    "button_alert": {
+      "file": "button_alert.png",
+      "size": [
+        10,
+        10
+      ],
+      "slice": 4
+    },
+    "ear": {
+      "file": "ear.png",
+      "size": [
+        8,
+        15
+      ],
+      "slice": 0,
+      "note": "Icon for the hold to talk button."
+    },
+    "bubble_tail": {
+      "file": "bubble_tail.png",
+      "size": [
+        7,
+        4
+      ],
+      "slice": 0,
+      "note": "Overlap the bubble's bottom edge by one source pixel."
+    }
+  }
+}

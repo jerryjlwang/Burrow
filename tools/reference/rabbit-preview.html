@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Burrow: the White Rabbit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Besley:wght@500;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#e7ece4;--panel:#f6f8f3;--line:#c3cdbf;--text:#1d1b2e;--soft:#4c5a52;
+  --stage:#1f3a34;--brass:#a9812b;--brass-ink:#ffffff;--focus:#1f3a34;
+  --display:"Besley",Georgia,"Times New Roman",serif;
+  --ui:"Work Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#111917;--panel:#19231f;--line:#2e3d37;--text:#eef1ea;--soft:#a5b3aa;
+    --stage:#0c1412;--brass:#d2ab55;--brass-ink:#1a1405;--focus:#d2ab55;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#111917;--panel:#19231f;--line:#2e3d37;--text:#eef1ea;--soft:#a5b3aa;
+  --stage:#0c1412;--brass:#d2ab55;--brass-ink:#1a1405;--focus:#d2ab55;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--ui);font-size:16px;line-height:1.55}
+main{max-width:1080px;margin:0 auto;padding:40px 20px 72px}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(2rem,5vw,3.1rem);line-height:1.05;margin:0 0 10px;letter-spacing:-0.01em}
+h2{font-family:var(--display);font-weight:500;font-size:1.5rem;margin:56px 0 6px}
+p{margin:0 0 14px;max-width:62ch;color:var(--soft)}
+.lede{font-size:1.05rem}
+.bench{display:grid;grid-template-columns:minmax(0,420px) minmax(0,1fr);gap:28px;margin-top:28px;align-items:start}
+.stagebox{background:var(--stage);border-radius:6px;padding:14px}
+canvas{display:block;width:100%;height:auto;image-rendering:pixelated;border-radius:3px}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center}
+.row span{color:#cfd8d2;font-size:.85rem;margin-right:4px}
+button{font:500 .92rem var(--ui);color:var(--text);background:var(--panel);border:1px solid var(--line);
+  border-radius:4px;padding:8px 12px;cursor:pointer}
+button:hover{border-color:var(--soft)}
+button:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+button[aria-pressed="true"]{background:var(--brass);color:var(--brass-ink);border-color:var(--brass)}
+.stagebox button{background:transparent;color:#e6ece8;border-color:#4b6159}
+.stagebox button[aria-pressed="true"]{background:#d2ab55;color:#1a1405;border-color:#d2ab55}
+.stagebox button:focus-visible{outline-color:#d2ab55}
+ul.bill{list-style:none;margin:0;padding:0;border-top:2px solid var(--text)}
+ul.bill li{border-bottom:1px solid var(--line)}
+ul.bill button{width:100%;display:grid;grid-template-columns:150px 1fr;gap:14px;text-align:left;border:0;border-radius:0;
+  background:transparent;padding:12px 6px}
+ul.bill button:hover{background:var(--panel)}
+ul.bill button[aria-pressed="true"]{background:var(--panel);color:var(--text);box-shadow:inset 4px 0 0 var(--brass)}
+.nm{font-family:var(--display);font-weight:500;font-size:1.08rem}
+.meta{display:block;font-size:.8rem;color:var(--soft);font-family:var(--ui)}
+.nt{font-size:.9rem;color:var(--soft)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}
+.pair figure{margin:0}
+.pair figcaption{font-size:.85rem;color:var(--soft);margin-top:8px}
+.go{background:var(--brass);color:var(--brass-ink);border-color:var(--brass);font-weight:600;padding:10px 16px}
+label.chk{display:inline-flex;gap:8px;align-items:center;font-size:.92rem;color:var(--soft)}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.88em;background:var(--panel);padding:1px 5px;border-radius:3px}
+@media (max-width:820px){.bench{grid-template-columns:1fr}.pair{grid-template-columns:1fr}
+  ul.bill button{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+  <h1>The White Rabbit, pixel by pixel</h1>
+  <p class="lede">Every animation for the Burrow hero, hand-placed on a 48 by 58 grid. Checked jacket, waistcoat, bow tie, and a pocket watch on a chain, all from the book. Pick a state, change the wallpaper, make him talk, then send him down the rabbit hole.</p>
+
+  <div class="bench">
+    <div>
+      <div class="stagebox">
+        <canvas id="main" width="384" height="464" aria-label="White Rabbit animation preview"></canvas>
+        <div class="row" id="walls"><span>Wallpaper</span></div>
+        <div class="row">
+          <button id="talk" aria-pressed="false">Make it talk</button>
+          <button id="blink" aria-pressed="true">Blinking on</button>
+        </div>
+      </div>
+      <p style="margin-top:14px;font-size:.9rem">Talking and blinking are small patches drawn over the idle loop. When he breathes, the head drops one pixel, and the manifest tells the renderer to move the patches with it.</p>
+    </div>
+    <ul class="bill" id="bill"></ul>
+  </div>
+
+  <h2>The jump between laptops</h2>
+  <p>He never walks off a screen. A hole opens under his feet, he drops in, and the hole closes. On the other laptop a hole opens, his ears poke out while the two machines shake hands, and then he pops up. A slow network just means the ears wait a little longer.</p>
+  <div class="row" style="margin-top:6px">
+    <button class="go" id="jump">Send him down the hole</button>
+    <label class="chk"><input type="checkbox" id="slow"> Pretend the network is slow</label>
+  </div>
+  <div class="pair">
+    <figure><div class="stagebox"><canvas id="a" width="288" height="348" aria-label="First laptop"></canvas></div><figcaption id="capA">This laptop</figcaption></figure>
+    <figure><div class="stagebox"><canvas id="b" width="288" height="348" aria-label="Second laptop"></canvas></div><figcaption id="capB">The other laptop</figcaption></figure>
+  </div>
+
+  <h2>Using the files</h2>
+  <p>Each state is one horizontal strip of 48 by 58 pixel cells, listed in <code>manifest.json</code> with its frame count, speed, and whether it loops. Scale by whole numbers and set <code>image-rendering: pixelated</code>. Every pixel is listed in <code>rabbit_px.py</code> as plain runs of color, so you can nudge a pixel there and regenerate, or open the strips in Aseprite or Piskel and edit by hand.</p>
+</main>
+<script>
+const SPRITES = {"idle": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAAA6CAYAAADm1VZ4AAAFZUlEQVR4nO2dT2gcVRzHvyse4iHHCsEKYrqHZP2zZK0eMgUxXlIohUAPHlK0IJKb98Ieeug5t+BFinvoISCWHnJRKXQQbM0SW5c9RKxoZLVeggpZcnketm86Mzu7mXnzfjPv1/l9IGR29jezn8m+7/x5+2YDCIIgCIIxajhQajhQVPXUmPi4tg2CGc/nXYEaDpS35AXTtZm5ms16akx8XNwGAEjrkbWeGrb+ajhQy4vzSh0fKnV8OJqeslfMWk+NiY+r25DWI2s9NWz94w3hpAaRtd41fw7b8KzvgCj8n8uzsObozj0c3blHVk+NiU/Z26BPw/y93WCev7cLb8nDpB1QlnpqXPG3EgChXKq2A7LpLwFISXgPpP/4L7z7NrxmC37XL/+CTDBCAiBUGgmAUGkkAEKlkQAIlUYCIFQaCYBQaXKPBQJG3YFxpn04kVRfJtz9BXOsBCCOHijGFW7+3ANcpr/1AIQ/quYId3+AX4DjFOlvFICkcRmm+Hu78JqtQocVc/c/yYczRftnvgi22Xg0RQ7K4u4PEAS44AFxLvlnCgBF49EU8UZw9wf4B9g1f+kGZQT3ALvobyUAjfoKGvUVsnpquPsL5uQOQKO+gt6vPwTTtuup4e4P8A9wmf52jgCvvEVaTw1nf+4BLttfrgGeATgHGCjXP3cAevvfJE7bqqeGu7+QD+MADG/dxvDWbQCjhpDUGB5vdvB4szM2P1wfXk+RcPcPuyRN26qnpmx/46EQMxcvJM73mq2gm2vtxiYAwP90fey5k9ZDDXd/HbqZixcmNgQd3hef+GvC9eH1FIkr/iRjgbxmazTd+xkA4DXOBM+5Dhd/7gF2xT9TAGozczU1HCiv2cL2l18AAOZebYzVhRtReF4Sg196AIBLa5fJv12Bu38auAR4EkX7G71Z+hM93Yg08cYUbEhMXDcaTdGNh7N/3D0pwMCTvWWoAbkSYNf8jTc2/AWx8YaUlktrlwGglD0nZ3/OAQbc8s+1wXrchen4bb/rjyRKOm3g7M85wIA7/rmPAJ12PZi3fm0fny+8Fjz+8Y+/AQBvvnQqmHel/9PYMmW+AVz9Ad4BBtzwz3VDTKddR79/gIWF00Yv3u8foNOuB6P4ij4Ec/UHotugA5k1wI+++gjr1/ZLuZnHFX+r3aB/vv8ernz97fgT//wVqQF+t/my1uDizz3ALvlb/xzgv48/nF7w6DfbL2kVzv5cAjyJMvxJvhXChH+//8SZ+2pNcMWfc4CB4v1zBaDfP4j8Bl7OtFx4evadzwpvRNz9bcLZHTD3zxyAeO9J5Bzuu2jt3aX7AIBz3bOR+bpeL9tpj3oC/K5P/kZw9w/DPcAu+JOeAsUbThpc2pO66F9UgAGa7lHX/J25BtA87RMuvmvRBi75mwR4daMHwI1/AVuEv3EAkg5DeQ5hwKjx7Gw1Io+p3gTxH5+uon/uO8Kubx9hYeF0Yl/u3aX7wWEsjK6/vn0Umb+z1cCsdxOrGz3Mejexs9Ug/6oO8a+2v3EAzl/1cf6qP7XmXPfsiYexSevxXn/DVC0V4j99PVXxd/KmeP/hA/gPH5StYYz4l0sWf+NrgPANI3nO4cLrWd3oYWfrg8hjqoFm4j++nir6Zw5AcFdVbCQlgLFurEno871Oe/RYj6gEoiMDKf744i/+EZ+U3mOEx3PnJSwavmCh7IIT/6eIf0bUcKCWF+eVOj5M/FlenFdqOIj8pKknkRV/8Z8C6f8HqM3M1dKk0NWv5xZ/+7jmb3wRHL8vk2oZKsS/XFzxz/WtEJNIuvgwWYYK8U+3DBUu+ee6CJ640gkiJstQIf7plqGCu78gCIIgCAJj/gdXOV3lUa0nMAAAAABJRU5ErkJggg==", "frames": 4, "fps": 3, "loop": true, "notes": "Ear twitch, then a one pixel breath. head_dy tells the renderer how far to push overlays down per frame.", "dy": [0, 0, 1, 1]}, "listening": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJAAAAA6CAYAAABfwdAwAAAEbElEQVR4nO2dP4jTUBzHvxWHOtyoUFQQtUOt/7jzz2AE8VwURDi4wUGRAxE3d6GDw81uxcXBDjccCOLQRUW4nOCfK+ef0oMTFT2v/llEhRaXONSXJk2TJu+9X9LY3wcOkvT3Xj9pfsl7eflzAAOr3bSsdtOiiqcmSf+NOipJM1a7aRnjhj2dyeYyOuOpSbu/LZLGPdhqN61je3ZZ1p8flvXnR2c6wCtqPDVp93dJhZWJGk9F74856EeNGj8q/kpNmDgcmstLAADj4ETgYTFqfFy0Hj8DAGw6cYQknpok/TfIFuxNBgAwl5dgjBvw2wOixDPpQDqBnLQeP7OzmiKeGV60JBAzunACMUpwAjFKcAIxSnACMUpwAjFKjPy1MCD6gNqwDCAKkvTnIxDSP46VpL+WI1C/jA4aXU7DHsz+4SBpwsTtAmmF/cOjPYGc17rSCPtHQ6oP1O/CqCxJXFBl/y6q/pETSKe8IM6NwP5eVPwjJRCFvCCOjcD+/sj682k8gGJ+EsX8JFk8NUn6a0mgNG+AYn4S9Q8v7Gnd8dQk7a+cQEmvAJMseo5AOw6RxlPD/vJwH4hRQjmB6qsP+07riqeG/dWQHolu37sPAMieO+sr8u1mBQCw5doF13JnvLOeOGF/bz3k+D2c5nlQzTHteRJyUFnicRT21+tPci3MODjRma6/BQAYxd32Z8MO+xMj9oL1lUVrfWUxOJv/EZT5op64HhFmf73+Uo8UiyH1+bt3XMtzO4uueXtP6Mn85ru6a3566iLMmom4HnFmf33+0ivsfE1I74qEZXrqIgDE+uML2F+Pv9JKi0Oe7A1MZs3sSCT0cgX2V/dXPgJVSnl72YUbq7hd2GvPv/z8HQBwYOtme9lM442nTJJ7MPur+SvdUFYp5dForMlUAQBoNNZQKeUTuyGL/dX9tZ7Gfzl1EjMPHnk/+PnVFQN80vm12mD/6GgfB/p9+VJwwPuPur9SK+wfjaG5mPrr6ZVUv2hqVP2VjkCi/e22w9sjlXNOjx29Za9EXB1S9lf3j5xAvb3/RmMNhcK2zodP3LEL488BAMdrh13LRbwoWyl1TkXNmkm+Edhfrz/ps/G94mFIYk/2g/0H+w/dyxW6g2LGUGyEqIyav3QC9WtHVdpgoCNfLRdd81Qbgf290zL+ymdhs/MtFArbuu2wg4Xx53Y77ETEz863XMur5SLGjDmcvlrHmDGHarlIPkjH/mr+0gl05rqJM9fNwJjjtcMD22G/eox9+2XVQsH+wfWE9R+acSAn5utXMF+/SlpDmlHyl+4DiXtNALU22FnP6at1VMvnXfNUFyrZ31uPjH/kBMpkc5l+V4IBeMYh/BDtdaXUmRdXhAH3rQkUPz776/XXckOZKk5RZ4eN8hSY/bvE7j/o6QBxf63zL0w8iSz7k/qTvh8ok81lwmTxsL5fh/0HI92J7r0xm6oMFeyvB6WnMvzo1/mSKUMF+4crEwalTrRvpQH/sTBqGSrYP1wZhmEYhvlP+QuPU6pFSzQHqQAAAABJRU5ErkJggg==", "frames": 3, "fps": 8, "loop": false, "notes": "Ears stretch up, eyes widen. Hold the last frame while the kid talks.", "dy": [0, 0, 0]}, "thinking": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAAA6CAYAAADm1VZ4AAAEyElEQVR4nO2dPYgbRxiGX5kUSnFlAiIOBB8qdEricImT4mQIuTQ2BIPBRQqbYDDBnXuDCheuUrg70qSIChcHBuPiGtsEvAQS5w7/RKgwJCE5I/80hx04cc24ELOalbR7u7MzO7s37wMHq72Z0bO392m+2Z1ZAYQQQog2YjQUYjQUtsrbhv5ucen/Vt4GxGgoOsudcLtWb9RMlrcN/emvjRgNxcrSohB7O0Ls7Yy3EyIza3nb0N8/f2O9x7TMflJZy9uG/v75yzbUOrlTIADY/eV3AMDbX35upbxt6O+WIvxl6rSx1gYAdJY7EKOhOJTRlXhI2QbNWUlyN9IDkINLqQadGqj+wVYAdbtWb9QYACSWuLShKkEwzz/YCgAA8hiYAlniIKcNVSDJXw1g9gAWOOhpg0u3NGTxZwAYxoe0ocxk9WcKRFJRhX/+JOL82QMYplZv1Ka74Cr98/jmbyQA5t2QSBqElOUGjMS0vzwJcjuv337QP0oWfys9gIy+qmLC3+WnJv3T+xsPgODBpukmC4X+binaX2sQLHMsE7LBg83wSknuxlJC/wm++2cOAJPykiJPAv1n8dk/UwDYkJcUcRLoH4+v/rwPQLyGAUC8xlgAtJuraDdXrZW3Df3d4srfSAC0m6vo//NHuG26vG3o7xaX/uZ6gA8+s1reNvR3iyt/jgGI12gHwOjmLYxu3gIA9J/cCfer2y+u9fDiWm+mrlpm84dLYTtFQv8xvvtrT4Won/omVkry7qWzsfXnlS8S+tMfsDUZ7pNP5+6vyjwV+rulSP/MM/7k3bz1Gz8DABpH2rkEhn/1AQBnTp8rZO45/aP47q91sNMHIUl7MFJaUtQfX0J/+ku0D1hddTN9IGk5c/ocADerjuhPfyBHAACTVTu6CxhcL7amP/1z9wC9bjPcd/bKE/zU+jB8/fDpSwDA0ffeCfedH/w5U8flJxD9/fbPtSCm121iMNjWaQIAMBhso9dtOluQQX/6G70M+uzrr3D+9t3ZX7x6HikD/GfybY1Bf7e48Dd+H+D/C98lF/j7X9NvaRT6u6Vo/9LMBXr92/eVfh4l/d2i65+rB5D52ySPez9TPXV74Ysfw4MoakBGf/pnDoDp0ftgsI1W6/D4l79Gy95bvg8AOL51LLJflpd1e93JMxxtnwT601/F6qMRp8XT4OKTKA76H3z/0j0bdHJTpFpPVZbQ3y1Z/bUDYF4elieHA8by8rHW8rWtk0D/2W0f/XNfBbq6votW6/Akj1O4t3w/zONUZPmr67uR/RtrbSx0ruPExT4WOtexsda2fpOG/n77awfAycsBTl4OEssc3zq2bx4X107no4911VJB/+R2fPEvzX0AleDxIwSPH7nW0Ib+bsnirz0GUFft5Mnh1HZOXOxjY+3byGtbE7XoP9uOj/6ZA0D9Bg51Vh6Ameu4cch8r9cdv5Yz+oDo1Fgbf3z60z/ik9J7BnVBQ15UUXXAYvMSHP0n0D8jYjQUK0uLQuztzP1ZWVoU8nty5U+a8lZk6U//BKx+P0Ct3qilicKyPp+e/uYpm7/2IHh6YbKtOragv1vK4p/rqRBxzBt86NSxBf3T1bFFmfxzDYJjG40R0aljC/qnq2OLqvsTQgghhFSYNzeVy0WmfcPaAAAAAElFTkSuQmCC", "frames": 4, "fps": 3, "loop": true, "notes": "He glances at his watch while dots count up. Loop while the model works.", "dy": null}, "confused": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAAA6CAYAAADm1VZ4AAAFZUlEQVR4nO2dP4gjVRzHvxGLtdhSYfEEcUmRjX+WrKfFzoG4NnsgwsEVFnfIgch29gdbWFxtt9hYmOKKBUEstlERbhD0vHDeGVIcqOhK/NMsKmzYZixyL3mTyUzevL+Tm+8HFiaTN28+7+X99r2XNzMBCCGEEG8ko2GSjIZJaA9d6B8Wm/6P28ikDMlomESdaLLdWFlr+HYwgf5hWWr/ZDRMtjfWk+TsJEnOTsbbS/SfiP5hWWr/WfllK4SJfxWGHHWu/yK8D4EA4PTr7wAAT7z2ilJ6UcCqdHdl/KvYZdep/hehHAAqUeaigmw1oBD+wv3ooA0AiDqRdhlY//oUBbBSAMiVsCidzULYakAh/GX33b0+AODooK1VBta/PosCeGEAiAziu3cWniza3LJWCFsNKJR/Y2WtMTl3L4ZKA5gH618flQAuDABZXoy7ZpHHYfHdO9YKYaMBhfQH0mUQDSnuxcpdPetfH9UANpoE25iEFGHagBbh2t81rP98VAO4MAAmmWxu5aZR6dpCUQX/2Q+iTOOpgr8Jof1VAnhhDyAymfee7ri2DCYNSD5+3ns+/OUPQGcSGdp/2et/EUpDoHmF9rV4YtqAgLD+pg1I5DG7j/Wvfu6i+ne2EFZUwDJjPxsNSAdb/sC0DD4Xklj/03yKAthJANju2nw3IBdds8/Gz/qf4r0HcDWp8VX5VZ5UqsD6z1IUwNrL2qqLGypEm1veu1f6T6mz/2NlD7AtDzxcAHk4PrOWaQ70z1Jn/1IB4EJe4ONDoH8+dfUv3QM8irSbO2g3d5ylJ8WErH8rAbDMDajd3EH/l+8n27bT+4D1r49xAIQuQN1h/Zthpwd49mWn6V1D/7CE9OccgNQa4wDoP/hy7rat9K6hf1hC+2uvBI8++xwAsPLWm7kif33YBQA89f6V1H45vZyPT+ifzccnVfHXDgCVE86K6+bjAvqr5+OCqvi7uRgu5waIZbnOhv5h8emv9XiOqBPh8NNPAABrz7WNBIY/je/XvHzpqpfrUeifpu7+RhfDiUIIVAsjpAW+Kl9Af/oLtAssP29ltiCqXL50FQC8Vr6A/vQHDAIAmN61o3sDQ9yLxxKBHrlHf/ob9wDd/eZk35UPHuDj1vOT1z/8/jcA4KWnn5zsuzb4MXNMyP9A9K+3v9ZCmCw/GBzrZAEAGAyO0d1versWXUD/MfS3/DXoH2+8jmtffJV9458/U2mA32ye1hr0D0sIf+vrAP+9+05xgp9/tX1Kq9A/LL79K3Mx3L/fvue1G7YN/cOi62/UA4jx23Qc90yp4+Tt1Vc/mhTC14SM/vQvHQCzs/fB4Bit1rnxm9+k097q3AYAXOidT+0X6cWx3f3xV2FxL3b+IdCf/jJOfyJpVlyFEP+J8qD/o+8f5DfCipguiuj/nFBI6B+Wsv7aATBvHGYyhgPG8uLXPMRrVx8C/bPbdfQ3/hboxuEpWq1z03GcxK3O7ck4Tkakv3F4mtp/dNDGanQTu3t9rEY3Uw80NfWkP/3noR0AF6/HuHg9LkxzoXd+4TguL5/ohRd11ZSgf3E+dfGvzDqATHz/HuL790JraEP/sJTx154DyHftmIzh5Hx29/o4Ong79drVhVr0z+ZTR//SASA/b12+Kg9A5nvcPMR4r7s/fi2u6APSl8a6qHz60z/lo+idQb6hwRRZVJ6wuPwKjv5T6F+SZDRMtjfWk+TsZO7f9sZ6koyGqT+V9E5k6U//Apz+PkBjZa2hEoVVfT49/e1TNX/tSfDsjcmujnEF/cNSFX+jp0LkMW/yoXOMK+ivdowrquRvNAnOzTRHROcYV9Bf7RhXLLs/IYQQQsgS8z+4szILKEUhHAAAAABJRU5ErkJggg==", "frames": 4, "fps": 4, "loop": true, "notes": "One ear flops over and a question mark bobs.", "dy": null}, "celebrate": {"src": "data:image/png;base64,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", "frames": 6, "fps": 9, "loop": false, "notes": "A hop with happy eyes and sparkles, landing with a squash. Play once.", "dy": null}, "wave": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAAA6CAYAAADm1VZ4AAAE1ElEQVR4nO2dv4scZRjHvysWl+JKi8Ok8bhi7/yx3BItbkJEbBIQIZDCwiABkfwNgS0sUl932Ii4RYoDIaS4RiSQQTDhljPx2EJQ0JPV2Bwq3HLNa7HM7Mzszuw7749539n5fmBhdvaZdz/zDM/O+86vBQghhBBlxHgkxHgkbMX7hm/+zL86L5uQCbaDeLq1stYyGe8bvvkz/w79xXgkdjbXhTg/FeL8dDJdUJll433DN3/m36F/VmaRVNl43/DNn/k34/+SCbmzR09w9uiJtXjf8M2f+VdHewxQF2R+JerWH64Tvua/EQWQHDgtimMRmMfn/C99AUTJD48OF8YGnS6LwDC+53+pCyCZ/Lw+44V3346nw6NDFoFB6pB/I4PgupJMPqkeH/K/1HuA1spaS4xHIuh0c2Nkds1EjTrkf6kLAJhuhHmfyQzMiB6+53/pCwCYf3itDid/lgWf82+kAOb15YpW0Ie+3yLq5M/8q2NlD+DDrk0H+rulSn/jBeB6UKML/d1Stb/SYdAyJzcWER4dItgOKu0T0n9K0/1LF4BJ+YgqNwL9Z2myf6kCsCEfUcVGoH8+TfVv9JlgQlgApNEYKYCg00XR6W7deNvQ3y0u/bULIOh0ER4dxlfymY63Df3d4tpfuwCSAxqZwU3ZeNvQ3y2u/TkGII1GuQDGDx5i/OBhYcyL3T5e7Pa127EB/eXbsYEv/sqXQqx8+EHh56n+2Ve7uburRe3Ygv5y7djCF387F8N1urh64dLMPB/6nDLQ3y1V+pe+7zI6m7f/zdcAgLXXtubGZUfoefKjX44BADdv3EI4CK0/GoP+aZrur7Sy2ZWIyFuZLJF0RFXJj6A//SOUVzj5rJfsishy88YtAKg0+RH0pz+gUQDA9K4d1RsYwkE4kXD0CBL60197D9DvbcTzPv78Z3zZfj1+/+MffwMA3nr1lXje7eFPM8u4/AWif7P9tW6I6fc2MByeqDQBABgOT9DvbTi7IYP+9Dd6GPTP99/D7W+/m/3gn79SMcDvJr/WGPR3iwt/4+cB/vv0k+KAX38z/ZVGob9bqvb35lqgf3/4zJtnxahAf7eo+mvtAaL+27Qfdyk/eM5yyenVd76IV6KqARn96V+6ALKj9+HwBO32xcmH36djH28/BQBcGVxOzY/io2X7vcmhsHAQWt8I9Kd/EquPRsyKy+DilygP+i+/v3fPBp2eFAm82Ahlob9byvorF8C8fphOHw6YyB/sbaXe29oI9J+dbqK/9lGge/tnaLcvTvtxCR5vP437cUmi+Hv7Z6n5B3tbWA3u49qdY6wG93Gwt2X9JA39m+2vXADX74a4fjcsjLkyuLywH5fXTvDGm6pqUtC/uJ2m+HtzHiBJ+PwZwufPXGsoQ3+3lPFXHgMkb1jQ6cMl27l25xgHex+l3tu6UIv+s+000b90AcT/+5S5kg/AzHHcPKL+Xr83eR9d0QekL421kXz60z/lI+k9g+yfH8uQFE0OWGwegqP/FPqXRIxHYmdzXYjz07mvnc11Icaj1Esm3oos/elfgNX/B2itrLVkqtDX59PT3zy++SsPgrM3Jttaxhb0d4sv/lpPhchj3uBDZRlb0F9uGVv45K81CM5tNEdEZRlb0F9uGVvU3Z8QQgghpMb8D0DwNMpsj0UhAAAAAElFTkSuQmCC", "frames": 4, "fps": 5, "loop": false, "notes": "He waves with his ear. Use for greetings.", "dy": null}, "sleepy": {"src": "data:image/png;base64,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", "frames": 4, "fps": 2, "loop": true, "notes": "Both ears flopped, eyes shut, z's rising. Bedtime and session limits.", "dy": null}, "dragged": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAAA6CAYAAABPjVypAAAD9klEQVR4nO2cP2gTURzHvycO6dBRIVhBlAwx/gmJ1cErinVpQYRCB6EtpSDSzalLIYNDZ7fgImKGDgVBHLKoFHoItjbU1pChUEUr8c9SVEjocg7xXe+Su/TuvXt/Iu8DhbuX37v7fe/b9969d5cAjNjNum036zaveFHI0nGUpbLdrNtmznS2jUTSiDNeFD2pw27W7atnz9j2/p5t7++1trv8R0SNF0VP6mhP4rBkosaLQgUdR1hFNJZX0Vhe5RYvClk6mA3QsKENkIw2QDLaAMloAySjDZCMNkAy2gDJMK0FAUDf9csdZd1mhX7xKiBLB7MB7ZBFql5HlI5YDbA21uM8nDRE6og8BpCl2DiStDbWYebMrk2dF6roiGRAnEkTZJigko7QBvBImiDSBNV0MN+GZlLDyKSGucWLQpYOJgMyqWFUP71ztuOOF4VMHXoiJhn2LujUJa7xopClQ7cAyTAZUN1+5bsdV7woZOqgmgk3n78AACRu3wpM4MfDEgDg+P1JT7k73n0cGaigg8qAbicys3lvwZOHAPyn97IufJjzi9IR61qQmc3jWt/JwM96Za1IpI7QY4CRSBpWxYKZzaO+U0V9p9o1fm5iGnMT011jyHHMbB5WxYKIV/xU0xFZMJnKLz176ilPns4A8Gm6/yD/Ne2Cx8emhF18N6rooBLtfjm1XUBYxsemAEDKxSeooINaOFlwon1wYVWsVgKS35CWrYOpBZQKKads8sE2HqfPOfvvv/4EAFw8ccwpm6l96KijQguQqYP6gUypkEKtthu1ukOttotSISX9gYxsHbHdhn67eQMzL193fvDruycG+BLXKbkgWkes84A/d6e7B3z8HOfpuCFShxKLcb/f3pPSDcUNjQ7qFkD6zYP+03/mGFTPvd1/5ZGTvOgBWbaOSAa03zXUartIpwdaH77xxq7k1gAAQ5VBTzmJJ3VLhdYtoFWxhJmgko7YX8witCccBpktIQjeOrgZQMPBZMhUyoSoRNFBZYBf/8fSdwKtpMvFjGeftwkq6GC6C1pYaiCdHjjoP12s5Nac/tMNiV9YanjKy8UM+s1FjMxW0W8uolzMCJukydRBZcDovIXReatrzFBl8ND+M+g45vkLNGlFRgUdSswD3Fhbm7C2NmWnwUxYHVRjgHutnKXvdB9nZLaKcvGOZ5/3Qp0KOiIZYCSSht8KIoCO++cgSD9bKrT2yUoi4F0S5nnxVdLB/ECGFXeC7oFKxC1oT+oI+sGK9h+ucP+FiY81yR7Swe37AUYiaYRxX/XvB/DWQTUIH/YmQVx1eKOCDuq3IoLwG3Ro6vBGFR3Ug3DgAQMSoKnDm/9Fh0aj0Wg0Ggr+AodIqSq6h8b3AAAAAElFTkSuQmCC", "frames": 2, "fps": 4, "loop": true, "notes": "Startled and swinging while the kid drags him.", "dy": null}, "hole_only": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJAAAAA6CAYAAABfwdAwAAAA+0lEQVR4nO3XzU3DMBQA4BT10BWYgDNS52CCTsIATMIEzIHEmQmyQm7uyZWxKIoTW3Hp952Sg5/fy3v5GwYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC6tNs6AZYL0xhqxNkdHhfPwb5GAv9BaTPWXPSl8hxPL69N4pbU1mSArjVji4v+lzTP0maka1vXFffKc/z6/qwSP48b95tTV/UBCtMYrjUjTGPoZYjyPEubka5tWVeaZ62ByeVx435z6npokhF3o9ld8+tmnTx9ojWvsPePt8vxrb/Cnp+OP85jbXPq6qqhW7rnj+j0ZhiGstoM0A3r4TceVjkDhuBzVXxGlQUAAAAASUVORK5CYII=", "frames": 3, "fps": 10, "loop": false, "notes": "An empty rabbit hole opening. Reverse it to close.", "dy": null}, "hole_open": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJAAAAA6CAYAAABfwdAwAAAEzklEQVR4nO2cO4gUSRjH/ysX7LlsYKCwuILcOcg4PtdTg2tFXBMFFQQDQUUEETNjFyYw2Piy5ZILHGGDhYM7g01URFvB1/gcRlF0uZtzfASKrx1M2qCtnn4/6qvq3rn9flF3TXXNr6e+7uquxwAMwzA9jdVpW1anbenKrxv2l+cHagFWp20ZI4az3dc/1Kcyv27Yv0B/q9O2fl31s2V9fW9ZX9/b2zGRnTW/bti/QH+/TJJU1vzs3xv+C2inYTN7+SZmL9/Ull837C+PkgBi5i8cQAwJDiCGBAcQQ4IDiCHBAcSQ4ABiSHAAMSTIY2EA8OP2zYG0uN7NsPxFwv7yKAkgP2Kwrldh//QoDyDz3h3VReYK+2dD6hlITAlQIWveuwNjxIi95aqG/btQ/TMHkEp5QZ6VwP5BKP6ZAkiHvCCPSmD/aGT9+TWeIaEkgCqlUVRKo9ry64b95SEHUKU0isbMbWdbdX7dsD8NNXeg5b9oza8b9peHn4EYEuQAajy9GLqtKr9u2J+GdE9056/zAID+fXsiRd78VgMALDl12JPuzu8uJ0/YP1iOdqKWhgSWibi2A+uQko7V3I/C/mr9tYyFGes32tuNZwAAo7LC+Wyuw/6aEVfBy8fXrJePr8VH83fiIl+Uk9cCPfZX6y+1Llp0qU/9edaTPvRTxbPvXAm+yG8/b3j2D+w/ArNuIq912uyvzl/6hN2L9P0nkpYD+48AQK4/voD91fiTTlrc8mQnMJl105Yo6B8i2J/uT74D1aolJ+3wmaf4o7za2b//31sAwLqli520Y81HgWOKvILZn+ZPmlBWq5bQbLZkigAANJst1KqlwiZksT/dX+lr/KudO3DswqXgBx9ee/IA/6r8WmWwf3aU9wN9On40PsOLf1R/pVLYPxtzZjD1440TuTYDqpmv/qQ7kGh/u+3wskzHubcHt/zunEReD6TsT/fPHED+p/9ms4Vyedj+8Lo379WRWwCArfVNnnSRXxxbq9qvombd1F4J7K/WX8vCQoFfPA1FXMlRsH+yv9YAkqHbKWbMiUrIynzzlw6gsHaU0gYDtvz0RMWzr6sS2D+4LeNPfgsbn5pFuTzcbYddXB255bTDbkT+8alZT/r0RAWDxiR2nWxg0JjE9ERFeycd+9P8pQNo95iJ3WNmbJ6t9U2J7XBUOcaatbJqqWD/+HLS+s+ZfiA35sMHMB8+KFpDmvnkL/0MJOaaALQ22F3OrpMNTE8c9OzrGqhk/2A5Mv6ZA6ivf6gvbCQYQKAfIgrRXteq9r4YEQa8UxN0/Pjsr9ZfyYQyKm5R9wObzldg9u9C8ZdqwpL+JcJYv9GJaCctIb94Xcyj36RX/d2Vm+SzfHibJ22mdSXRX+znMpSh/P9pXJWgrOAQ0vof2ns6dZm6/UXlCqe4YBDcfXLbs79oIDqv8BdBJ75Pa0+0f2K2n7AKSDomT5JcwiqgCH+r07bEbymcZF3SnrP4vjQXBGlVRhT+26dgpnUl8pgiVjVE8e7zwtD0RQNfIo/R5R8WQEkuMv7uYzastP984dzf43ofomWPDRUpYE6xez9LkwXYP66bPJ59/I7+u6QsImAE4tzSnFNPDfTpJOsFUcQgKTXoo6BcDBxAPYyqVqDXZgww/yO+Af6BLvcNnrLqAAAAAElFTkSuQmCC", "frames": 3, "fps": 10, "loop": false, "notes": "The hole opens under his feet. Reverse it to close once he has popped out.", "dy": null}, "dive": {"src": "data:image/png;base64,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", "frames": 7, "fps": 12, "loop": false, "notes": "He drops into the hole. Reverse it to pop out on the other screen.", "dy": null}, "hole_wait": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAAA6CAYAAADm1VZ4AAABzklEQVR4nO3aPW7UQBgG4AmiIKGipEYICRr+lIZFygk4ASfhAJyEE3CCFFtFJNByApekQbHSDIXlhUzWu+u1Jzaa56ns1bfjd7z65B1rQgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIA5iXUVY13FXPW5yT+tKfPfHzpArKu4eL1YHR88eHwwZn1u8su/t1hX8d3zJzFeX8Z4fdkcb+jMvvW5jZV/qjm4/xPmT8NsC9W3fm755zaH0u5/rvz3hk2jcXV6Fq5Oz7LV57ZPnjnNobT7P2b+URoA/lcagKJpAIqmAXbUvn5b/jhf/f88PDkOi5dvwvJiGaZ+nch+NABF0wAUTQNQtMFbIbrMaa/JPuSf1l3l79UAXaEOT45vnH/88GnjOGl9OnauBaX86+vTsUvKv1MDtIN3Bfv3rUgIIXz/+W1t3aOH6+vTcdvrjfVDyN+Q/7atDRDrKrYXSIO1gdZ15CZpfTpue70xdvvJf5v8fw1aA/z6fRRePH2ffHo0Wn1u8m+uz20O+Xfq7q5HWNejqq9Xz97eOP/y9XMTLvMjWP5Gyfl7TTBdxGxbrOyqDdy6q0WY/I2S8w/+fzfk+6sQE20jkL8hPxTqD850TlbkJPAIAAAAAElFTkSuQmCC", "frames": 4, "fps": 4, "loop": true, "notes": "Ears poking out of the hole. Loop while the handoff completes.", "dy": null}, "overlay_blink": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJAAAAA6CAYAAABfwdAwAAAAtElEQVR4nO3WsQqDMBAGYC3F2TdwdxKy+viugm9Sly4u6SZtKZYSg0i/DwIZ/hzHcUOKAgAAAAAAAAAAAAAA/lSZWiAuc3wpWNWbNX/N56b/tP4vKY/hmlqg70LWPNuOnn/yAt3uddZ8bn0XimEa1/ve+dyOnn/yAp3dMI3rIgzTWJRVvWueL+Iyx7YJsW1CfP+g7ZHPLS5zfD5753M7+/wBAAAAAAAAAAAAAAAAAAAAAPjoAdQWfuIAU53xAAAAAElFTkSuQmCC", "frames": 3, "fps": 12, "loop": false, "notes": "Eye patch: half, closed, half. Draw over idle, offset by head_dy.", "dy": null}, "overlay_mouth": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAAA6CAYAAADm1VZ4AAAA/0lEQVR4nO3WMUoDQRQG4CeIYOcFrGIVG8EyAS9i4Sk8RE6RwosE1nJhG620ygXsAjZrIQ+ShQQCE5OR76t2ppj55+0MMxEAAAAAAAAAAAAAAAAAAAAAAAAAAMAxnJUesP/+6ndOeHFVfM6SMv/07n6jv+naiKgj/zB7arr25PNPxqM+a53rWG+/vn8WzX+QA1DzD8j8D5fXG/2L1bKK/JPxqB9mT4vVsvgGKm19/zRvHxERMb29+W0foP7nJQdLeWJr1XTt1hugJs+PTxERMXuZHzXHvv6y/p5AA/8hf+03cH4Pn0ARp19/AAAAAAAAAAAAAAAAAAAAAAAAAPb1A3olZCuLJrKhAAAAAElFTkSuQmCC", "frames": 4, "fps": 0, "loop": false, "notes": "Mouth patch: 0 flat, 1 open, 2 wide, 3 smile. Pick by voice loudness. Offset by head_dy.", "dy": null}};
+const WALLS = [["Daylight","#dfe6ee"],["Midnight","#181c26"],["Meadow","#7fae8a"],["Plum","#5a3d5c"]];
+const imgs = {};
+let ready = Promise.all(Object.entries(SPRITES).map(([k,s]) => new Promise(r => {const i=new Image();i.onload=r;i.src=s.src;imgs[k]=i;})));
+
+class Stage{
+  constructor(canvas, scale){this.c=canvas;this.x=canvas.getContext("2d");this.x.imageSmoothingEnabled=false;
+    this.scale=scale;this.wall="#181c26";this.state=null;this.f=0;this.acc=0;this.rev=false;this.done=null;
+    this.talk=false;this.blinkOn=false;this.mouth=3;this.mAcc=0;this.bF=-1;this.bAcc=0;this.nextBlink=2+Math.random()*3;}
+  play(state,opt={}){this.state=state;this.rev=!!opt.reverse;const n=state?SPRITES[state].frames:0;
+    this.f=this.rev?n-1:0;this.acc=0;this.hold=opt.hold||0;
+    return new Promise(res=>{this.done=res;});}
+  tick(dt){
+    if(this.state){const s=SPRITES[this.state];this.acc+=dt;const step=1/Math.max(s.fps,1);
+      while(this.acc>=step){this.acc-=step;let nf=this.f+(this.rev?-1:1);
+        if(nf<0||nf>=s.frames){ if(s.loop&&!this.once){nf=(nf+s.frames)%s.frames;}
+          else{nf=this.f;const d=this.done;this.done=null;if(d)d();}}
+        this.f=nf;}}
+    if(this.state==="idle"){
+      if(this.talk){this.mAcc+=dt;if(this.mAcc>0.09){this.mAcc=0;this.mouth=[0,1,2,1,2,0,1][Math.floor(Math.random()*7)];}}
+      if(this.blinkOn){this.bAcc+=dt;if(this.bF<0&&this.bAcc>this.nextBlink){this.bF=0;this.bAcc=0;}
+        else if(this.bF>=0&&this.bAcc>0.07){this.bAcc=0;this.bF++;if(this.bF>2){this.bF=-1;this.nextBlink=2+Math.random()*3;}}}}
+    this.draw();}
+  draw(){const x=this.x,S=this.scale,W=this.c.width;x.fillStyle=this.wall;x.fillRect(0,0,W,this.c.height);
+    const Hh=this.c.height;const ox=(W-48*S)/2,oy=(Hh-58*S)/2;
+    const put=(k,f,dy)=>x.drawImage(imgs[k],f*48,0,48,58,ox,oy+(dy||0)*S,48*S,58*S);
+    if(!this.state)return;put(this.state,this.f);
+    if(this.state==="idle"){const dy=(SPRITES.idle.dy||[])[this.f]||0;if(this.talk)put("overlay_mouth",this.mouth,dy);if(this.bF>=0)put("overlay_blink",this.bF,dy);}}
+}
+
+ready.then(()=>{
+  const main=new Stage(document.getElementById("main"),8);
+  const A=new Stage(document.getElementById("a"),6),B=new Stage(document.getElementById("b"),6);
+  main.blinkOn=true;A.blinkOn=true;B.blinkOn=true;
+  main.play("idle");A.play("idle");B.play(null);
+  const stages=[main,A,B];
+  let last=performance.now();
+  (function loop(t){const dt=Math.min(0.1,(t-last)/1000);last=t;stages.forEach(s=>s.tick(dt));requestAnimationFrame(loop);})(last);
+
+  const walls=document.getElementById("walls");
+  WALLS.forEach(([n,c],i)=>{const b=document.createElement("button");b.textContent=n;b.setAttribute("aria-pressed",i===1);
+    b.onclick=()=>{stages.forEach(s=>s.wall=c);[...walls.querySelectorAll("button")].forEach(o=>o.setAttribute("aria-pressed",o===b));};
+    walls.appendChild(b);});
+
+  const bill=document.getElementById("bill");
+  const shown=Object.keys(SPRITES).filter(k=>!k.startsWith("overlay"));
+  function select(k){[...bill.querySelectorAll("button")].forEach(o=>o.setAttribute("aria-pressed",o.dataset.k===k));}
+  shown.forEach(k=>{const s=SPRITES[k];const li=document.createElement("li");const b=document.createElement("button");b.dataset.k=k;
+    b.innerHTML='<span class="nm">'+k.replace("_"," ")+'<span class="meta">'+s.frames+' frames, '+s.fps+' per second, '+(s.loop?'loops':'plays once')+'</span></span><span class="nt">'+s.notes+'</span>';
+    b.onclick=async()=>{select(k);const REV=["dive","hole_only","hole_open"];main.once=!s.loop;const p=main.play(k);if(!s.loop){await p;await new Promise(r=>setTimeout(r,600));
+        if(REV.includes(k)){await main.play(k,{reverse:true});}
+        main.once=false;main.play("idle");select("idle");}};
+    li.appendChild(b);bill.appendChild(li);});
+  select("idle");
+
+  const talk=document.getElementById("talk");
+  talk.onclick=()=>{main.talk=!main.talk;talk.setAttribute("aria-pressed",main.talk);talk.textContent=main.talk?"Talking":"Make it talk";
+    if(main.talk&&main.state!=="idle"){main.play("idle");select("idle");}};
+  const blink=document.getElementById("blink");
+  blink.onclick=()=>{main.blinkOn=!main.blinkOn;blink.setAttribute("aria-pressed",main.blinkOn);blink.textContent=main.blinkOn?"Blinking on":"Blinking off";};
+
+  const jump=document.getElementById("jump"),capA=document.getElementById("capA"),capB=document.getElementById("capB");
+  let onA=true,busy=false;
+  const wait=ms=>new Promise(r=>setTimeout(r,ms));
+  async function once(st,k,opt){st.once=true;await st.play(k,opt);st.once=false;}
+  jump.onclick=async()=>{if(busy)return;busy=true;jump.disabled=true;
+    const from=onA?A:B,to=onA?B:A,cf=onA?capA:capB,ct=onA?capB:capA;
+    cf.textContent="A hole opens under his feet";await once(from,"hole_open");
+    cf.textContent="Down he goes";await once(from,"dive");await once(from,"hole_only",{reverse:true});from.play(null);cf.textContent="Empty";
+    ct.textContent="A hole opens on the other laptop";await once(to,"hole_only");
+    to.play("hole_wait");ct.textContent="Ears first, while the machines shake hands";
+    await wait(document.getElementById("slow").checked?3200:1100);
+    ct.textContent="Up he pops";await once(to,"dive",{reverse:true});await once(to,"hole_open",{reverse:true});
+    to.play("idle");ct.textContent="He is here now";
+    onA=!onA;jump.textContent=onA?"Send him down the hole":"Send him back";jump.disabled=false;busy=false;};
+});
+</script>
+</body>
+</html>

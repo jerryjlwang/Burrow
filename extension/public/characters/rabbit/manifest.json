@@ -1,0 +1,326 @@
+{
+  "character": "rabbit",
+  "cell": [
+    64,
+    58
+  ],
+  "anchor": "bottom center, feet end at row 53",
+  "display": "whole-number scale only, image-rendering: pixelated",
+  "jump_sequence": {
+    "sending": [
+      {
+        "state": "hole_open"
+      },
+      {
+        "state": "dive"
+      },
+      {
+        "state": "hole_only",
+        "reverse": true
+      }
+    ],
+    "receiving": [
+      {
+        "state": "hole_only"
+      },
+      {
+        "state": "hole_wait",
+        "loop": true
+      },
+      {
+        "state": "dive",
+        "reverse": true
+      },
+      {
+        "state": "hole_open",
+        "reverse": true
+      },
+      {
+        "state": "idle"
+      }
+    ]
+  },
+  "idle_variant_gap": [
+    4,
+    9
+  ],
+  "wander_gap": [
+    75,
+    150
+  ],
+  "wander_hops": [
+    2,
+    3
+  ],
+  "body": [
+    19,
+    2,
+    50,
+    55
+  ],
+  "body_note": "left, top, right, bottom of the rabbit in idle frame 0, rim included, right and bottom exclusive",
+  "states": {
+    "idle": {
+      "file": "rabbit_idle.png",
+      "frames": 4,
+      "fps": 3,
+      "loop": true,
+      "notes": "Ear twitch, then a one pixel breath. head_dy tells the renderer how far to push overlays down per frame.",
+      "head_dy": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "overlays": [
+        "blink",
+        "mouth"
+      ],
+      "variants": [
+        {
+          "state": "idle_tap",
+          "weight": 3
+        },
+        {
+          "state": "idle_watch",
+          "weight": 2
+        },
+        {
+          "state": "idle_flick",
+          "weight": 2
+        }
+      ]
+    },
+    "idle_tap": {
+      "file": "rabbit_idle_tap.png",
+      "frames": 8,
+      "fps": 10,
+      "loop": false,
+      "notes": "Idle variant. The right foot taps twice.",
+      "overlays": [
+        "blink",
+        "mouth"
+      ]
+    },
+    "idle_watch": {
+      "file": "rabbit_idle_watch.png",
+      "frames": 7,
+      "fps": 6,
+      "loop": false,
+      "notes": "Idle variant. He lifts the pocket watch, checks it, and lets it drop.",
+      "overlays": [
+        "blink",
+        "mouth"
+      ]
+    },
+    "idle_flick": {
+      "file": "rabbit_idle_flick.png",
+      "frames": 4,
+      "fps": 8,
+      "loop": false,
+      "notes": "Idle variant. The left ear flicks twice.",
+      "overlays": [
+        "blink",
+        "mouth"
+      ]
+    },
+    "to_listening": {
+      "file": "rabbit_to_listening.png",
+      "frames": 3,
+      "fps": 12,
+      "loop": false,
+      "notes": "Ears rise a pixel at a time, then the eyes widen. Enter transition for listening."
+    },
+    "listening": {
+      "file": "rabbit_listening.png",
+      "frames": 1,
+      "fps": 8,
+      "loop": false,
+      "notes": "Ears stretch up, eyes widen. Hold the last frame while the kid talks.",
+      "head_dy": [
+        0
+      ],
+      "enter": "to_listening",
+      "exit": "from_listening",
+      "hold": true,
+      "overlays": [
+        "blink"
+      ]
+    },
+    "from_listening": {
+      "file": "rabbit_from_listening.png",
+      "frames": 4,
+      "fps": 12,
+      "loop": false,
+      "notes": "Ears come down, dip below rest once, and settle. Exit transition for listening."
+    },
+    "to_thinking": {
+      "file": "rabbit_to_thinking.png",
+      "frames": 4,
+      "fps": 8,
+      "loop": false,
+      "notes": "The thought trail appears, then the empty bubble. Enter transition for thinking."
+    },
+    "thinking": {
+      "file": "rabbit_thinking.png",
+      "frames": 4,
+      "fps": 3,
+      "loop": true,
+      "notes": "He glances at his watch while a pocket watch ticks in a thought bubble. Loop while the model works.",
+      "enter": "to_thinking",
+      "exit": "aha"
+    },
+    "aha": {
+      "file": "rabbit_aha.png",
+      "frames": 4,
+      "fps": 6,
+      "loop": false,
+      "notes": "The watch turns into a light bulb and the bubble pops. Play once when the answer is ready, then idle."
+    },
+    "to_confused": {
+      "file": "rabbit_to_confused.png",
+      "frames": 2,
+      "fps": 8,
+      "loop": false,
+      "notes": "The left ear folds half way. Enter transition for confused."
+    },
+    "confused": {
+      "file": "rabbit_confused.png",
+      "frames": 4,
+      "fps": 4,
+      "loop": true,
+      "notes": "One ear flops over and a question mark bobs.",
+      "enter": "to_confused",
+      "exit": "from_confused"
+    },
+    "from_confused": {
+      "file": "rabbit_from_confused.png",
+      "frames": 2,
+      "fps": 8,
+      "loop": false,
+      "notes": "The left ear comes back up. Exit transition for confused."
+    },
+    "celebrate": {
+      "file": "rabbit_celebrate.png",
+      "frames": 8,
+      "fps": 10,
+      "loop": false,
+      "notes": "Crouch, hop with sparkles, land with a squash, settle. Ears and watch lag the body. Play once."
+    },
+    "hop": {
+      "file": "rabbit_hop.png",
+      "frames": 5,
+      "fps": 12,
+      "loop": true,
+      "notes": "Travel hop. Loop while moving; move lists the sideways pixels per frame so he only travels in the air.",
+      "move": [
+        0,
+        4,
+        6,
+        4,
+        0
+      ]
+    },
+    "panic": {
+      "file": "rabbit_panic.png",
+      "frames": 3,
+      "fps": 6,
+      "loop": false,
+      "notes": "Oh dear, I'm late. Watch check, gasp, then hold the panic. The player follows it with the hole.",
+      "hold": true
+    },
+    "settle": {
+      "file": "rabbit_settle.png",
+      "frames": 2,
+      "fps": 12,
+      "loop": false,
+      "notes": "After a hop trip: the last squash eases up, then idle frame 0."
+    },
+    "land": {
+      "file": "rabbit_land.png",
+      "frames": 3,
+      "fps": 10,
+      "loop": false,
+      "notes": "Landing after a throw: impact squash, recover, settle on idle frame 0."
+    },
+    "wave": {
+      "file": "rabbit_wave.png",
+      "frames": 8,
+      "fps": 10,
+      "loop": false,
+      "notes": "He waves with his left ear, twice, then settles. Use for greetings."
+    },
+    "to_sleepy": {
+      "file": "rabbit_to_sleepy.png",
+      "frames": 3,
+      "fps": 6,
+      "loop": false,
+      "notes": "Ears sag, fold half way, then flop as the eyes close. Enter transition for sleepy."
+    },
+    "sleepy": {
+      "file": "rabbit_sleepy.png",
+      "frames": 4,
+      "fps": 2,
+      "loop": true,
+      "notes": "Both ears flopped, eyes shut, z's rising. Bedtime and session limits.",
+      "enter": "to_sleepy",
+      "exit": "from_sleepy"
+    },
+    "from_sleepy": {
+      "file": "rabbit_from_sleepy.png",
+      "frames": 3,
+      "fps": 8,
+      "loop": false,
+      "notes": "Ears half up with heavy eyes, a stretch above rest, then settle. Exit transition for sleepy."
+    },
+    "dragged": {
+      "file": "rabbit_dragged.png",
+      "frames": 2,
+      "fps": 4,
+      "loop": true,
+      "notes": "Startled and swinging while the kid drags him."
+    },
+    "hole_only": {
+      "file": "rabbit_hole_only.png",
+      "frames": 3,
+      "fps": 10,
+      "loop": false,
+      "notes": "An empty rabbit hole opening. Reverse it to close."
+    },
+    "hole_open": {
+      "file": "rabbit_hole_open.png",
+      "frames": 3,
+      "fps": 10,
+      "loop": false,
+      "notes": "The hole opens under his feet. Reverse it to close once he has popped out."
+    },
+    "dive": {
+      "file": "rabbit_dive.png",
+      "frames": 7,
+      "fps": 12,
+      "loop": false,
+      "notes": "He drops into the hole. Reverse it to pop out on the other screen."
+    },
+    "hole_wait": {
+      "file": "rabbit_hole_wait.png",
+      "frames": 4,
+      "fps": 4,
+      "loop": true,
+      "notes": "Ears poking out of the hole. Loop while the handoff completes."
+    },
+    "overlay_blink": {
+      "file": "rabbit_overlay_blink.png",
+      "frames": 3,
+      "fps": 12,
+      "loop": false,
+      "notes": "Eye patch: half, closed, half. Draw over idle, offset by head_dy."
+    },
+    "overlay_mouth": {
+      "file": "rabbit_overlay_mouth.png",
+      "frames": 4,
+      "fps": 0,
+      "loop": false,
+      "notes": "Mouth patch: 0 flat, 1 open, 2 wide, 3 smile. Pick by voice loudness. Offset by head_dy."
+    }
+  }
+}

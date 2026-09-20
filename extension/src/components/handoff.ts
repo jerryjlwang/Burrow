@@ -1,0 +1,255 @@
+/**
+ * The kid side and the parent side of docs/frontend/HANDOFF.md, plus the rare "I'm late" vignette.
+ * Everything goes through chrome.storage.local so two tabs on one machine already work; the
+ * backend relay for two laptops writes the same records.
+ */
+import type { GraphSnapshot } from "@shared/graph";
+import type { CompanionController } from "../content/controller";
+import type { PetController } from "./pet";
+
+export type Role = "kid" | "parent";
+export type JumpStage = "requested" | "gone" | "arrived";
+
+export interface Grant {
+  granted: boolean;
+  at: number;
+}
+export interface Jump {
+  id: string;
+  to: Role;
+  stage: JumpStage;
+  at: number;
+  summary?: string;
+  graph?: GraphSnapshot;
+}
+
+function storageGet<T>(key: string): Promise<T | undefined> {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.get(key, (raw) => resolve(raw?.[key] as T | undefined));
+    } catch {
+      resolve(undefined);
+    }
+  });
+}
+
+function storageSet(key: string, value: unknown): Promise<void> {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.set({ [key]: value }, () => resolve());
+    } catch {
+      resolve();
+    }
+  });
+}
+
+export const GRANTS_KEY = "burrow.grants";
+export const JUMP_KEY = "burrow.jump";
+export const GRAPH_KEY = "burrow.graph";
+/** Set just before a page navigation the rabbit escorts: the next page pops him out of a hole. */
+export const ARRIVE_KEY = "burrow.arrive";
+export interface Arrival {
+  at: number;
+  url: string;
+  /** What he says when he pops out. */
+  line?: string;
+}
+/** An arrival older than this is stale (the navigation never happened). */
+const ARRIVE_FRESH_MS = 15_000;
+
+export function readArrival(): Promise<Arrival | null> {
+  return storageGet<Arrival>(ARRIVE_KEY).then((a) => (a && Date.now() - a.at < ARRIVE_FRESH_MS ? a : null));
+}
+
+/** Escort a navigation: say a line, dive, mark the arrival, then go. Without a pet, just go. */
+export async function escort(controller: CompanionController, pet: PetController | null, url: string, line: string, arriveLine: string): Promise<void> {
+  if (pet) {
+    controller.showBubble({ id: `escort-${Date.now()}`, text: line, kind: "info", expiresAt: Date.now() + 2500 });
+    await new Promise((r) => setTimeout(r, 700));
+    await pet.jumpOut();
+  }
+  const arrival: Arrival = { at: Date.now(), url, line: arriveLine };
+  await storageSet(ARRIVE_KEY, arrival);
+  location.assign(url);
+}
+
+/** What each skill lets him do, in his own words. */
+export const SKILLS: Record<string, string> = {
+  read_pages: "see what is on the page",
+  use_voice: "listen and talk out loud",
+  browse_links: "click and open things",
+  remember: "remember what you teach me between days",
+  visit_parent: "visit your parent's laptop",
+};
+
+/** If the other side never answers, the receiving hole closes on its own after this long. */
+const HANDOFF_TIMEOUT_MS = 12_000;
+/** Quiet minutes before he checks his watch, panics and dives to a new spot. */
+const VIGNETTE_GAP_MS: [number, number] = [150_000, 300_000];
+
+export function pageRole(): Role {
+  return /\/parent\.html$/.test(location.pathname) ? "parent" : "kid";
+}
+
+/** Skills that flipped to granted between two maps. */
+export function newlyGranted(before: Record<string, Grant> | undefined, after: Record<string, Grant> | undefined): string[] {
+  const out: string[] = [];
+  for (const [skill, g] of Object.entries(after ?? {})) {
+    if (g?.granted && !before?.[skill]?.granted) out.push(skill);
+  }
+  return out;
+}
+
+/** What the rabbit says he learned, from the graph he carries. */
+export function summarize(graph: GraphSnapshot | null | undefined, now: number): string {
+  const nodes = (graph?.nodes ?? []).slice().sort((a, b) => (b.state?.lastSeenAt ?? 0) - (a.state?.lastSeenAt ?? 0));
+  const recent = nodes.filter((n) => now - (n.state?.lastSeenAt ?? 0) < 36 * 3600 * 1000).slice(0, 3);
+  const labels = recent.map((n) => n.label);
+  if (!labels.length) return "I have not learned anything new yet. Teach me something!";
+  if (labels.length === 1) return `Today I learned about ${labels[0]}.`;
+  return `Today I learned about ${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}.`;
+}
+
+export function requestJump(to: Role): Promise<void> {
+  const jump: Jump = { id: `j-${Date.now().toString(36)}`, to, stage: "requested", at: Date.now() };
+  return storageSet(JUMP_KEY, jump);
+}
+
+export function grant(skill: string, granted = true): Promise<void> {
+  return storageGet<Record<string, Grant>>(GRANTS_KEY).then((map) => storageSet(GRANTS_KEY, { ...(map ?? {}), [skill]: { granted, at: Date.now() } }));
+}
+
+interface Deps {
+  controller: CompanionController;
+  role: Role;
+  getPet: () => PetController | null;
+  /** Nothing going on: used to gate the vignette. */
+  isQuiet: () => boolean;
+  reducedMotion: () => boolean;
+}
+
+/**
+ * Watches storage and drives the pet. Returns a stop function.
+ * Only the visible tab acts on a departure so several kid tabs do not all dive.
+ */
+export function startHandoff(deps: Deps): () => void {
+  const { controller, role, getPet } = deps;
+  const handled = new Set<string>();
+  const waiting = new Map<string, () => void>();
+  let stopped = false;
+
+  const say = (id: string, text: string, ms: number) => controller.showBubble({ id, text, kind: "info", expiresAt: Date.now() + ms });
+
+  const depart = async (jump: Jump) => {
+    const pet = getPet();
+    if (!pet) return;
+    say(`jump-${jump.id}`, role === "kid" ? "Off to see your parent. Back soon!" : "Off I go, back to my kid!", 2500);
+    await new Promise((r) => setTimeout(r, 900));
+    await pet.jumpOut();
+    const graph = role === "kid" ? controller.session.graph.toJSON() : await storageGet<GraphSnapshot>(GRAPH_KEY);
+    const gone: Jump = { ...jump, stage: "gone", at: Date.now(), summary: summarize(graph, Date.now()), graph: graph ?? undefined };
+    await storageSet(JUMP_KEY, gone);
+  };
+
+  const arrive = async (jump: Jump, alreadyGone: boolean) => {
+    const pet = getPet();
+    if (!pet) return;
+    const ready = alreadyGone
+      ? Promise.resolve()
+      : new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, HANDOFF_TIMEOUT_MS);
+          waiting.set(jump.id, () => {
+            clearTimeout(timer);
+            resolve();
+          });
+        });
+    await pet.jumpIn(ready);
+    waiting.delete(jump.id);
+    const latest = (await storageGet<Jump>(JUMP_KEY)) ?? jump;
+    if (latest.id === jump.id && latest.graph && role === "parent") await storageSet(GRAPH_KEY, latest.graph);
+    if (latest.id === jump.id && latest.stage !== "arrived") await storageSet(JUMP_KEY, { ...latest, stage: "arrived", at: Date.now(), graph: undefined });
+    const text = role === "parent" ? latest.summary ?? summarize(latest.graph, Date.now()) : "I am back! Your parent says hi.";
+    say(`arrive-${jump.id}`, text, 9000);
+  };
+
+  const onJump = (jump: Jump | undefined) => {
+    if (!jump || stopped) return;
+    if (jump.stage === "gone") waiting.get(jump.id)?.();
+    if (handled.has(`${jump.id}:${jump.stage}`)) return;
+    if (jump.stage === "requested" && jump.to !== role && document.visibilityState === "visible") {
+      handled.add(`${jump.id}:requested`);
+      void depart(jump);
+    } else if (jump.to === role && (jump.stage === "requested" || jump.stage === "gone") && !handled.has(`${jump.id}:arrive`)) {
+      handled.add(`${jump.id}:arrive`);
+      void arrive(jump, jump.stage === "gone");
+    }
+  };
+
+  const onGrants = (before: Record<string, Grant> | undefined, after: Record<string, Grant> | undefined) => {
+    if (role !== "kid" || stopped) return;
+    const fresh = newlyGranted(before, after);
+    if (!fresh.length) return;
+    const pet = getPet();
+    pet?.play("celebrate");
+    const what = fresh.map((s) => SKILLS[s] ?? s.replace(/_/g, " "));
+    say(`grant-${Date.now()}`, `Your parent said yes. I can ${what.join(" and ")} now.`, 8000);
+  };
+
+  const listener = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+    if (area !== "local") return;
+    if (changes[JUMP_KEY]) onJump(changes[JUMP_KEY].newValue as Jump | undefined);
+    if (changes[GRANTS_KEY]) onGrants(changes[GRANTS_KEY].oldValue as Record<string, Grant> | undefined, changes[GRANTS_KEY].newValue as Record<string, Grant> | undefined);
+  };
+  try {
+    chrome.storage.onChanged.addListener(listener);
+  } catch {
+    /* not an extension context */
+  }
+
+  // On load: if he is away from this side, he should not be standing here.
+  void storageGet<Jump>(JUMP_KEY).then((jump) => {
+    if (!jump || stopped) return;
+    if (jump.to !== role && (jump.stage === "gone" || jump.stage === "arrived")) {
+      handled.add(`${jump.id}:requested`);
+      const tryHide = () => {
+        const pet = getPet();
+        if (pet) void pet.jumpOut();
+        else if (!stopped) setTimeout(tryHide, 300);
+      };
+      tryHide();
+    } else if (jump.to === role && jump.stage === "gone") {
+      onJump(jump);
+    }
+  });
+
+  // The vignette: after a long quiet spell he checks his watch, panics, and dives to a new spot.
+  let vignetteTimer = 0;
+  const gap = () => VIGNETTE_GAP_MS[0] + Math.random() * (VIGNETTE_GAP_MS[1] - VIGNETTE_GAP_MS[0]);
+  const scheduleVignette = () => {
+    vignetteTimer = window.setTimeout(async () => {
+      const pet = getPet();
+      if (!stopped && pet && deps.isQuiet() && !deps.reducedMotion() && document.visibilityState === "visible") {
+        const body = pet.getBodyRect();
+        if (body) {
+          pet.play("panic");
+          say(`late-${Date.now()}`, "Oh dear, look at the time!", 2200);
+          await new Promise((r) => setTimeout(r, 1400));
+          const x = 160 + Math.random() * Math.max(200, window.innerWidth - 320);
+          await pet.moveTo(x, body.top + body.height / 2);
+        }
+      }
+      if (!stopped) scheduleVignette();
+    }, gap());
+  };
+  scheduleVignette();
+
+  return () => {
+    stopped = true;
+    window.clearTimeout(vignetteTimer);
+    try {
+      chrome.storage.onChanged.removeListener(listener);
+    } catch {
+      /* ignore */
+    }
+  };
+}

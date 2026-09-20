@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Pip \u2014 Learning Companion",
+  "name": "Burrow",
   "version": "0.1.0",
-  "description": "A tiny animated companion that lives in your browser, sees the page you're on, talks with you by voice, and helps you get unstuck without doing the work for you.",
+  "description": "A pixel-art White Rabbit that lives on the page. Kids teach it in their own words, and it asks, forgets, and learns.",
   "minimum_chrome_version": "116",
   "permissions": [
     "storage",
@@ -36,7 +36,7 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Pip \u2014 Learning Companion",
+    "default_title": "Burrow",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
@@ -59,7 +59,7 @@
       "suggested_key": {
         "default": "Alt+Shift+P"
       },
-      "description": "Open or close Pip's panel"
+      "description": "Open or close the rabbit's panel"
     },
     "toggle-voice": {
       "suggested_key": {
@@ -67,5 +67,17 @@
       },
       "description": "Start or stop voice mode"
     }
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "characters/*",
+        "ui/*",
+        "fonts/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
 }

@@ -9,7 +9,7 @@ type MicState = "idle" | "asking" | "granted" | "denied";
 function Onboarding() {
   const [step, setStep] = useState(0);
   const [mic, setMic] = useState<MicState>("idle");
-  const [name, setName] = useState("Pip");
+  const [name, setName] = useState("White Rabbit");
   const [serverUrl, setServerUrl] = useState("http://localhost:8787");
 
   useEffect(() => {
@@ -51,7 +51,7 @@ function Onboarding() {
       </div>
       {step === 0 && (
         <>
-          <h1>Meet {name}.</h1>
+          <h1>Meet the {name}.</h1>
           <p>Your learning companion lives right in your browser—a tiny character in the corner of every page.</p>
           <ul>
             <li>Ask it questions about what's on screen.</li>
