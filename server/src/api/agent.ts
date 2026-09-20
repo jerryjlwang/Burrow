@@ -1,8 +1,7 @@
-import { validateDecision, validateIntervention } from "@shared/schemas";
+import { validateDecision, validateIntervention } from "@shared/validate";
 import type { AgentInput, AgentOutput, InterventionInput, InterventionOutput } from "@shared/types";
 import type { AgentProvider } from "../agent/provider";
 import { MockProvider } from "../agent/mock";
-import { AnthropicProvider } from "../agent/anthropic";
 import { OpenAIProvider } from "../agent/openai";
 import type { Config } from "../config";
 import { log } from "../util/logger";
@@ -14,9 +13,7 @@ export class AgentService {
   readonly fallback = new MockProvider();
 
   constructor(cfg: Config) {
-    if (cfg.llmProvider === "anthropic") {
-      this.primary = new AnthropicProvider({ apiKey: cfg.llmApiKey || undefined, model: cfg.llmModel, effort: cfg.llmEffort === "minimal" ? "low" : cfg.llmEffort });
-    } else if (cfg.llmProvider === "openai") {
+    if (cfg.llmProvider === "openai") {
       this.primary = new OpenAIProvider({ apiKey: cfg.llmApiKey, model: cfg.llmModel, effort: cfg.llmEffort });
     } else {
       this.primary = this.fallback;

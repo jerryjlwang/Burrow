@@ -1,5 +1,6 @@
 import type { ConversationTurn, StudentSessionState, PendingOffer } from "@shared/types";
 import { emptyStudentState } from "@shared/types";
+import { KnowledgeGraph } from "@shared/graph";
 import { sendToBackground, type TabSession, type PendingLoop } from "../shared/messages";
 import { store } from "../content/store";
 import { log } from "../shared/logger";
@@ -15,6 +16,8 @@ export class Session {
   pendingOffer: PendingOffer | null = null;
   pendingLoop: PendingLoop | null = null;
   proactiveCooldownUntil = 0;
+  /** Session-scoped learner knowledge graph (RAM only for the MVP; not synced to background). */
+  readonly graph = new KnowledgeGraph();
   private syncTimer: number | null = null;
   private loaded = false;
 

@@ -8,6 +8,11 @@ import { log } from "../shared/logger";
 
 const logger = log("offscreen");
 const TTS_SAMPLE_RATE = 24000;
+// Frames arrive ~1.5x faster than realtime, so the schedule normally runs well ahead and a small
+// lead is enough. After a genuine underrun, though, resuming 20ms out just invites the next one,
+// so rebuild a real cushion in that case only — start-of-utterance latency is unaffected.
+const APPEND_LEAD = 0.02;
+const UNDERRUN_LEAD = 0.15;
 
 function emit(event: OffscreenEvent): void {
   chrome.runtime.sendMessage({ type: "offscreen.event", event }).catch(() => undefined);
@@ -197,6 +202,10 @@ function looksLikeEcho(text: string): boolean {
   const recentlySpoken = Date.now() - lastSpokenAt < 8000 || currentTts !== null;
   if (!recentlySpoken) return false;
   const words = t.split(" ");
+  // A lone word while audio is actually playing is almost always our own voice coming back
+  // through the speakers. The multi-word heuristics below can't judge a single token, and
+  // letting it through lets Pip barge in on itself mid-sentence.
+  if (words.length === 1) return currentTts !== null && spoken.includes(t);
   if (words.length >= 2 && spoken.includes(t)) return true;
   if (words.length >= 4) {
     // Most of the words appear in the spoken text in order → echo.
@@ -221,7 +230,10 @@ function handleTranscript(msg: { text: string; final: boolean; event: string; tu
       logger.debug("dropping echo transcript", { text });
       return;
     }
-    if (currentTts && text.split(/\s+/).filter(Boolean).length >= 1 && (msg.event === "StartOfTurn" || msg.event === "Update" || msg.event === "EagerEndOfTurn" || msg.final)) {
+    // Two words (or one confirmed final) before we cut Pip off: a single interim token is far
+    // more often speaker bleed than a real interruption.
+    const wordCount = text.split(/\s+/).filter(Boolean).length;
+    if (currentTts && (wordCount >= 2 || (msg.final && wordCount >= 1)) && (msg.event === "StartOfTurn" || msg.event === "Update" || msg.event === "EagerEndOfTurn" || msg.final)) {
       logger.info("barge-in: interrupting speech");
       stopTts("interrupted");
     }
@@ -246,7 +258,11 @@ interface ActiveTts {
 let currentTts: ActiveTts | null = null;
 
 function ensurePlayCtx(): AudioContext {
-  if (!playCtx) playCtx = new AudioContext({ sampleRate: TTS_SAMPLE_RATE });
+  // Deliberately NOT pinned to TTS_SAMPLE_RATE. Forcing a non-native rate here while the mic
+  // context (16kHz) and the echo canceller are live makes Chrome resample playback through the
+  // AEC render path, which warbles and breaks up. The buffers below carry their own 24kHz rate,
+  // and Web Audio resamples them cleanly into whatever the output device actually runs at.
+  if (!playCtx) playCtx = new AudioContext();
   if (playCtx.state === "suspended") void playCtx.resume();
   return playCtx;
 }
@@ -322,7 +338,8 @@ function playChunk(buffer: ArrayBuffer): void {
   const source = ctx.createBufferSource();
   source.buffer = audio;
   source.connect(ctx.destination);
-  const startAt = Math.max(ctx.currentTime + 0.02, tts.nextTime);
+  const behind = tts.nextTime > 0 && tts.nextTime < ctx.currentTime;
+  const startAt = Math.max(ctx.currentTime + (behind ? UNDERRUN_LEAD : APPEND_LEAD), tts.nextTime);
   source.start(startAt);
   tts.nextTime = startAt + audio.duration;
   tts.sources.push(source);

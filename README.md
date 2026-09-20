@@ -26,6 +26,7 @@ Core principle: **help the student regain momentum without taking the learning a
 | Notices struggle | Local, model‑free signals (repeated wrong answers, hammering a dead button, validation errors, dead‑end pages, backtracking, hesitation) escalate through 4 intensity levels: look → “?” → bubble → speech. Cooldowns; “I'm good” is respected. |
 | Coaches | Hint ladder: nudge → hint → explanation → analogous example → more direct. Never the final answer on assessments. |
 | Survives navigation | Conversation, student model and an in‑flight agent loop persist per tab; “Open it” → page changes → “It's open.” |
+| Always in the corner | Injected on every http(s) page in every tab, plus a New Tab override page so Ctrl+T never loses him. Only `chrome://` settings pages and the Web Store are off‑limits (Chrome policy). |
 | Works offline | If the server or LLM is unreachable, a deterministic rule‑based brain still points, clicks, summarizes and gives hints (demo‑safe). |
 
 ---
@@ -55,8 +56,8 @@ Core principle: **help the student regain momentum without taking the learning a
                                │ localhost:8787
 ┌──────────────────────────────▼───────────────────────────────────┐
 │ server (Node + ws)                                                │
-│  POST /api/agent/decide     AgentProvider: Anthropic (structured  │
-│  POST /api/agent/intervene  outputs) │ mock (rules) │ fallback    │
+│  POST /api/agent/decide     AgentProvider: OpenAI (strict JSON    │
+│  POST /api/agent/intervene  schema) │ mock (rules) │ fallback     │
 │  WS   /ws/stt  ⇄  Deepgram Flux STT (listen v2) / Nova‑3 fallback │
 │  WS   /ws/tts  ⇄  Deepgram Flux TTS (speak v2 ws) / REST fallback │
 │  GET  /demo/*  demo learning site · GET /health                   │
@@ -83,7 +84,7 @@ extension/           Chrome MV3 extension (TypeScript + React, esbuild)
   src/onboarding/    first-run page (mic permission, privacy)
   src/popup/         toolbar popup (status, toggles)
 server/src/          Node server: agent providers, prompt, voice proxies, static
-shared/src/          schemas (zod), types, mock agent, hint bank, text matching
+shared/src/          action schema + validators, types, mock agent, hint bank, text matching
 demo-pages/          "Riverside Learning" fake LMS for the demo scenarios
 e2e/smoke.mjs        Playwright smoke test (real Chrome + extension)
 CHECKLIST.md         manual test checklist
@@ -108,10 +109,10 @@ Or separately: `npm run dev:server` and `npm run build` (one‑off production bu
 | Variable | Purpose |
 |---|---|
 | `DEEPGRAM_API_KEY` | **Secret.** Enables voice (STT + TTS). Without it Pip is text‑only. |
-| `LLM_API_KEY` | **Secret.** OpenAI (`sk-…`) or Anthropic (`sk-ant-…`) key; `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` also work. Without it the server runs the rule‑based mock agent. |
-| `LLM_PROVIDER` | `openai`, `anthropic` or `mock`. If omitted the key format decides. |
-| `LLM_MODEL` | Default `gpt-5.4-mini` (OpenAI) or `claude-opus-5` (Anthropic). |
-| `LLM_EFFORT` | Reasoning effort for decisions: `minimal` / `low` (default) / `medium` / `high`. |
+| `LLM_API_KEY` | **Secret.** OpenAI (`sk-…`) key; `OPENAI_API_KEY` also works. Without it the server runs the rule‑based mock agent. |
+| `LLM_PROVIDER` | `openai` or `mock`. If omitted, an `sk-…` key selects `openai` and no key falls back to `mock`. |
+| `LLM_MODEL` | Default `gpt-5.4-mini`. |
+| `LLM_EFFORT` | Reasoning effort for decisions: `none` (fastest, recommended for voice) / `minimal` / `low` (default) / `medium` / `high`. The server adapts the name to what the model supports. |
 | `DEEPGRAM_TTS_MODEL` | `flux-rufus-en` (default) |
 | `DEEPGRAM_TTS_SPEED` | `1` (default) |
 | `DEEPGRAM_TTS_EXPRESSIVITY` | `0` (default) |
@@ -149,12 +150,12 @@ The green dot on the character means the mic is live; one click on the mic butto
 Each student turn runs a **bounded loop** (max 6 steps): `observe → decide → policy → execute → verify`.
 
 - `observe` builds a `PageSummary` (≤ ~2.5k chars of text, ≤ 120 elements, viewport first). Elements get stable ids kept in a `WeakMap` registry, so “it” keeps working across rescans.
-- `decide` posts `AgentInput` (utterance, goal, recent conversation, page, recent action results, struggle signals, student state, last referenced element) to the server. The Anthropic provider uses **structured outputs** (`zodOutputFormat(AgentDecisionSchema)`), with the system prompt cached and server‑side refusal fallbacks enabled. Any output is re‑validated with zod on both sides; malformed output never executes.
+- `decide` posts `AgentInput` (utterance, goal, recent conversation, page, recent action results, struggle signals, student state, last referenced element) to the server. The OpenAI provider uses **structured outputs** (`response_format: json_schema`, `strict: true`), so the model can only return a schema‑valid action. Any output is re‑validated on both sides; malformed output never executes.
 - `policy` (`extension/src/actions/policy.ts`) is the single place that decides what needs confirmation (`requiresConfirmation`) and what is forbidden (`isForbidden`: sensitive fields, card‑like numbers, credential requests).
 - `execute` runs the action with realistic pointer/mouse events or framework‑compatible value setting, then `verify` waits for DOM/URL changes and diffs error messages. Stale elements cause a re‑observe, never a repeated click on a dead node.
 - If an action navigates, the loop state is stored per tab and the next page's content script resumes it.
 
-Provider abstraction: `server/src/agent/provider.ts` (`AgentProvider.decide/intervene`). Implementations: `openai.ts` (Chat Completions + strict JSON schema), `anthropic.ts` (structured outputs via zod), `mock.ts`. `api/agent.ts` wraps them with fallback + validation. The same mock also runs **inside the extension** when the server is unreachable. Try the configured provider without a browser: `npx tsx scripts/try-agent.ts` (or pass an utterance).
+Provider abstraction: `server/src/agent/provider.ts` (`AgentProvider.decide/intervene`). Implementations: `openai.ts` (Chat Completions + strict JSON schema), `mock.ts`. `api/agent.ts` wraps them with fallback + validation. The same mock also runs **inside the extension** when the server is unreachable. Try the configured provider without a browser: `npx tsx scripts/try-agent.ts` (or pass an utterance).
 
 ## Proactive help
 
@@ -184,6 +185,8 @@ npm test               # vitest: extraction, hidden filtering, schemas, policy, 
 npm run e2e:install    # once: downloads Playwright's Chromium (Google Chrome ≥137 ignores --load-extension)
 npm run e2e            # Playwright: Chromium + built extension + demo server, headless (npm run e2e:headed to watch)
 npm run build          # production bundle → extension/dist
+npx tsx scripts/try-agent.ts      # run the demo scenarios through the configured LLM provider (no browser)
+npx tsx scripts/voice-check.ts    # TTS → STT loopback through a running server: latency + transcript accuracy
 ```
 
 Developer panel: panel ⚙ → **Developer panel** (or popup). Shows page summary, detected elements, character state, last transcript, goal, last decision/result, provider latency, proactive signals and a live log. Logger namespaces: `[pip:page] [pip:agent] [pip:action] [pip:voice] [pip:proactive] [pip:character] [pip:bg] [pip:offscreen]`; sensitive keys are redacted before logging.
@@ -197,11 +200,14 @@ Developer panel: panel ⚙ → **Developer panel** (or popup). Shows page summar
 | `scripting` | Re‑inject the content script into already‑open tabs after install/reload. |
 | `offscreen` | Microphone capture and audio playback that outlive page navigations. |
 | `contextMenus` | “Ask Pip about this” on selected text. |
+| `topSites`, `favicon` | The New Tab override page shows your most‑visited sites with their icons. |
+| `chrome_url_overrides.newtab` | Chrome forbids extensions on its own New Tab page, so Pip ships his own start page (search box + shortcuts) and lives there too. |
 | `host_permissions: <all_urls>` | Pip must appear on arbitrary pages (content script) — broad for the hackathon; restrict to a domain list for a real release. `localhost:8787` is listed explicitly for the server. |
 
 ## Known limitations
 
 - Chrome's PDF viewer isolates content: Pip detects PDFs, doesn't crash, and can only use screenshots/selected text (limited). Cross‑origin iframes are not inspected.
+- `chrome://` pages (settings, extensions, history) and the Chrome Web Store cannot host extensions at all; the New Tab page is covered by Pip's own start page.
 - The mic permission is per extension origin; if onboarding was skipped, the first voice start fails with a bubble that opens setup.
 - Echo suppression is heuristic (Chrome AEC + transcript/spoken‑text similarity). Use headphones for the cleanest barge‑in.
 - The offline rule‑based brain handles navigation, pointing, summaries and hints, but not open‑ended questions.
