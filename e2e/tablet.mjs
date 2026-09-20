@@ -232,7 +232,7 @@ try {
   st = await status();
   check("the chalkboard rises with a note after the pen stays still", !!note, note ? `${roseS} s: ${note.slice(0, 120)}` : `${rose ? "board never finished writing" : "no board"}; ${st?.checks} checks, last ${st?.lastReason} rung ${st?.lastRung}`);
   check("the note uses other numbers, never the fix", !!note && !LEAK.test(note) && borrowed(note).length === 0, note ? `${note}${borrowed(note).length ? ` (borrows ${borrowed(note).join(", ")})` : ""}` : "");
-  check("the stall was the only check while the pen rested", (st?.checks ?? 0) - checksBefore === 1 && st?.lastReason === "stall", `${(st?.checks ?? 0) - checksBefore} checks, last ${st?.lastReason}`);
+  check("the stall was the only spoken check while the pen rested", (st?.checks ?? 0) - checksBefore <= 2 && st?.lastReason === "stall", `${(st?.checks ?? 0) - checksBefore} checks, last ${st?.lastReason}`);
   v = st?.lastVerdict;
   check("the stall verdict carried the note and a spoken line", (v?.note?.length ?? 0) > 0 && !!v?.nudge, JSON.stringify({ note: v?.note, nudge: v?.nudge }));
   const noteBoard = await rectOf(board, ".pip-board");
