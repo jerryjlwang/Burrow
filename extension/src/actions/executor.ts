@@ -33,6 +33,8 @@ export interface ExecutorDeps {
   showPlan: () => boolean;
   /** Overlay a drawing on the screen (newline-separated text lines and draw commands). `add` extends the current one; elementId/quote wrap it to a page region. */
   sketch: (spec: string, opts?: { add?: boolean; elementId?: number | null; quote?: string | null }) => void;
+  /** Erase from the drawing on screen: "all" or item numbers. null when nothing is drawn. */
+  eraseSketch: (spec: string) => { erased: number; left: number } | null;
   /** Real mouse/keyboard input via the background's debugger session. An escalation, never the first resort. */
   input: (ops: InputOp[]) => Promise<{ ok: boolean; error?: string }>;
   /** Whether the student has switched real input on; off by default, because attaching shows Chrome's debugging bar. */
@@ -571,6 +573,12 @@ export async function executeAction(decision: AgentDecision, deps: ExecutorDeps)
       }
 
       case "sketch": {
+        if (decision.value === "erase") {
+          const r = deps.eraseSketch(decision.text!);
+          if (!r) return { ok: false, message: "there is no drawing on screen to erase" };
+          if (!r.erased) return { ok: false, message: "none of those numbers are on the drawing; see DRAWING ON SCREEN" };
+          return { ok: true, message: r.left ? `erased ${r.erased} part${r.erased > 1 ? "s" : ""}; ${r.left} left on screen` : "drawing erased" };
+        }
         deps.sketch(decision.text!, { add: decision.value === "add", elementId: decision.elementId, quote: decision.quote });
         return { ok: true, message: decision.value === "add" ? "added to the drawing" : "drawn on screen" };
       }

@@ -3,7 +3,7 @@ import { isStopCommand, truncate } from "@shared/text";
 import { HeuristicConceptExtractor, pageToExtractionInput, type ConceptExtraction, type ExtractionInput } from "@shared/concepts";
 import { slugify } from "@shared/graph";
 import { parsePlan, topicPlanKey } from "@shared/plan";
-import { parseSketch } from "@shared/sketch";
+import { describeSketch, eraseFromSketch, parseSketch } from "@shared/sketch";
 import { planStepSuggestion } from "@shared/path";
 import type { PlanRoute } from "./store";
 import { classifyTask } from "../actions/policy";
@@ -120,6 +120,14 @@ export class CompanionController {
           const onVideo = named ? null : this.video.watcher.element;
           store.setState({ board: { id: `${Date.now()}`, title: sk.title, items: sk.items, anchor: named ?? onVideo, region: onVideo ? this.video.watcher.emptyRegion() : null }, planView: null });
         },
+        eraseSketch: (spec) => {
+          const board = store.getState().board;
+          if (!board) return null;
+          const { items, erased } = eraseFromSketch(board.items, spec);
+          // Same board id and position: what is left stays exactly where it was.
+          store.setState({ board: items.length ? { ...board, items } : null });
+          return { erased, left: items.length };
+        },
         goBack: async () => {
           try {
             await sendToBackground({ type: "nav.back" }, 3000);
@@ -139,6 +147,10 @@ export class CompanionController {
       onError: (message) => this.showAgentError(message),
       getPlan: () => this.engine.planContext,
       onHint: () => this.engine.notePlanEngaged(),
+      getBoard: () => {
+        const board = store.getState().board;
+        return board && board.items.length ? describeSketch(board) : null;
+      },
       getVideo: () => {
         const context = this.video.context();
         return context ? { context, frame: () => this.video.watcher.frame() } : null;

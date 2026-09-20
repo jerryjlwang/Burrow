@@ -28,6 +28,7 @@ function setup(html: string) {
     lookup: vi.fn(async () => ""),
     makePlan: vi.fn(async () => null),
     sketch: vi.fn(() => undefined),
+    eraseSketch: vi.fn(() => ({ erased: 1, left: 2 })),
     showPlan: vi.fn(() => true),
     input: vi.fn(async (): Promise<{ ok: boolean; error?: string }> => ({ ok: true })),
     trustedInputEnabled: vi.fn(() => false),
