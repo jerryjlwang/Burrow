@@ -105,3 +105,7 @@ Status: open, found 2026-09-20 by the front end.
 Status: heads-up, 2026-09-20. One more small handler in a backend-lane file, for the same reason as item 9.
 
 - `extension/src/background/index.ts`: a `zoom.get` case returning `chrome.tabs.getZoom(sender.tab.id)`, and `zoom.get` in `extension/src/shared/messages.ts`. The content script divides the rabbit's draw scale by it so a site the student has zoomed out does not shrink him. No permission was added; `tabs` was already there.
+
+## Heads-up: colour by numbers for "Become a character" (2026-09-20)
+
+`server/src/api/character.ts` and one route in `server/src/index.ts` (`POST /api/character/paint`) were added from the front end lane. It is one OpenAI vision call on `LLM_MODEL` that names a kid's drawing and gives each numbered region a flat colour; without a key it returns a stand-in palette. Self contained, no changes to existing services. Feel free to move or rework it.

@@ -30,6 +30,11 @@
       .knobs { display: grid; grid-template-columns: 138px 1fr 48px; gap: 6px 12px; align-items: center; margin-top: 12px; }
       .knobs input[type="range"] { accent-color: var(--teal); width: 100%; }
       .knobs .val { text-align: right; font-family: var(--font-digits); font-size: 20px; }
+      .paint { margin-top: 12px; padding: 9px 12px 12px; border: 3px solid var(--ink); background: var(--paper); }
+      .paint .who .px-input { line-height: 24px; }
+      .paint .row { margin-top: 9px; }
+      .paint .note { flex: 1; min-width: 200px; color: var(--muted); }
+      .paint .err.note { color: var(--red); margin: 0; }
       .name { margin-top: 12px; }
       .name .px-input { line-height: 24px; }
       /* The live preview: a stage the pet stands on, as on a page, light and dark halves. */

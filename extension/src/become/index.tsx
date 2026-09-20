@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { SpritePet, assembleCharacter, registerCharacter, CUSTOM_KEY, CUSTOM_PREFIX, DEFAULT_CHARACTER, type LoadedCharacter, type PetController, type StoredCharacter } from "../components/pet";
-import { DEFAULT_OPTIONS, makeCharacter, makeSprite, type MakeOptions, type Raster } from "../components/pet/pixelize";
+import { DEFAULT_OPTIONS, cutBackground, makeCharacter, makeSprite, type MakeOptions, type Raster } from "../components/pet/pixelize";
+import { looksBlackAndWhite, paintRegions, splitRegions, type Region } from "../components/pet/regions";
 import styles from "../components/styles.css";
 import { getSettings, setSettings } from "../shared/settings";
 
@@ -63,10 +64,70 @@ function loadFile(file: File): Promise<Raster> {
 
 let previewCount = 0;
 
+/** The cut-out on white with each region tinted and numbered, for the model to colour by numbers. */
+function numberedPicture(cut: Raster, labels: Int32Array, regions: Region[]): string {
+  const c = document.createElement("canvas");
+  c.width = cut.width;
+  c.height = cut.height;
+  const ctx = c.getContext("2d")!;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, c.width, c.height);
+  const img = ctx.getImageData(0, 0, c.width, c.height);
+  for (let k = 0; k < labels.length; k++) {
+    const a = cut.data[k * 4 + 3];
+    if (a === 0) continue;
+    const id = labels[k];
+    if (id > 0) {
+      // A faint tint per region so the borders read even where a line is thin.
+      const hue = (id * 47) % 360;
+      const [r, g, b] = hsl(hue, 0.5, 0.85);
+      img.data[k * 4] = r;
+      img.data[k * 4 + 1] = g;
+      img.data[k * 4 + 2] = b;
+    } else {
+      img.data[k * 4] = cut.data[k * 4];
+      img.data[k * 4 + 1] = cut.data[k * 4 + 1];
+      img.data[k * 4 + 2] = cut.data[k * 4 + 2];
+    }
+    img.data[k * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  ctx.font = "bold 13px Arial, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "#ffffff";
+  ctx.fillStyle = "#d0021b";
+  for (const r of regions) {
+    ctx.strokeText(String(r.id), r.cx, r.cy);
+    ctx.fillText(String(r.id), r.cx, r.cy);
+  }
+  return c.toDataURL("image/png");
+}
+
+function hsl(h: number, s: number, l: number): [number, number, number] {
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
+}
+
+interface PaintResult {
+  name: string;
+  colors: Record<string, string>;
+  provider: string;
+}
+
 function Maker() {
   const [phase, setPhase] = useState<"camera" | "tune" | "done">("camera");
   const [camError, setCamError] = useState("");
   const [photo, setPhoto] = useState<Raster | null>(null);
+  /** The picture as taken, kept so a colouring can be undone or redone with other words. */
+  const [original, setOriginal] = useState<Raster | null>(null);
+  const [hint, setHint] = useState("");
+  const [painting, setPainting] = useState<"" | "busy" | "done" | "failed">("");
+  const [paintNote, setPaintNote] = useState("");
+  const [serverUrl, setServerUrl] = useState("http://localhost:8787");
   const [opts, setOpts] = useState<MakeOptions>(DEFAULT_OPTIONS);
   const [name, setName] = useState("");
   const [current, setCurrent] = useState(DEFAULT_CHARACTER);
@@ -82,7 +143,10 @@ function Maker() {
   const petDarkRef = useRef<PetController | null>(null);
 
   useEffect(() => {
-    void getSettings().then((s) => setCurrent(s.character));
+    void getSettings().then((s) => {
+      setCurrent(s.character);
+      setServerUrl(s.serverUrl);
+    });
   }, []);
 
   // The camera runs only on the first step and is released as soon as a picture is taken.
@@ -158,17 +222,57 @@ function Maker() {
   const snap = () => {
     const v = videoRef.current;
     if (!v || !v.videoWidth) return;
-    setPhoto(grab(v, v.videoWidth, v.videoHeight, GUIDE, false));
-    setPhase("tune");
+    takePhoto(grab(v, v.videoWidth, v.videoHeight, GUIDE, false));
   };
   const pick = async (file: File | undefined) => {
     if (!file) return;
     try {
-      setPhoto(await loadFile(file));
-      setPhase("tune");
+      takePhoto(await loadFile(file));
     } catch (e) {
       setCamError(String((e as Error).message ?? e));
     }
+  };
+
+  const takePhoto = (r: Raster) => {
+    setOriginal(r);
+    setPhoto(r);
+    setPainting("");
+    setPaintNote(looksBlackAndWhite(cutBackground(r, opts.tolerance)) ? "Looks like a black and white drawing. Say who it is and colour it in." : "");
+    setPhase("tune");
+  };
+
+  /** Colour by numbers: split the cut-out into regions, number them, ask the server's model, fill them in. */
+  const colourIn = async () => {
+    if (!original || painting === "busy") return;
+    setPainting("busy");
+    setPaintNote("");
+    try {
+      const cut = cutBackground(original, opts.tolerance);
+      const { labels, regions } = splitRegions(cut);
+      if (!regions.length) throw new Error("No regions to colour. The lines need to close around each part.");
+      const numbered = numberedPicture(cut, labels, regions);
+      const photoUrl = canvasFromRaster(original).toDataURL("image/jpeg", 0.8);
+      const res = await fetch(`${serverUrl}/api/character/paint`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ numbered, photo: photoUrl, hint, regions: regions.map((r) => ({ id: r.id, size: r.size })) }),
+      });
+      if (!res.ok) throw new Error(`The server said ${res.status}`);
+      const out = (await res.json()) as PaintResult;
+      setPhoto(paintRegions(original, labels, out.colors));
+      if (!name.trim() && out.name) setName(out.name);
+      setPainting("done");
+      setPaintNote(out.provider === "mock" ? "Coloured with the server's stand-in palette (no model key)." : `Coloured as ${out.name}.`);
+    } catch (e) {
+      setPainting("failed");
+      setPaintNote(`Could not colour it: ${(e as Error).message}. Is the server running?`);
+    }
+  };
+  const undoColour = () => {
+    if (!original) return;
+    setPhoto(original);
+    setPainting("");
+    setPaintNote("");
   };
 
   const onPet = useCallback((c: PetController | null) => {
@@ -252,6 +356,23 @@ function Maker() {
             <canvas ref={spriteCanvas} className="sprite" width={64} height={58} aria-label="The pixel sprite" />
           </div>
           {!sprite && <p className="err">Nothing is left after the cut. Lower the background cut, or take the picture on a plainer wall.</p>}
+          <div className="paint">
+            <label className="who">
+              <span className="px-muted">Who is this?</span>
+              <input className="px-input" value={hint} placeholder="Pikachu, a green frog, my dog Max" onChange={(e) => setHint(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void colourIn()} />
+            </label>
+            <div className="row">
+              <button className="px-btn primary" onClick={() => void colourIn()} disabled={!original || painting === "busy"}>
+                {painting === "busy" ? "Colouring" : painting === "done" ? "Colour it again" : "Colour it in"}
+              </button>
+              {painting === "done" && (
+                <button className="px-btn" onClick={undoColour}>
+                  Undo colour
+                </button>
+              )}
+              {paintNote && <span className={painting === "failed" ? "err note" : "note"}>{paintNote}</span>}
+            </div>
+          </div>
           <div className="knobs">
             {knob("Background cut", "tolerance", 10, 160)}
             {knob("Size", "height", 20, 40)}

@@ -7,6 +7,7 @@ import { AgentService } from "./api/agent";
 import { ExtractService } from "./api/extract";
 import { lookUp } from "./api/lookup";
 import { InkService } from "./api/ink";
+import { CharacterService, type PaintInput } from "./api/character";
 import { NotebookService, type NotebookReadInput } from "./api/notebook";
 import { StepService, type JudgeRequest, type PlanRequest } from "./api/steps";
 import { VideoService, type VideoAnalyzeRequest } from "./api/video";
@@ -28,6 +29,7 @@ const video = new VideoService(llm, cfg.transcriptApiKey);
 const agent = new AgentService(cfg, steps);
 const extract = new ExtractService(cfg);
 const ink = new InkService(cfg);
+const character = new CharacterService(cfg);
 const notebook = new NotebookService(cfg);
 const demoRoot = resolve(here, "../../demo-pages");
 const notebookRoot = resolve(here, "../../notebook-page");
@@ -100,6 +102,16 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       json(res, 200, await agent.intervene({ ...input, demoMode: cfg.demoMode }));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/character/paint") {
+      const input = (await readJson(req, 6_000_000)) as PaintInput;
+      if (!input || typeof input.numbered !== "string" || !input.numbered.startsWith("data:image/") || !Array.isArray(input.regions)) {
+        json(res, 400, { error: "invalid input" });
+        return;
+      }
+      const regions = input.regions.filter((r) => r && Number.isFinite(r.id)).map((r) => ({ id: Number(r.id), size: Number(r.size) || 0 })).slice(0, 60);
+      json(res, 200, await character.paint({ numbered: input.numbered, photo: typeof input.photo === "string" && input.photo.startsWith("data:image/") ? input.photo : undefined, hint: typeof input.hint === "string" ? input.hint : undefined, regions }));
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/ink/judge") {
