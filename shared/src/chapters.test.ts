@@ -48,11 +48,6 @@ describe("pickChapterLexical", () => {
     expect(pickChapterLexical("look at the chapter list for neurons", chapters)).toBe(2);
   });
 
-  it("can demand a plainer match, which is what lets the chapter path skip the model", () => {
-    expect(pickChapterLexical("find the chapter on the series preview", chapters, 2)).toBe(1);
-    expect(pickChapterLexical("look at the chapter list for neurons", chapters, 2)).toBeNull();
-  });
-
   it("is null when they named no part, or nothing overlaps", () => {
     expect(pickChapterLexical("show me the chapter list", chapters)).toBeNull();
     expect(pickChapterLexical("which chapter is about logarithms", chapters)).toBeNull();

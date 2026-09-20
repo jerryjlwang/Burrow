@@ -44,10 +44,9 @@ const stem = (w: string) => w.replace(/(ing|ed|es|s)$/, "").replace(/e$/, "");
 
 /**
  * The chapter whose title shares the most content words with the request; null when nothing
- * overlaps (or fewer than `minShared` words do). Used when no model is available, as the fallback
- * when the model call fails, and — asked for two shared words — to skip the model when the match is plain.
+ * overlaps. Used when no model is available, and as the fallback when the model call fails.
  */
-export function pickChapterLexical(request: string, chapters: Chapter[], minShared = 1): number | null {
+export function pickChapterLexical(request: string, chapters: Chapter[]): number | null {
   const wanted = new Set(words(request).map(stem));
   if (!wanted.size) return null;
   let best = -1;
@@ -59,5 +58,5 @@ export function pickChapterLexical(request: string, chapters: Chapter[], minShar
       bestScore = score;
     }
   });
-  return bestScore < minShared ? null : best;
+  return best === -1 ? null : best;
 }

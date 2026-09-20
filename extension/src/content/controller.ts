@@ -8,7 +8,7 @@ import { validateInkJudgement } from "@shared/ink";
 import { pageRole } from "../components/handoff";
 import { markInkAt } from "../components/InkCoach";
 import { isVideoQuestion, pickRelated, relatedQuery } from "@shared/related";
-import { isChapterRequest, pickChapterLexical } from "@shared/chapters";
+import { isChapterRequest } from "@shared/chapters";
 import { chapterTarget, openDescription, readChapters } from "../page-understanding/chapters";
 import { planStepSuggestion } from "@shared/path";
 import type { PlanRoute } from "./store";
@@ -547,14 +547,10 @@ export class CompanionController {
       await openDescription();
       const chapters = readChapters();
       if (chapters.length < 2) return false;
-      // Two of their own words in a chapter's title is a plain match: no need to wait on the model for it.
-      const plain = pickChapterLexical(request, chapters, 2);
-      const picking = plain !== null
-        ? Promise.resolve({ index: plain, by: "lexical" as const })
-        : sendToBackground({ type: "video.chapter", request: { request, title: document.title, chapters } }, 12_000).catch((e) => {
-            logger.warn("chapter pick unavailable", { error: String(e) });
-            return null;
-          });
+      const picking = sendToBackground({ type: "video.chapter", request: { request, title: document.title, chapters } }, 12_000).catch((e) => {
+        logger.warn("chapter pick unavailable", { error: String(e) });
+        return null;
+      });
       // Down to the list while the choice is being made, so the wait is spent somewhere useful.
       chapterTarget(chapters[0]).el.scrollIntoView({ behavior: "smooth", block: "center" });
       const pick = await picking;
