@@ -549,3 +549,9 @@
 .pip-notes-rest { visibility: hidden; }
 .pip-notes-caret { display: inline-block; width: 9px; height: 15px; margin-left: 3px; vertical-align: -3px; background: var(--ink); animation: pip-blink 0.6s steps(2) infinite; }
 @keyframes pip-notes-pop { 0% { transform: translateY(18px); } 50% { transform: translateY(-6px); } 100% { transform: none; } }
+
+/* ---------- Action set pieces: the rabbit acts out the agent's actions (components/actfx) ---------- */
+/* One fixed, pointer-transparent layer for pixel effects. Each module (tabs, hands, video) appends its
+   own section below this one: whole pixels, 3px grid, steps() timing, cream/brown/teal/gold palette. */
+.pip-actfx { position: fixed; inset: 0; pointer-events: none; overflow: visible; }
+.pip-actfx > * { position: fixed; pointer-events: none; image-rendering: pixelated; }

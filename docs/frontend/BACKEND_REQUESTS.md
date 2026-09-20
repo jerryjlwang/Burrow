@@ -71,3 +71,10 @@ Status: heads-up, 2026-09-20. Micah asked for the tablet watcher end to end, so 
 - `extension/manifest.json`: the `system.display` permission and the `open-tablet` command (Alt+Shift+D).
 
 The judge is one Gemini call per check and returns text only; the rabbit speaks through Deepgram as before. `INK_DEBUG_DIR` on the server dumps judged frames for tuning.
+
+## 9. Two window events for the rabbit's action set pieces
+
+Status: heads-up, 2026-09-20. Two backend-lane files gained one announcement each, documented in `docs/frontend/ACTION_FX.md`; please keep them when you refactor.
+
+- `extension/src/actions/executor.ts`: `announceAction` dispatches `burrow:act` at the top of `executeAction` and waits for an optional `detail.hold` at most 900 ms. Nothing else about an action changed.
+- `extension/src/page-understanding/video.ts`: `announceVideo` dispatches `burrow:video` from `pause()` and `play()` (by us) and from the seeked, pause and play handlers (by them).
