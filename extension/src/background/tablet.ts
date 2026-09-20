@@ -72,6 +72,8 @@ interface Watch {
 
 let watch: Watch | null = null;
 let deps: Deps | null = null;
+/** A board left open after he came home: the next trip reuses it, with whatever is on it treated as old news. */
+let parkedBoard: { windowId: number; boardTabId: number | null } | null = null;
 /** Chrome allows two tab captures a second across the whole extension; the tick and the context capture share that budget. */
 let lastCaptureAt = 0;
 let contextCapturing = false;
@@ -82,6 +84,7 @@ export function initTablet(d: Deps): void {
   // Test hook: lets an automated run drive the watcher from the service worker context.
   (globalThis as unknown as { __burrowTablet?: unknown }).__burrowTablet = { open: openTablet, stop: stopTablet, status: tabletStatus, locate: locateInk };
   chrome.windows.onRemoved.addListener((windowId) => {
+    if (parkedBoard && parkedBoard.windowId === windowId) parkedBoard = null;
     if (watch && watch.windowId === windowId) void stopTablet(false);
   });
   chrome.tabs.onUpdated.addListener((tabId, info) => {
@@ -281,8 +284,27 @@ export async function openTablet(contextTab?: chrome.tabs.Tab | null, opts: { sk
   }
   if (ctx && watch && ctx.windowId === watch.windowId) ctx = null; // pressed on the board itself
   if (watch) {
-    // Pressed again while he is on the board: the trip back. The board closes and he comes home.
-    return stopTablet(true);
+    // Pressed again while he is on the board: the trip back. The board stays open; he hops home.
+    return stopTablet(false);
+  }
+  if (parkedBoard) {
+    // A trip to a board he left earlier: the same window, but a fresh watch. What is on it already
+    // is the old problem's work, so the first frame is the baseline and only new ink gets judged.
+    try {
+      await chrome.windows.get(parkedBoard.windowId);
+      await chrome.windows.update(parkedBoard.windowId, { focused: true });
+      watch = freshWatch(parkedBoard.windowId, parkedBoard.boardTabId, ctx?.id ?? null, ctx?.windowId ?? null);
+      // His arrival moves pixels; nothing is diffed until he has landed and stood still.
+      watch.quietUntil = Date.now() + 2_500 + 900 + 1_500;
+      parkedBoard = null;
+      logger.info("board reused", { window: watch.windowId, contextTab: ctx?.id ?? null });
+      startLoop();
+      await persist();
+      await writeJump("board", "kid", "requested");
+      return tabletStatus();
+    } catch {
+      parkedBoard = null;
+    }
   }
   const display = opts.skipDisplay ? null : await pickDisplay();
   const area = display?.workArea;
@@ -303,6 +325,7 @@ export async function openTablet(contextTab?: chrome.tabs.Tab | null, opts: { sk
     }
   }
   watch = freshWatch(win.id, win.tabs?.[0]?.id ?? null, ctx?.id ?? null, ctx?.windowId ?? null);
+  watch.quietUntil = Date.now() + 2_500 + 900 + 1_500;
   logger.info("board opened", { window: win.id, display: display?.name ?? "same screen", touch: display?.hasTouchSupport ?? false, contextTab: ctx?.id ?? null });
   startLoop();
   await persist();
@@ -331,7 +354,8 @@ export async function stopTablet(closeWindow: boolean): Promise<TabletState> {
       /* already closed */
     }
   }
-  // Back to the kid's page: a living board dives first; a closed one cannot, so he is simply gone.
+  if (w && boardAlive) parkedBoard = { windowId: w.windowId, boardTabId: w.boardTabId };
+  // Back to the kid's page: a living board sees him off first; a closed one cannot, so he is simply gone.
   if (w) await writeJump("kid", "board", boardAlive ? "requested" : "gone");
   try {
     await chrome.storage.session.remove(STATE_KEY);
