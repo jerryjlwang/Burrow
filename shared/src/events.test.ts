@@ -41,3 +41,29 @@ describe("resourceKindOf", () => {
     expect(resourceKindOf("not a url")).toBe("page");
   });
 });
+
+
+describe("graded results pages", () => {
+  const results = (at: number, missed: string[]): LearnerEvent => ({ kind: "extraction", at, ctx: { url: "https://example.edu/quiz/results#top", title: "Results", kind: "page" }, extraction: { concepts: [], edges: [], misconceptions: [], missed } });
+  const DAY = 24 * 3_600_000;
+
+  it("counts a results page once: a reload is not a second set of wrong answers", () => {
+    const g = new KnowledgeGraph();
+    applyLearnerEvent(g, results(T0, ["Seasons", "Plate tectonics"]));
+    applyLearnerEvent(g, results(T0 + 60_000, ["Plate tectonics", "Seasons"])); // reload, order differs
+    expect(g.get("seasons")!.state.attempts).toBe(1);
+    expect(g.get("plate-tectonics")!.state.attempts).toBe(1);
+  });
+
+  it("still counts a retake with different misses, the same result a day later, and survives persistence", () => {
+    const g = new KnowledgeGraph();
+    applyLearnerEvent(g, results(T0, ["Seasons", "Plate tectonics"]));
+    applyLearnerEvent(g, results(T0 + 60_000, ["Seasons"])); // retake: only one miss now
+    expect(g.get("seasons")!.state.attempts).toBe(2);
+    const back = KnowledgeGraph.fromJSON(JSON.parse(JSON.stringify(g.toJSON())));
+    applyLearnerEvent(back, results(T0 + 120_000, ["Seasons"])); // reload in a new session
+    expect(back.get("seasons")!.state.attempts).toBe(2);
+    applyLearnerEvent(back, results(T0 + DAY + 120_000, ["Seasons"]));
+    expect(back.get("seasons")!.state.attempts).toBe(3);
+  });
+});

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { KnowledgeGraph, RECALL } from "./graph";
+import { KnowledgeGraph, RECALL, emptyProfile } from "./graph";
 import { diagnose, diagnoseConcept, formatDiagnostics, preferredModality, retention } from "./diagnostics";
 
 const T0 = 1_700_000_000_000;
@@ -138,7 +138,7 @@ describe("profile: offers, resources, plans", () => {
 
   it("drops a malformed profile instead of throwing", () => {
     const g = KnowledgeGraph.fromJSON({ version: 1, nodes: [], edges: [], updatedAt: 0, profile: { offers: "nope", resources: [{ url: 3 }, null], plans: [{ key: "k" }], suggested: [7] } });
-    expect(g.profile).toEqual({ offers: {}, solves: { unaided: 0, hinted: 0 }, resources: [], suggested: [], plans: [] });
+    expect(g.profile).toEqual(emptyProfile());
   });
 });
 

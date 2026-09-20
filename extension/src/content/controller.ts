@@ -158,6 +158,8 @@ export class CompanionController {
       store.setState({ characterState: this.voice.listening ? "listening" : "idle", status: "", board: null });
     };
     document.addEventListener("keydown", onKeydown, true);
+    // Observe whatever changed in the last debounce window before this document goes away.
+    window.addEventListener("pagehide", () => this.watcher.flush());
 
     this.session.onRecord = () => this.refreshPlanView();
     const session = await this.session.load();
