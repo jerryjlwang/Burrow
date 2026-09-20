@@ -1,6 +1,7 @@
 import { spawn, wait, type ActDetail, type Piece, type PieceContext } from "./common";
 import { burst, confetti, gather, trail, CREAM, GOLD, TEAL, WHITE } from "./particles";
 import { whoosh } from "../tunnel";
+import { assetUrl } from "../pet";
 import { FLIGHT } from "../pet/travel";
 
 /** Actions this module acts out: the rabbit and the browser's tabs and pages. */
@@ -9,7 +10,10 @@ export const TAB_ACTIONS = new Set(["open_tab", "switch_tab", "navigate", "go_ba
 /** Where his head should reach on the jump: just under the top edge, where the tab strip is. */
 const APEX_Y = 6;
 const CARD_W = 189;
-const CHARGE_MS = 380;
+const CHARGE_MS = 360;
+/** The big card the new tab arrives as, centre stage, long enough to read. */
+const BIG_W = 372;
+const HOLD_MS = 620;
 const POP_MS = 240;
 const AWAY_MS = 520;
 const ACROSS_MS = 480;
@@ -21,6 +25,29 @@ const host = (url: string | null): string => {
     return "new tab";
   }
 };
+
+/**
+ * The page falls away: a dither of ink over everything, darkest at the edges, so the sparks and the
+ * card read against it. It lifts at the end of the piece. Nothing under reduced motion.
+ */
+function dim(ctx: PieceContext): () => void {
+  if (ctx.reduced) return () => undefined;
+  const { el } = spawn(ctx.layer, "pip-actfx-dim", { backgroundImage: `url("${assetUrl("ui/guide/dim.png")}")` });
+  return () => {
+    el.classList.add("out");
+    window.setTimeout(() => el.remove(), 320);
+  };
+}
+
+/** Cracks running out from a hit, drawn in steps like a pane going. */
+function cracks(ctx: PieceContext, x: number, y: number): void {
+  for (let i = 0; i < 8; i++) {
+    const { el } = spawn(ctx.layer, "pip-crack", { left: `${Math.round(x)}px`, top: `${Math.round(y)}px` }, 620);
+    el.style.setProperty("--a", `${(i / 8) * 360 + 12}deg`);
+    el.style.setProperty("--len", `${120 + (i % 3) * 45}px`);
+    el.style.animationDelay = `${(i % 4) * 25}ms`;
+  }
+}
 
 /** A ring of pixels that expands from a point in steps and fades: the shock of an impact. */
 function shock(ctx: PieceContext, x: number, y: number, to: number, ms: number, color = CREAM): void {
@@ -105,21 +132,25 @@ async function tabCard(ctx: PieceContext, x: number, text: string, how: "away" |
  */
 async function openTab(d: ActDetail, ctx: PieceContext): Promise<void> {
   const pet = ctx.pet;
-  const r = ctx.petRect();
+  const r0 = ctx.petRect();
   const text = host(d.url);
-  if (pet && r && ready && ready.action === "open_tab" && Date.now() < ready.until) {
+  if (pet && r0 && ready && ready.action === "open_tab" && Date.now() < ready.until) {
     // He is already up at the strip, charged: the punch lands the moment the decision does.
-    const { home, timer } = ready;
+    const { home, timer, lift } = ready;
     window.clearTimeout(timer);
     ready = null;
-    void punch(ctx, pet, r, text, home);
+    void punch(ctx, pet, r0, text, home, lift);
     return;
   }
-  if (!pet || !r || ctx.reduced) {
-    await tabCard(ctx, r ? r.x + r.width / 2 : window.innerWidth - 120, text, "away");
+  if (!pet || !r0 || ctx.reduced) {
+    await tabCard(ctx, r0 ? r0.x + r0.width / 2 : window.innerWidth - 120, text, "away");
     return;
   }
-  const home = { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  const home = { x: r0.x + r0.width / 2, y: r0.y + r0.height / 2 };
+  const lift = dim(ctx);
+  // No trip first: the page falls away and he goes straight up from where he stands, so the beat
+  // starts at once. The card is centre stage wherever he jumped from.
+  const r = r0;
   await charge(ctx, pet, r);
   const h = Math.max(60, r.top - APEX_Y);
   const vy = -Math.sqrt(2 * FLIGHT.gravity * h);
@@ -129,7 +160,9 @@ async function openTab(d: ActDetail, ctx: PieceContext): Promise<void> {
   trailWhile(ctx, flight);
   await wait(Math.min(apexMs, 820));
   const at = ctx.petRect() ?? r;
-  void impact(ctx, at, text).then(() => flight).then(() => landing(ctx, pet, home));
+  void impact(ctx, at, text)
+    .then(() => flight)
+    .then(() => landing(ctx, pet, home, lift));
 }
 
 /** The wind-up: sparks drawn into him from a ring, a glow under his feet, a crouch. */
@@ -152,39 +185,86 @@ function launch(ctx: PieceContext, r: DOMRect): void {
   whoosh("up");
 }
 
-/** The hit at the top: flash, shock rings, a burst, a jolt, then the card. */
+/**
+ * The hit: a white flash, three shock rings, cracks running out, sixty pixels thrown, the layer jolts
+ * twice. Then the new tab arrives as a card big enough to read in the middle of the screen, holds,
+ * and rockets up to the strip on a beam with a comet of sparks behind it.
+ */
 async function impact(ctx: PieceContext, at: DOMRect, text: string): Promise<void> {
-  const tapX = at.x + at.width / 2 + 27;
-  flash(ctx, 0.5);
+  const x = Math.round(at.x + at.width / 2);
+  const y = Math.round(APEX_Y + 30);
+  flash(ctx, 0.75);
   shake(ctx);
-  shock(ctx, tapX, APEX_Y + 9, 150, 300, WHITE);
-  shock(ctx, tapX, APEX_Y + 9, 90, 220, GOLD);
-  burst(ctx.layer, tapX, APEX_Y + 12, 24, { lo: 200, hi: 520, colors: [CREAM, GOLD, TEAL], g: 640, life: 760, size: 3 });
-  await tabCard(ctx, tapX, text, "away");
+  shock(ctx, x, y, 420, 420, WHITE);
+  shock(ctx, x, y, 270, 340, GOLD);
+  shock(ctx, x, y, 140, 260, CREAM);
+  cracks(ctx, x, y);
+  burst(ctx.layer, x, y, 60, { lo: 240, hi: 900, colors: [CREAM, GOLD, TEAL, WHITE], g: 520, life: 1000, size: 3 });
+  whoosh("up");
+  await wait(140);
+  await bigCard(ctx, x, text);
+}
+
+/** The card the new tab arrives as: it grows out of the hit, holds where it can be read, then goes up. */
+async function bigCard(ctx: PieceContext, _x: number, text: string): Promise<void> {
+  const left = Math.round((window.innerWidth - BIG_W) / 2 / 3) * 3;
+  const top = Math.round((window.innerHeight * 0.3) / 3) * 3;
+  const { el, gone } = spawn(ctx.layer, "pip-bigcard", { left: `${left}px`, top: `${top}px`, width: `${BIG_W}px` });
+  const ico = document.createElement("i");
+  ico.className = "pip-bigcard-ico";
+  const label = document.createElement("span");
+  label.textContent = text;
+  const sub = document.createElement("b");
+  sub.textContent = "opening a new tab";
+  el.append(ico, label, sub);
+  if (ctx.reduced) {
+    await wait(700);
+    gone();
+    return;
+  }
+  await wait(240);
+  // A halo of sparks drawn in as it settles, so the eye goes to it.
+  gather(ctx.layer, left + BIG_W / 2, top + 45, 18, 180, 300, [GOLD, CREAM]);
+  await wait(HOLD_MS);
+  spawn(ctx.layer, "pip-beamup", { left: `${left + BIG_W / 2}px` }, AWAY_MS + 120);
+  el.classList.add("away");
+  for (let i = 0; i < 6; i++) {
+    burst(ctx.layer, left + BIG_W / 2 + (Math.random() - 0.5) * BIG_W, top - i * 24, 6, { lo: 80, hi: 300, colors: [CREAM, GOLD], g: -180, life: 620, size: 3 });
+    await wait(AWAY_MS / 6);
+  }
+  gone();
 }
 
 /** The landing: dust, a ring, a bow, and a little confetti for the judges. */
-async function landing(ctx: PieceContext, pet: PieceContext["pet"], home: { x: number; y: number }): Promise<void> {
+async function landing(ctx: PieceContext, pet: PieceContext["pet"], home: { x: number; y: number }, lift?: () => void): Promise<void> {
   const r = ctx.petRect();
   if (r) {
     shock(ctx, r.x + r.width / 2, r.y + r.height, 96, 260, CREAM);
     burst(ctx.layer, r.x + r.width / 2, r.y + r.height, 10, { lo: 80, hi: 260, colors: [CREAM], g: 900, life: 460 });
   }
-  confetti(ctx.layer, home.x - 150, home.x + 150, 14);
+  confetti(ctx.layer, 0, window.innerWidth, 40);
+  lift?.();
   pet?.play("celebrate");
+  await wait(360);
+  await pet?.goTo(home.x, home.y);
 }
 
 /** He is up at the strip already: punch, card, then home. */
-async function punch(ctx: PieceContext, pet: PieceContext["pet"], r: DOMRect, text: string, home: { x: number; y: number }): Promise<void> {
-  pet?.play("land");
-  await impact(ctx, r, text);
-  await wait(160);
-  await pet?.goTo(home.x, home.y);
-  await landing(ctx, pet, home);
+async function punch(ctx: PieceContext, pet: PieceContext["pet"], r: DOMRect, text: string, home: { x: number; y: number }, lift: () => void): Promise<void> {
+  if (!pet) return;
+  const h = Math.max(60, r.top - APEX_Y);
+  const vy = -Math.sqrt(2 * FLIGHT.gravity * h);
+  launch(ctx, r);
+  const flight = pet.fling(0, vy);
+  trailWhile(ctx, flight);
+  await wait(Math.min(Math.round((-vy / FLIGHT.gravity) * 1000), 820));
+  await impact(ctx, ctx.petRect() ?? r, text);
+  await flight;
+  await landing(ctx, pet, home, lift);
 }
 
 /** He went up early on a guess and is waiting under the strip: where, since when, and where home is. */
-let ready: { action: string; until: number; home: { x: number; y: number }; timer: number } | null = null;
+let ready: { action: string; until: number; home: { x: number; y: number }; timer: number; lift: () => void } | null = null;
 const READY_MS = 9000;
 
 /**
@@ -197,21 +277,17 @@ export async function anticipateTabPiece(action: "open_tab", ctx: PieceContext):
   const r = ctx.petRect();
   if (!pet || !r || ctx.reduced || ready) return;
   const home = { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-  const x = Math.max(120, Math.min(window.innerWidth - 120, home.x));
+  const lift = dim(ctx);
   const timer = window.setTimeout(() => {
     if (ready?.timer !== timer) return;
     ready = null;
+    lift();
     void pet.goTo(home.x, home.y);
   }, READY_MS);
-  ready = { action, until: Date.now() + READY_MS, home, timer };
+  ready = { action, until: Date.now() + READY_MS, home, timer, lift };
+  // He does not travel: he crouches where he is and keeps a glow while the model decides.
   await charge(ctx, pet, r);
-  speedLines(ctx, home.x, 520);
-  await pet.goTo(x, APEX_Y + r.height / 2 + 3);
-  const up = ctx.petRect();
-  if (up && ready) {
-    burst(ctx.layer, up.x + up.width / 2, up.y + up.height, 8, { lo: 60, hi: 200, colors: [GOLD], g: 500, life: 520 });
-    spawn(ctx.layer, "pip-charge waiting", { left: `${Math.round(up.x + up.width / 2)}px`, top: `${Math.round(up.y + up.height)}px` }, READY_MS);
-  }
+  if (ready) spawn(ctx.layer, "pip-charge waiting", { left: `${Math.round(r.x + r.width / 2)}px`, top: `${Math.round(r.y + r.height)}px` }, READY_MS);
 }
 
 /** switch_tab: a wave, and the card slides along the strip behind a teal wipe. */
