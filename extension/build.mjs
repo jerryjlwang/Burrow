@@ -9,7 +9,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "..");
 const outdir = join(here, "dist");
 const isWatch = process.argv.includes("--watch");
-const isProd = process.argv.includes("--prod");
+const isDev = process.argv.includes("--dev") || isWatch;
+const isProd = !isDev;
 
 const entryPoints = {
   content: join(here, "src/content/index.tsx"),
@@ -39,7 +40,7 @@ const options = {
   format: "iife",
   target: ["chrome116"],
   platform: "browser",
-  sourcemap: isProd ? false : "inline",
+  sourcemap: isProd ? false : "linked",
   minify: isProd,
   logLevel: "info",
   legalComments: "none",

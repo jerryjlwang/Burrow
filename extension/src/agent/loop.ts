@@ -1,4 +1,5 @@
-import { validateDecision, type AgentDecision } from "@shared/schemas";
+import { validateDecision } from "@shared/validate";
+import type { AgentDecision } from "@shared/actions";
 import type { ActionRecord, AgentInput, AgentOutput, PageSummary, PendingOffer } from "@shared/types";
 import { decideMock } from "@shared/mock-agent";
 import { detectProblem, problemKey } from "@shared/hints";
@@ -179,7 +180,7 @@ export class AgentLoop {
           }
         } else if (decision.say) {
           // Speak alongside the action (e.g. "Yep." while clicking, or the hint while pointing).
-          this.say(decision.say, decision.action === "explain" ? decision.text ?? undefined : undefined);
+          this.say(decision.say);
         }
 
         if (decision.action === "observe") {
@@ -189,6 +190,12 @@ export class AgentLoop {
         }
 
         // --- Execute + verify ---
+        // Persist resume state BEFORE actions that may unload the page (a click on a link
+        // navigates faster than we could save afterwards). Cleared again if nothing navigated.
+        const mayNavigate = decision.action === "click" || decision.action === "navigate" || decision.action === "go_back";
+        if (mayNavigate) {
+          await session.setPendingLoop({ utterance, goal, history: [...history.slice(-5), { step, decision, result: { ok: true, message: "action dispatched; page navigated" }, at: Date.now() }], step: step + 1, at: Date.now(), pendingOffer: null, lastReferencedElementName: this.lastReferencedElementName });
+        }
         const result = await this.executeSafely(decision, page, signal);
         history.push({ step, decision, result, at: Date.now() });
         store.setState({ debug: { ...store.getState().debug, lastResult: result } });
@@ -197,10 +204,11 @@ export class AgentLoop {
           if (pendingOffer || decision.taskType === "learning" || decision.taskType === "assessment") this.noteHint(page);
         }
         if (result.urlChanged) {
-          // The page is navigating; the next content script resumes with this state.
+          // The page is navigating; the next content script resumes with the state saved above.
           await session.setPendingLoop({ utterance, goal, history: history.slice(-6), step: step + 1, at: Date.now(), pendingOffer: null, lastReferencedElementName: this.lastReferencedElementName });
           break;
         }
+        if (mayNavigate) await session.setPendingLoop(null);
         if (!result.ok && !result.elementFound) {
           // Element vanished: re-observe on the next iteration (the model sees the failure in history).
           continue;

@@ -1,5 +1,6 @@
 :root { --ink: #1f2333; --muted: #6b7280; --brand: #0f766e; --brand-2: #14b8a6; --bg: #f5f7fb; --card: #fff; --line: #e5e7eb; --danger: #b91c1c; --ok: #15803d; }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); line-height: 1.5; }
 a { color: var(--brand); }
 header.top { background: #fff; border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10; }

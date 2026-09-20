@@ -126,7 +126,8 @@ export async function attachSttSession(client: WebSocket, cfg: Config): Promise<
         accumulated = "";
         if (text) send(client, { type: "transcript", text, final: true, event: "EndOfTurn", turnIndex: turnIndex++ });
       };
-      conn.on("message", (m: { type: string; [k: string]: unknown }) => {
+      conn.on("message", (raw) => {
+        const m = raw as unknown as { type: string; [k: string]: unknown };
         if (m.type === "Results") {
           const alt = (m as { channel?: { alternatives?: { transcript?: string }[] } }).channel?.alternatives?.[0];
           const text = (alt?.transcript ?? "").trim();

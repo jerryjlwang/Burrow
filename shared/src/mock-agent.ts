@@ -3,7 +3,7 @@
  * or when the extension cannot reach the server at all. It makes the demo scenarios
  * (navigation, pointing, clicking, summaries, progressive hints) work reliably offline.
  */
-import { DECISION_DEFAULTS, type AgentDecision, type InterventionDecision } from "./schemas";
+import { DECISION_DEFAULTS, type AgentDecision, type InterventionDecision } from "./actions";
 import type { AgentInput, InterventionInput, PageElement, PageSummary } from "./types";
 import { extractTarget, findBestElement, findElements, isAffirmative, isNegative, isStopCommand, normalizeText, truncate } from "./text";
 import { detectProblem, hintFor } from "./hints";

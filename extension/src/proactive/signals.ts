@@ -38,6 +38,7 @@ export class SignalTracker {
   private clicks: ClickRecord[] = [];
   private urls: { url: string; at: number }[] = [];
   private lastActionAt = 0;
+  private lastCountedActionAt = 0;
   private knownErrors = new Set<string>();
   private knownSuccesses = new Set<string>();
   private incorrectAt: number[] = [];
@@ -90,11 +91,25 @@ export class SignalTracker {
     for (const e of page.errors) this.knownErrors.add(e);
     for (const s of page.successes) this.knownSuccesses.add(s);
 
-    const attributable = now - this.lastActionAt <= THRESHOLDS.attributionMs;
-    for (const e of newErrors) {
-      this.lastErrorText = e;
-      if (INCORRECT_RE.test(e) && (page.hasQuizUi || attributable)) this.incorrectAt.push(now);
-      else if (attributable) this.validationAt.push(now);
+    // Attribute errors to the student's most recent action, at most once per action. This also
+    // counts pages that keep showing the same "try again" message after every attempt.
+    const attributable = now - this.lastActionAt <= THRESHOLDS.attributionMs && this.lastActionAt > this.lastCountedActionAt;
+    const incorrectShown = page.errors.find((e) => INCORRECT_RE.test(e));
+    const newIncorrect = newErrors.find((e) => INCORRECT_RE.test(e));
+    if (attributable && incorrectShown) {
+      this.incorrectAt.push(now);
+      this.lastCountedActionAt = this.lastActionAt;
+      this.lastErrorText = incorrectShown;
+    } else if (newIncorrect && page.hasQuizUi) {
+      this.incorrectAt.push(now);
+      this.lastCountedActionAt = this.lastActionAt;
+      this.lastErrorText = newIncorrect;
+    } else if (attributable && newErrors.length) {
+      this.validationAt.push(now);
+      this.lastCountedActionAt = this.lastActionAt;
+      this.lastErrorText = newErrors[0];
+    } else if (newErrors.length) {
+      this.lastErrorText = newErrors[0];
     }
     if (newSuccesses.length) {
       this.incorrectAt = [];

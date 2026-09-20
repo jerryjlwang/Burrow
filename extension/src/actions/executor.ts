@@ -1,4 +1,4 @@
-import type { AgentDecision } from "@shared/schemas";
+import type { AgentDecision } from "@shared/actions";
 import type { ActionResult, PageSummary } from "@shared/types";
 import { normalizeText } from "@shared/text";
 import { ElementRegistry } from "../page-understanding/registry";
@@ -27,9 +27,23 @@ function isInputLike(el: Element): el is HTMLInputElement | HTMLTextAreaElement 
   return el.tagName === "INPUT" || el.tagName === "TEXTAREA";
 }
 
+function isContentEditable(el: Element): boolean {
+  if ((el as HTMLElement).isContentEditable === true) return true;
+  const attr = el.getAttribute("contenteditable");
+  return attr === "" || attr === "true" || attr === "plaintext-only";
+}
+
 function isEditable(el: Element): boolean {
   if (isInputLike(el)) return !(el as HTMLInputElement).readOnly && !(el as HTMLInputElement).disabled;
-  return (el as HTMLElement).isContentEditable === true;
+  return isContentEditable(el);
+}
+
+function prefersReducedMotion(): boolean {
+  try {
+    return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return false;
+  }
 }
 
 function center(el: Element): { x: number; y: number } {
@@ -38,6 +52,7 @@ function center(el: Element): { x: number; y: number } {
 }
 
 function coveredBy(el: Element): Element | null {
+  if (typeof document.elementFromPoint !== "function") return null;
   const { x, y } = center(el);
   const top = document.elementFromPoint(x, y);
   if (!top || top === el || el.contains(top) || top.contains(el)) return null;
@@ -48,10 +63,22 @@ function coveredBy(el: Element): Element | null {
 
 export function dispatchClickSequence(el: Element): void {
   const { x, y } = center(el);
-  const base = { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, view: window, button: 0 } as const;
+  const view = el.ownerDocument.defaultView ?? undefined;
+  const base = { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, button: 0 } as const;
+  const make = <T extends Event>(ctor: new (type: string, init: Record<string, unknown>) => T, type: string, init: Record<string, unknown>): T => {
+    try {
+      return new ctor(type, { ...init, view });
+    } catch {
+      return new ctor(type, init);
+    }
+  };
   const pointer = (type: string, extra: Record<string, unknown> = {}) =>
-    el.dispatchEvent(new PointerEvent(type, { ...base, pointerId: 1, pointerType: "mouse", isPrimary: true, ...extra }));
-  const mouse = (type: string, extra: Record<string, unknown> = {}) => el.dispatchEvent(new MouseEvent(type, { ...base, ...extra }));
+    el.dispatchEvent(
+      typeof PointerEvent === "function"
+        ? make(PointerEvent as unknown as new (type: string, init: Record<string, unknown>) => Event, type, { ...base, pointerId: 1, pointerType: "mouse", isPrimary: true, ...extra })
+        : make(MouseEvent as unknown as new (type: string, init: Record<string, unknown>) => Event, type, { ...base, ...extra }),
+    );
+  const mouse = (type: string, extra: Record<string, unknown> = {}) => el.dispatchEvent(make(MouseEvent as unknown as new (type: string, init: Record<string, unknown>) => Event, type, { ...base, ...extra }));
   pointer("pointerover");
   mouse("mouseover");
   pointer("pointermove");
@@ -98,7 +125,7 @@ export function typeInto(el: Element, text: string, opts: { clear?: boolean } = 
     el.dispatchEvent(new Event("change", { bubbles: true }));
     return el.value;
   }
-  if ((el as HTMLElement).isContentEditable) {
+  if (isContentEditable(el)) {
     const sel = window.getSelection();
     const range = document.createRange();
     range.selectNodeContents(el);
@@ -138,7 +165,7 @@ function clearElement(el: Element): void {
     el.dispatchEvent(new Event("change", { bubbles: true }));
     return;
   }
-  if ((el as HTMLElement).isContentEditable) {
+  if (isContentEditable(el)) {
     el.textContent = "";
     el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "deleteContentBackward" }));
   }
@@ -165,7 +192,7 @@ function findScrollableRoot(): Element | null {
 
 export async function executeAction(decision: AgentDecision, deps: ExecutorDeps): Promise<ActionResult> {
   const { registry, overlay } = deps;
-  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reduced = prefersReducedMotion();
   const behavior: ScrollBehavior = reduced ? "auto" : "smooth";
   const getEl = (): { el: Element } | { error: ActionResult } => {
     const el = decision.elementId != null ? registry.get(decision.elementId) : null;

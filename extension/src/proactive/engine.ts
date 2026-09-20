@@ -1,5 +1,6 @@
 import type { PageSummary, PendingOffer, InterventionInput } from "@shared/types";
-import { validateIntervention, type InterventionDecision } from "@shared/schemas";
+import { validateIntervention } from "@shared/validate";
+import type { InterventionDecision } from "@shared/actions";
 import { interveneMock, findAnswerInput } from "@shared/mock-agent";
 import { computeLevel, SignalTracker, THRESHOLDS, type ClickRecord } from "./signals";
 import { store } from "../content/store";
@@ -150,9 +151,10 @@ export class ProactiveEngine {
       const id = this.issueElementId();
       const el = id != null ? this.deps.registry.get(id) : null;
       const rect = el?.getBoundingClientRect();
-      store.setState({ attention: level, lookAt: rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : null });
+      const cue = level as 1 | 2;
+      store.setState({ attention: cue, lookAt: rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : null });
       if (this.cueTimer) window.clearTimeout(this.cueTimer);
-      this.cueTimer = window.setTimeout(() => store.setState((st) => (st.attention === level ? { attention: 0, lookAt: st.pointer ? st.lookAt : null } : {})), level === 1 ? 3000 : 6000);
+      this.cueTimer = window.setTimeout(() => store.setState((st) => (st.attention === cue ? { attention: 0, lookAt: st.pointer ? st.lookAt : null } : {})), cue === 1 ? 3000 : 6000);
       return;
     }
     if (this.requesting) return;

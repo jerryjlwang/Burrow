@@ -8,6 +8,8 @@ export interface VoiceState {
   ttsPlaying: boolean;
   /** null = unknown / not checked yet */
   serverOk: boolean | null;
+  /** Whether the server has a Deepgram key (voice possible at all). */
+  deepgram?: boolean;
 }
 
 export interface PendingLoop {

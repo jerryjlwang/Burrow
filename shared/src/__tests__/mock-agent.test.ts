@@ -1,0 +1,118 @@
+import { describe, expect, it } from "vitest";
+import { decideMock, interveneMock } from "../mock-agent";
+import { emptySignals, emptyStudentState, type AgentInput, type PageSummary, type PageElement } from "../types";
+import { validateDecision } from "../validate";
+
+const el = (id: number, role: string, name: string, extra: Partial<PageElement> = {}): PageElement => ({ id, role, name, tag: role === "link" ? "a" : "button", inViewport: true, rect: { x: 0, y: 0, width: 10, height: 10 }, ...extra });
+
+const page: PageSummary = {
+  url: "http://localhost:8787/demo/algebra.html",
+  title: "Practice: Linear Equations",
+  headings: ["Practice: Linear Equations", "Question 1 of 2"],
+  textSummary: "Solve for x:\n3x + 5 = 20\nWhatever you do to one side of an equation, do to the other side too.",
+  elements: [el(1, "link", "Dashboard"), el(2, "link", "Sign in"), el(3, "textbox", "Your answer", { placeholder: "x = ?" }), el(4, "button", "Check answer"), el(5, "link", "Take the quiz", { inViewport: false })],
+  errors: [],
+  successes: [],
+  dialogs: [],
+  forms: 0,
+  landmarks: ["main"],
+  isPdf: false,
+  hasQuizUi: true,
+  scroll: { x: 0, y: 0, maxY: 800 },
+  viewport: { width: 1200, height: 800 },
+  capturedAt: Date.now(),
+  truncatedElements: 0,
+};
+
+function input(utterance: string, extra: Partial<AgentInput> = {}): AgentInput {
+  return { utterance, goal: utterance, conversation: [], page, history: [], signals: emptySignals(), student: emptyStudentState(), pendingOffer: null, lastReferencedElementId: null, step: 0, maxSteps: 6, ...extra };
+}
+
+describe("mock agent", () => {
+  it("points at the element the student asks for", () => {
+    const d = decideMock(input("Where is the sign in button?"));
+    expect(d.action).toBe("point_to");
+    expect(d.elementId).toBe(2);
+    expect(d.done).toBe(true);
+    expect(validateDecision(d).ok).toBe(true);
+  });
+  it("clicks the last referenced element on 'click it'", () => {
+    const d = decideMock(input("Click it", { lastReferencedElementId: 2 }));
+    expect(d.action).toBe("click");
+    expect(d.elementId).toBe(2);
+  });
+  it("navigates via links for 'take me to the quiz'", () => {
+    const d = decideMock(input("Take me to the quiz"));
+    expect(d.action).toBe("click");
+    expect(d.elementId).toBe(5);
+  });
+  it("summarises the page", () => {
+    const d = decideMock(input("What's on this page?"));
+    expect(d.action).toBe("explain");
+    expect(d.say).toMatch(/Practice: Linear Equations/);
+  });
+  it("gives a teaching hint that does not reveal the answer", () => {
+    const d = decideMock(input("Give me a hint"));
+    expect(d.action).toBe("point_to");
+    expect(d.elementId).toBe(3);
+    expect(d.say).toMatch(/both sides/i);
+    expect(d.say).not.toMatch(/\b5\b.*\bx\s*=\s*5|x = 5/);
+  });
+  it("escalates hints based on the student model", () => {
+    const later = decideMock(input("hint", { student: { ...emptyStudentState(), hintsForCurrentProblem: 2 } }));
+    expect(later.say).toMatch(/3x = 15|undoes multiplying/);
+  });
+  it("coaches instead of answering when asked for the answer", () => {
+    const d = decideMock(input("Just tell me the answer"));
+    expect(d.say).toMatch(/help you get there/i);
+    expect(d.taskType).toBe("assessment");
+  });
+  it("turns an accepted offer into a hint pointing at the answer box", () => {
+    const d = decideMock(input("Yeah", { pendingOffer: { type: "hint", message: "Want a hint?", elementId: 3, at: Date.now() } }));
+    expect(d.action).toBe("point_to");
+    expect(d.elementId).toBe(3);
+    expect(d.say).toMatch(/5/);
+  });
+  it("respects a decline", () => {
+    const d = decideMock(input("I'm good", { pendingOffer: { type: "hint", message: "Want a hint?", elementId: 3, at: Date.now() } }));
+    expect(d.action).toBe("finish");
+  });
+  it("types into a named field", () => {
+    const d = decideMock(input("type 5 into your answer"));
+    expect(d.action).toBe("type");
+    expect(d.elementId).toBe(3);
+    expect(d.text).toBe("5");
+  });
+  it("refuses to type into sensitive fields", () => {
+    const p = { ...page, elements: [...page.elements, el(9, "textbox", "Password", { sensitive: true })] };
+    const d = decideMock(input("type hunter2 into password", { page: p }));
+    expect(d.action).not.toBe("type");
+    expect(d.say).toMatch(/private/i);
+  });
+  it("finishes after a click that navigated", () => {
+    const d = decideMock(input("open it", { step: 1, resumedAfterNavigation: true, history: [{ step: 0, decision: { ...decideMock(input("click it", { lastReferencedElementId: 2 })) }, result: { ok: true, message: "clicked", urlChanged: true }, at: Date.now() }] }));
+    expect(d.action).toBe("finish");
+    expect(d.say).toMatch(/open/i);
+  });
+});
+
+describe("mock intervention", () => {
+  it("offers a hint after repeated incorrect attempts", () => {
+    const d = interveneMock({ page, signals: { ...emptySignals(), incorrectAttempts: 2, summary: ["2 incorrect attempts"], strength: 0.75 }, student: emptyStudentState(), conversation: [], level: 3 });
+    expect(d.intervene).toBe(true);
+    expect(d.type).toBe("hint");
+    expect(d.message).toMatch(/hint/i);
+    expect(d.elementId).toBe(3);
+  });
+  it("points at unanswered options when a disabled button is hammered", () => {
+    const p = { ...page, elements: [el(10, "radio", "Add 3 to both sides", { checked: false, context: "Question 1" }), el(11, "button", "Continue", { disabled: true })] };
+    const d = interveneMock({ page: p, signals: { ...emptySignals(), repeatedClicks: 3, failedUiAction: true, lastClickedName: "Continue", summary: [], strength: 0.85 }, student: emptyStudentState(), conversation: [], level: 4 });
+    expect(d.intervene).toBe(true);
+    expect(d.elementId).toBe(10);
+    expect(d.message).toMatch(/unlocks/);
+  });
+  it("stays quiet without signals", () => {
+    const d = interveneMock({ page, signals: emptySignals(), student: emptyStudentState(), conversation: [], level: 0 });
+    expect(d.intervene).toBe(false);
+  });
+});

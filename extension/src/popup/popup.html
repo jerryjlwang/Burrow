@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Pip</title>
+    <style>
+      :root { color-scheme: light dark; --accent: #7c5cff; --fg: #1c1a2e; --muted: #6b6884; --bg: #fff; --line: rgba(28,26,46,.1); }
+      @media (prefers-color-scheme: dark) { :root { --fg: #f3f0ff; --muted: #b3adcc; --bg: #1e1b30; --line: rgba(255,255,255,.12); } }
+      * { box-sizing: border-box; }
+      body { margin: 0; width: 300px; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; color: var(--fg); background: var(--bg); }
+      .wrap { padding: 14px; }
+      h1 { font-size: 15px; margin: 0 0 2px; }
+      .sub { color: var(--muted); margin: 0 0 12px; }
+      .status { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; }
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; }
+      .dot.ok { background: #22c55e; } .dot.bad { background: #e11d48; }
+      label.t { display: flex; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; }
+      label.t input { accent-color: var(--accent); }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+      .btn { border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 999px; padding: 6px 12px; font-weight: 600; cursor: pointer; font-family: inherit; font-size: 12px; }
+      .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+      input.url { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; font-size: 12px; background: transparent; color: var(--fg); margin-top: 4px; }
+      .muted { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div id="root" class="wrap"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { ConversationTurn, PageSummary, StruggleSignals, Rect, ActionResult } from "@shared/types";
-import type { AgentDecision } from "@shared/schemas";
+import type { AgentDecision } from "@shared/actions";
 import { emptySignals } from "@shared/types";
 import type { VoiceState } from "../shared/messages";
 import { DEFAULT_SETTINGS, type Settings } from "../shared/settings";

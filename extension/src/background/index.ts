@@ -173,26 +173,26 @@ async function handleOffscreenEvent(event: OffscreenEvent): Promise<void> {
 }
 
 // ---------------- Request handling ----------------
-async function handle<T extends BgRequest["type"]>(msg: Extract<BgRequest, { type: T }>, sender: chrome.runtime.MessageSender): Promise<BgResponseMap[T]> {
+async function handle(msg: BgRequest, sender: chrome.runtime.MessageSender): Promise<BgResponseMap[BgRequest["type"]]> {
   const tabId = sender.tab?.id ?? null;
   const settings = await getSettings();
   switch (msg.type) {
     case "ping":
-      return { ok: true, at: Date.now() } as BgResponseMap[T];
+      return { ok: true, at: Date.now() };
     case "server.health":
-      return (await health(true)) as BgResponseMap[T];
+      return (await health(true));
     case "agent.decide":
-      return (await postJson("/api/agent/decide", msg.input, 40_000)) as BgResponseMap[T];
+      return (await postJson("/api/agent/decide", msg.input, 40_000));
     case "agent.intervene":
-      return (await postJson("/api/agent/intervene", msg.input, 15_000)) as BgResponseMap[T];
+      return (await postJson("/api/agent/intervene", msg.input, 15_000));
     case "tts.speak": {
-      if (!settings.ttsEnabled) return { ok: false, error: "tts disabled" } as BgResponseMap[T];
+      if (!settings.ttsEnabled) return { ok: false, error: "tts disabled" };
       ttsOwnerTab = tabId;
       try {
         const r = await sendToOffscreen<{ ok: boolean; error?: string }>({ target: "offscreen", type: "tts.speak", id: msg.id, text: msg.text, serverUrl: settings.serverUrl });
-        return (r ?? { ok: false, error: "no response from audio" }) as BgResponseMap[T];
+        return (r ?? { ok: false, error: "no response from audio" });
       } catch (e) {
-        return { ok: false, error: String(e) } as BgResponseMap[T];
+        return { ok: false, error: String(e) };
       }
     }
     case "tts.stop": {
@@ -202,7 +202,7 @@ async function handle<T extends BgRequest["type"]>(msg: Extract<BgRequest, { typ
         /* nothing playing */
       }
       voiceState = { ...voiceState, ttsPlaying: false };
-      return { ok: true } as BgResponseMap[T];
+      return { ok: true };
     }
     case "voice.start": {
       setVoiceState({ mode: "starting", error: undefined, errorCode: undefined });
@@ -214,11 +214,11 @@ async function handle<T extends BgRequest["type"]>(msg: Extract<BgRequest, { typ
         } else {
           setVoiceState({ mode: "error", error: r?.error ?? "Voice is having trouble connecting. You can still type to me.", errorCode: r?.code ?? "unknown" });
         }
-        return { ok: !!r?.ok, state: voiceState } as BgResponseMap[T];
+        return { ok: !!r?.ok, state: voiceState };
       } catch (e) {
         setVoiceState({ mode: "error", error: "Voice is having trouble connecting. You can still type to me.", errorCode: "server" });
         logger.error("voice.start failed", { error: String(e) });
-        return { ok: false, state: voiceState } as BgResponseMap[T];
+        return { ok: false, state: voiceState };
       }
     }
     case "voice.stop": {
@@ -228,44 +228,44 @@ async function handle<T extends BgRequest["type"]>(msg: Extract<BgRequest, { typ
         /* offscreen gone */
       }
       setVoiceState({ mode: "off", error: undefined, errorCode: undefined });
-      return { ok: true, state: voiceState } as BgResponseMap[T];
+      return { ok: true, state: voiceState };
     }
     case "voice.status":
-      return voiceState as BgResponseMap[T];
+      return voiceState;
     case "tab.session.get":
-      return (tabId == null ? emptySession() : await getSession(tabId)) as BgResponseMap[T];
+      return (tabId == null ? emptySession() : await getSession(tabId));
     case "tab.session.set":
       if (tabId != null) await setSession(tabId, msg.patch);
-      return { ok: true } as BgResponseMap[T];
+      return { ok: true };
     case "tab.session.clear":
       if (tabId != null) await chrome.storage.session.remove(`tab:${tabId}`);
-      return { ok: true } as BgResponseMap[T];
+      return { ok: true };
     case "nav.navigate":
       if (tabId == null) throw new Error("no tab");
       if (!/^https?:\/\//i.test(msg.url)) throw new Error("only http(s) urls");
       await chrome.tabs.update(tabId, { url: msg.url });
-      return { ok: true } as BgResponseMap[T];
+      return { ok: true };
     case "nav.back":
       if (tabId == null) throw new Error("no tab");
       await chrome.tabs.goBack(tabId);
-      return { ok: true } as BgResponseMap[T];
+      return { ok: true };
     case "screenshot": {
       try {
         const dataUrl = await chrome.tabs.captureVisibleTab(sender.tab?.windowId ?? chrome.windows.WINDOW_ID_CURRENT, { format: "jpeg", quality: 55 });
-        return { ok: true, dataUrl } as BgResponseMap[T];
+        return { ok: true, dataUrl };
       } catch (e) {
-        return { ok: false, error: String(e) } as BgResponseMap[T];
+        return { ok: false, error: String(e) };
       }
     }
     case "open.onboarding":
       await chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html") });
-      return { ok: true } as BgResponseMap[T];
+      return { ok: true };
     case "open.demo":
       await chrome.tabs.create({ url: `${settings.serverUrl.replace(/\/$/, "")}/demo/` });
-      return { ok: true } as BgResponseMap[T];
+      return { ok: true };
     case "offscreen.event":
       await handleOffscreenEvent(msg.event);
-      return { ok: true } as BgResponseMap[T];
+      return { ok: true };
     default:
       throw new Error(`unknown message ${(msg as { type: string }).type}`);
   }

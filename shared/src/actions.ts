@@ -1,0 +1,74 @@
+/** Action vocabulary and defaults shared by the extension and the server. Zod-free so the content script stays small. */
+export const ACTIONS = [
+  "observe",
+  "speak",
+  "highlight",
+  "point_to",
+  "click",
+  "focus",
+  "type",
+  "clear",
+  "select",
+  "scroll",
+  "scroll_to",
+  "navigate",
+  "go_back",
+  "wait",
+  "ask_user",
+  "ask_confirmation",
+  "explain",
+  "finish",
+] as const;
+export type ActionName = (typeof ACTIONS)[number];
+
+export const TASK_TYPES = ["navigation", "accessibility", "administrative", "learning", "assessment", "chat"] as const;
+export type TaskType = (typeof TASK_TYPES)[number];
+
+export const INTERVENTION_TYPES = ["hint", "nudge", "navigation", "explain", "encourage", "none"] as const;
+export type InterventionType = (typeof INTERVENTION_TYPES)[number];
+
+export interface PendingAction {
+  action: ActionName;
+  elementId: number | null;
+  text: string | null;
+  url: string | null;
+  value: string | null;
+}
+
+/** Flat decision shape (every field present, nullable) — matches the structured-output schema. */
+export interface AgentDecision {
+  action: ActionName;
+  say: string | null;
+  elementId: number | null;
+  text: string | null;
+  url: string | null;
+  direction: "up" | "down" | null;
+  amount: number | null;
+  value: string | null;
+  pendingAction: PendingAction | null;
+  taskType: TaskType | null;
+  reason: string;
+  done: boolean;
+}
+
+export interface InterventionDecision {
+  intervene: boolean;
+  confidence: number;
+  type: InterventionType;
+  message: string | null;
+  elementId: number | null;
+  reason: string;
+}
+
+export const DECISION_DEFAULTS: Omit<AgentDecision, "action" | "reason"> = {
+  say: null,
+  elementId: null,
+  text: null,
+  url: null,
+  direction: null,
+  amount: null,
+  value: null,
+  pendingAction: null,
+  taskType: null,
+  done: false,
+};

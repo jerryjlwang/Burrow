@@ -154,7 +154,7 @@ export class CompanionController {
   async checkServer(): Promise<void> {
     try {
       const h = await sendToBackground({ type: "server.health" }, 6000);
-      store.setState((s) => ({ offline: !h.ok, voice: { ...s.voice, serverOk: h.ok } }));
+      store.setState((s) => ({ offline: !h.ok, voice: { ...s.voice, serverOk: h.ok, deepgram: h.ok ? !!h.deepgram : s.voice.deepgram } }));
     } catch {
       store.setState((s) => ({ offline: true, voice: { ...s.voice, serverOk: false } }));
     }
@@ -396,6 +396,10 @@ export class CompanionController {
   async toggleVoice(): Promise<void> {
     const s = store.getState();
     if (s.voice.mode === "off" || s.voice.mode === "error") {
+      if (s.voice.deepgram === false) {
+        this.showBubble({ id: "no-deepgram", text: "Voice needs a Deepgram key on the server (see .env). Typing works fine in the meantime.", kind: "error", expiresAt: Date.now() + 8000 });
+        return;
+      }
       const ok = await this.voice.start();
       if (!ok) {
         const st = store.getState().voice;
@@ -406,7 +410,7 @@ export class CompanionController {
             kind: "error",
             actions: [{ label: "Open setup", value: "open", primary: true }, { label: "Later", value: "dismiss" }],
           });
-        } else {
+        } else if (!store.getState().panelOpen) {
           this.showBubble({ id: "voice-error", text: st.error ?? "Voice is having trouble connecting. You can still type to me.", kind: "error", expiresAt: Date.now() + 7000 });
         }
       }

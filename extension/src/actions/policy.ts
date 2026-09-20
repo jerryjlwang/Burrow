@@ -1,4 +1,4 @@
-import type { AgentDecision, TaskType } from "@shared/schemas";
+import type { AgentDecision, TaskType } from "@shared/actions";
 import type { PageElement, PageSummary } from "@shared/types";
 import { normalizeText } from "@shared/text";
 
@@ -102,8 +102,8 @@ export function isForbidden(decision: AgentDecision, ctx: PolicyContext = {}): F
 export function classifyTask(utterance: string, page?: PageSummary | null): TaskType {
   const u = normalizeText(utterance);
   if (/(what s on|whats on|describe|summari|read (this|the|it|me)|what does (this|it) say|what am i looking at|where am i)/.test(u)) return "accessibility";
-  if (/(answer (question|number|q)|what s the answer|whats the answer|tell me the answer|solve (it|this|question|number)|pick the (right|correct)|which (answer|option) is (right|correct)|do question)/.test(u)) return "assessment";
-  if (/(how do i (solve|do|find x|factor|simplify)|why (is|does|do)|what (is|are|does) (a|an|the)? ?[a-z ]+ mean|explain|hint|stuck|don t (get|understand)|dont (get|understand)|help me (with|understand)|walk me through|derivative|integral|equation|formula|concept)/.test(u)) return "learning";
+  if (/(how do i (solve|do|find x|factor|simplify|start)|why (is|does|do)|what (is|are|does) (a|an|the)? ?[a-z ]+ mean|explain|hint|stuck|don t (get|understand)|dont (get|understand)|help me (with|understand)|walk me through|derivative|integral|equation|formula|concept)/.test(u)) return "learning";
+  if (/(answer (question|number|q)|what s the answer|whats the answer|tell me the answer|solve (it|this|question|number \d+) for me|solve (question|number) \d+|pick the (right|correct)|which (answer|option) is (right|correct)|do question)/.test(u)) return "assessment";
   if (/(type|enter|fill|put|write) (my|the|in|into)|my name|my email|fill (in|out) (the|this) form/.test(u)) return "administrative";
   if (/(where|open|go to|take me|find|click|press|navigate|show me|which button|submit|scroll|back)/.test(u)) return "navigation";
   if (page?.hasQuizUi && /(this (one|question|problem)|number \d|question \d)/.test(u)) return "learning";

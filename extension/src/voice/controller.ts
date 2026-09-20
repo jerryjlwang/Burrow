@@ -74,9 +74,12 @@ export class VoiceController {
   /** Speaks text via Deepgram TTS (through the offscreen document). Resolves when playback ends or fails. */
   speak(text: string): Promise<void> {
     const s = store.getState();
-    if (!s.settings.ttsEnabled || !text.trim()) return Promise.resolve();
+    // No TTS without a configured voice backend or a reachable server: stay quiet, no error noise.
+    if (!s.settings.ttsEnabled || !text.trim() || s.voice.deepgram === false || s.voice.serverOk === false) return Promise.resolve();
     const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    this.stopSpeaking();
+    // The audio player interrupts any previous utterance itself when a new one starts, so only
+    // settle the previous promise locally (an explicit stop message could overtake the new speak).
+    if (this.currentSpeechId) this.finishSpeech(this.currentSpeechId, "interrupted");
     this.currentSpeechId = id;
     return new Promise<void>((resolve) => {
       this.speeches.set(id, { resolve, text });
@@ -119,7 +122,7 @@ export class VoiceController {
   private applyVoiceState(state: VoiceState): void {
     store.setState((s) => ({
       voice: { ...s.voice, ...state },
-      status: state.mode === "listening" ? "Listening…" : state.mode === "error" ? state.error ?? "Voice unavailable" : s.status === "Starting microphone…" || s.status === "Listening…" ? "" : s.status,
+      status: state.mode === "listening" ? "Listening…" : s.status === "Starting microphone…" || s.status === "Listening…" ? "" : s.status,
       characterState: state.mode === "listening" && (s.characterState === "idle" || s.characterState === "sleeping") ? "listening" : state.mode === "off" && s.characterState === "listening" ? "idle" : s.characterState,
     }));
   }

@@ -1,4 +1,4 @@
-import type { AgentDecision, InterventionDecision, TaskType } from "./schemas";
+import type { AgentDecision, InterventionDecision, TaskType } from "./actions";
 
 export interface Rect {
   x: number;
