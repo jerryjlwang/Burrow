@@ -52,3 +52,12 @@ Run through this before a demo. Server: `npm run dev:server` (or `DEMO_MODE=1 np
 - [ ] LLM key missing: server logs `agent provider: mock`; everything still works.
 - [ ] Reload the extension while a page is open → Pip re-injects into open tabs (or page reload restores it).
 - [ ] Developer panel (settings → Developer panel) shows page elements, signals, last decision/result, provider latency.
+
+## Tablet watcher (needs GEMINI_API_KEY in .env; a second touch display is optional)
+- [ ] On any page press Alt+Shift+D (or popup, "Watch the tablet") → excalidraw.com opens fullscreen on the touch display (beside you on one screen); popup shows "Watching the tablet".
+- [ ] Open the demo practice page on the laptop, write `3x + 5 = 20` then `3x = 25` on the board → within about 5 s the rabbit on the practice page shows and speaks a nudge that names the step, never `15` or `x = 5`.
+- [ ] Say or click "Yes, please" → a hint conversation starts from the nudge.
+- [ ] Fix the line and finish with `x = 5` → the rabbit celebrates once.
+- [ ] Draw something unrelated → no nudge (verdict "unclear" in the popup). Slow, messy or unfinished work → no nudge.
+- [ ] Press Alt+Shift+D again → the board comes forward and the context follows the tab you pressed it on. "Stop watching" in the popup stops; closing the board window also stops.
+- [ ] Server without a Gemini key → the mock cycles fine, slip, solved so the beat still rehearses.
