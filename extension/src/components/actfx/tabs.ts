@@ -1,6 +1,6 @@
 import { spawn, wait, type ActDetail, type Piece, type PieceContext } from "./common";
 import { burst, confetti, gather, trail, CREAM, GOLD, TEAL, WHITE } from "./particles";
-import { whoosh } from "../tunnel";
+import { dig, holeOf, tunnelIn, whoosh } from "../tunnel";
 import { assetUrl } from "../pet";
 import { FLIGHT } from "../pet/travel";
 
@@ -14,6 +14,10 @@ const CHARGE_MS = 360;
 /** The big card the new tab arrives as, centre stage, long enough to read. */
 const BIG_W = 372;
 const HOLD_MS = 620;
+/** The signpost stands this long, long enough to read the place he is going. */
+const SIGN_MS = 900;
+/** The earth takes this long to close over the page (tunnel.ts TUNNEL_MS plus a beat). */
+const TUNNEL_CLOSE_MS = 640;
 const POP_MS = 240;
 const AWAY_MS = 520;
 const ACROSS_MS = 480;
@@ -125,21 +129,24 @@ async function tabCard(ctx: PieceContext, x: number, text: string, how: "away" |
 }
 
 /**
- * open_tab, the set piece. He gathers himself (sparks drawn in, a glow at his feet), fires up the
- * screen on speed lines with a tail of sparks, punches the tab strip at the top (white flash, a
- * shock ring, a burst of two dozen pixels, the layer jolts), the new tab's card pops out of the
- * strip and leaves on a beam of light, and he drops back with a dust ring and a bow of confetti.
+ * open_tab, the set piece: he takes the request down the burrow.
+ *
+ * A content script cannot draw into the browser's own chrome, so nothing here pretends to touch the
+ * tab strip. The beat stays inside the page and uses the product's own language: he gathers himself,
+ * a hole opens under him and clods fly while he digs, a signpost rises out of the hole with the site
+ * on it, held long enough to read; he dives in after it, the earth closes over the whole page from
+ * the edges in, and the tab opens on black. The cut is covered, so the new page simply is there.
+ * When you come back to this page the earth lets go and he climbs out again.
  */
 async function openTab(d: ActDetail, ctx: PieceContext): Promise<void> {
   const pet = ctx.pet;
   const r0 = ctx.petRect();
   const text = host(d.url);
   if (pet && r0 && ready && ready.action === "open_tab" && Date.now() < ready.until) {
-    // He is already up at the strip, charged: the punch lands the moment the decision does.
     const { home, timer, lift } = ready;
     window.clearTimeout(timer);
     ready = null;
-    await punch(ctx, pet, r0, text, home, lift);
+    await burrow(ctx, pet, text, home, lift);
     return;
   }
   if (!pet || !r0 || ctx.reduced) {
@@ -148,23 +155,71 @@ async function openTab(d: ActDetail, ctx: PieceContext): Promise<void> {
   }
   const home = { x: r0.x + r0.width / 2, y: r0.y + r0.height / 2 };
   const lift = dim(ctx);
-  // No trip first: the page falls away and he goes straight up from where he stands, so the beat
-  // starts at once. The card is centre stage wherever he jumped from.
-  const r = r0;
-  await charge(ctx, pet, r);
-  const h = Math.max(60, r.top - APEX_Y);
-  const vy = -Math.sqrt(2 * FLIGHT.gravity * h);
-  const apexMs = Math.round((-vy / FLIGHT.gravity) * 1000);
-  launch(ctx, r);
-  const flight = pet.fling(0, vy);
-  trailWhile(ctx, flight);
-  await wait(Math.min(apexMs, 820));
-  // This is where the hold ends: the card has been read, so the browser may take the window now.
-  const card = await impact(ctx, ctx.petRect() ?? r, text);
-  // The hold ends when the card has reached the strip, so the browser opens the real tab in the
-  // place the card just flew to. His landing plays on after that.
-  await cardAway(ctx, card);
-  void flight.then(() => landing(ctx, pet, home, lift));
+  await charge(ctx, pet, r0);
+  await burrow(ctx, pet, text, home, lift);
+}
+
+/** The dig, the signpost, the dive and the earth closing. Resolves when the page is covered. */
+async function burrow(ctx: PieceContext, pet: NonNullable<PieceContext["pet"]>, text: string, home: { x: number; y: number }, lift: () => void): Promise<void> {
+  const hole = holeOf(pet);
+  if (!hole) {
+    await tabCard(ctx, home.x, text, "away");
+    lift();
+    return;
+  }
+  // He digs: clods of earth fly out of the hole while the ground gives way.
+  const stop = dig(hole, ctx.reduced);
+  shock(ctx, hole.x, hole.y, 150, 320, CREAM);
+  burst(ctx.layer, hole.x, hole.y, 18, { lo: 140, hi: 420, colors: [CREAM, GOLD], g: 900, life: 700 });
+  await wait(520);
+  // The signpost rises out of the hole with the place he is going written on it.
+  const post = signpost(ctx, hole.x, text);
+  await wait(SIGN_MS);
+  stop();
+  lift();
+  whoosh("down");
+  // He goes down after it, and the earth closes over the page from the edges in.
+  const earth = tunnelIn(hole, ctx.reduced);
+  post.down();
+  await Promise.all([pet.jumpOut(), wait(TUNNEL_CLOSE_MS)]);
+  post.gone();
+  // The page is covered: this is where the hold ends and the browser opens the tab on black.
+  // Coming back to this page, the earth lets go and he climbs out again.
+  void (async () => {
+    await wait(900);
+    await earth.out();
+    await pet.jumpIn(wait(200));
+    confetti(ctx.layer, 0, window.innerWidth, 24);
+    pet.play("celebrate");
+  })();
+}
+
+/**
+ * A signpost rising out of the hole: the plank with the site's name on it, the way the meadow's
+ * signs read, then it drops back into the hole ahead of him.
+ */
+function signpost(ctx: PieceContext, _x: number, text: string): { down: () => void; gone: () => void } {
+  // Planted in the middle of the page, clear of him, so the name can be read whatever corner he digs in.
+  const left = Math.round((window.innerWidth - BIG_W) / 2 / 3) * 3;
+  const { el, gone } = spawn(ctx.layer, "pip-post", { left: `${left}px`, width: `${BIG_W}px` });
+  el.style.bottom = `${Math.round(window.innerHeight * 0.16 / 3) * 3}px`;
+  const board = document.createElement("div");
+  board.className = "pip-post-board";
+  const ico = document.createElement("i");
+  ico.className = "pip-bigcard-ico";
+  const label = document.createElement("span");
+  label.textContent = text;
+  const sub = document.createElement("b");
+  sub.textContent = "opening a new tab";
+  board.append(ico, label, sub);
+  const leg = document.createElement("i");
+  leg.className = "pip-post-leg";
+  el.append(board, leg);
+  if (!ctx.reduced) gather(ctx.layer, left + BIG_W / 2, Math.round(window.innerHeight * 0.68), 16, 180, 320, [GOLD, CREAM]);
+  return {
+    down: () => el.classList.add("down"),
+    gone,
+  };
 }
 
 /** The wind-up: sparks drawn into him from a ring, a glow under his feet, a crouch. */
@@ -248,35 +303,7 @@ async function cardAway(ctx: PieceContext, card: { el: HTMLElement; gone: () => 
   card.gone();
 }
 
-/** The landing: dust, a ring, a bow, and a little confetti for the judges. */
-async function landing(ctx: PieceContext, pet: PieceContext["pet"], home: { x: number; y: number }, lift?: () => void): Promise<void> {
-  const r = ctx.petRect();
-  if (r) {
-    shock(ctx, r.x + r.width / 2, r.y + r.height, 96, 260, CREAM);
-    burst(ctx.layer, r.x + r.width / 2, r.y + r.height, 10, { lo: 80, hi: 260, colors: [CREAM], g: 900, life: 460 });
-  }
-  confetti(ctx.layer, 0, window.innerWidth, 40);
-  lift?.();
-  pet?.play("celebrate");
-  await wait(360);
-  await pet?.goTo(home.x, home.y);
-}
 
-/** He is up at the strip already: punch, card, then home. */
-async function punch(ctx: PieceContext, pet: PieceContext["pet"], r: DOMRect, text: string, home: { x: number; y: number }, lift: () => void): Promise<void> {
-  if (!pet) return;
-  const h = Math.max(60, r.top - APEX_Y);
-  const vy = -Math.sqrt(2 * FLIGHT.gravity * h);
-  launch(ctx, r);
-  const flight = pet.fling(0, vy);
-  trailWhile(ctx, flight);
-  await wait(Math.min(Math.round((-vy / FLIGHT.gravity) * 1000), 820));
-  const card = await impact(ctx, ctx.petRect() ?? r, text);
-  // The hold ends when the card has reached the strip, so the browser opens the real tab in the
-  // place the card just flew to. His landing plays on after that.
-  await cardAway(ctx, card);
-  void flight.then(() => landing(ctx, pet, home, lift));
-}
 
 /** He went up early on a guess and is waiting under the strip: where, since when, and where home is. */
 let ready: { action: string; until: number; home: { x: number; y: number }; timer: number; lift: () => void } | null = null;

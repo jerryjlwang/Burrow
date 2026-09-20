@@ -779,3 +779,21 @@
 @keyframes pip-bigcard-in { 0% { transform: translateY(36px) scale(0.55); opacity: 0; } 60% { transform: translateY(0) scale(1.08); opacity: 1; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
 .pip-bigcard.away { animation: pip-bigcard-away 0.52s steps(8, end) both; }
 @keyframes pip-bigcard-away { 0% { transform: translateY(0) scale(1); opacity: 1; } 100% { transform: translateY(-60vh) scale(0.35); opacity: 0; } }
+
+/* ---------- Action set pieces: the signpost that rises out of the burrow ---------- */
+/* It grows up out of the hole on its leg, stands while the name is read, then drops back in ahead
+   of him. Everything is inside the page: a content script cannot draw in the browser's own chrome. */
+.pip-post { display: flex; flex-direction: column; align-items: center; transform-origin: 50% 100%; animation: pip-post-up 0.42s steps(7, end) both; }
+.pip-post-board {
+  box-sizing: border-box; width: 100%; display: grid; grid-template-columns: 36px 1fr; grid-template-rows: auto auto;
+  gap: 3px 12px; align-items: center; padding: 18px;
+  background: var(--cream); border: 6px solid var(--ink); color: var(--ink);
+  box-shadow: 9px 9px 0 rgba(59, 42, 35, 0.35); image-rendering: pixelated;
+}
+.pip-post-board .pip-bigcard-ico { grid-row: 1 / span 2; }
+.pip-post-board span { font: 27px/30px var(--pip-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pip-post-board b { font: 17px/21px var(--pip-font); font-weight: 400; opacity: 0.7; }
+.pip-post-leg { width: 18px; height: 96px; background: var(--ink); box-shadow: inset 3px 0 0 rgba(255, 248, 231, 0.2), inset -3px 0 0 rgba(0, 0, 0, 0.25); }
+@keyframes pip-post-up { from { transform: translateY(100%) scaleY(0.2); opacity: 0; } to { transform: translateY(0) scaleY(1); opacity: 1; } }
+.pip-post.down { animation: pip-post-down 0.36s steps(6, end) both; }
+@keyframes pip-post-down { from { transform: translateY(0) scaleY(1); opacity: 1; } to { transform: translateY(100%) scaleY(0.15); opacity: 0; } }

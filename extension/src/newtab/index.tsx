@@ -547,6 +547,8 @@ function NewTab() {
   const [sound, setSound] = useState(soundWanted);
   const [sky, setSky] = useState(skyWanted);
   const nextSky = () => {
+    // A dragged sun holds the light for a minute; the sign is the newer word, so let go of that hold.
+    sceneRef.current?.api.releaseScrub();
     setSky((i) => {
       const n = (i + 1) % SKIES.length;
       pinnedHour = SKIES[n].hour;

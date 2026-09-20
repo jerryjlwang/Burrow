@@ -86,6 +86,8 @@ export interface MeadowApi {
   moonRect(): Rect | null;
   oakRect(): Rect | null;
   shownHour(): number;
+  /** Drop a dragged sun's hold on the light, so the sky sign takes over again. */
+  releaseScrub(): void;
   bootElapsed(): number;
   weather(): "clear" | "rain";
   /** Force a happening now: cards, cheshire, fish, gust, balloon, rainbow, shadow. */
@@ -1614,6 +1616,9 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
     },
     oakRect: () => (lay ? rectOf(lay.oak.x, lay.oak.y, 47, 40) : null),
     shownHour,
+    releaseScrub: () => {
+      scrub = null;
+    },
     bootElapsed: () => opts.getBoot().elapsed,
     weather: () => (rainUntil > performance.now() ? "rain" : "clear"),
     event: (name) => {
