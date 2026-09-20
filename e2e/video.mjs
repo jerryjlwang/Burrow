@@ -136,6 +136,33 @@ try {
   check("the agent was given the video position, transcript and exact frame", !!decideLine && /"transcript":true/.test(decideLine) && /"frame":true/.test(decideLine), decideLine?.slice(0, 200) ?? "no decide log with video context");
   const analysed = serverLog.join("").split("\n").filter((l) => l.includes("analyzed"));
   check("the video was analysed once, from the page's own captions, across both loads", analysed.length === 1 && /"transcript":"page"/.test(analysed[0]), `${analysed.length} analyses`);
+
+  // ---- 5. A drawing on a video page goes INTO the picture's empty space, solid and legible ----
+  await page.evaluate(() => document.getElementById("lesson").pause());
+  await page.locator(".pip-input").fill("can you draw a right triangle?");
+  await page.locator(".pip-input").press("Enter");
+  await page.locator(".pip-board").waitFor({ timeout: 12_000 }).catch(() => null);
+  await new Promise((r) => setTimeout(r, 6500)); // staged reveal (650ms per item) + draw-in
+  const drawn = await page.evaluate(() => {
+    const root = document.getElementById("pip-companion-host").shadowRoot;
+    const board = root.querySelector(".pip-board");
+    const v = document.getElementById("lesson").getBoundingClientRect();
+    if (!board) return null;
+    const b = board.getBoundingClientRect();
+    const strokes = [...root.querySelectorAll(".pip-board-canvas path, .pip-board-canvas circle, .pip-board-canvas rect")];
+    return {
+      placement: board.getAttribute("data-placement"),
+      inside: b.left >= v.left - 1 && b.top >= v.top - 1 && b.right <= v.right + 1 && b.bottom <= v.bottom + 1,
+      cover: +((b.width * b.height) / (v.width * v.height)).toFixed(2),
+      strokes: strokes.length,
+      dashed: strokes.filter((el) => getComputedStyle(el).strokeDasharray !== "none").length,
+      longest: Math.round(Math.max(0, ...strokes.map((el) => el.getTotalLength?.() ?? 0))),
+      labels: [...root.querySelectorAll(".pip-board-label")].map((l) => l.textContent).join(" "),
+    };
+  });
+  check("the drawing lands inside the video picture, not in the corner", !!drawn && drawn.placement === "video" && drawn.inside, JSON.stringify(drawn));
+  check("strokes are solid once drawn: none left dashed, even ones longer than 100px", !!drawn && drawn.strokes >= 6 && drawn.dashed === 0 && drawn.longest > 100, drawn ? `${drawn.strokes} strokes, ${drawn.dashed} dashed, longest ${drawn.longest}px` : "");
+  await page.screenshot({ path: resolve(shots, "22-video-sketch.png") });
 } catch (e) {
   check("video e2e ran to completion", false, String(e).slice(0, 300));
 } finally {

@@ -6,6 +6,7 @@ import { emptySignals } from "@shared/types";
 import type { VoiceState } from "../shared/messages";
 import { DEFAULT_SETTINGS, type Settings } from "../shared/settings";
 import type { LogEntry } from "../shared/logger";
+import type { FrameRegion } from "@shared/video";
 
 export type CharacterState = "idle" | "listening" | "thinking" | "speaking" | "pointing" | "acting" | "celebrating" | "confused" | "sleeping" | "error";
 
@@ -53,6 +54,11 @@ export interface SketchBoard {
   items: SketchItem[];
   /** Page element the 100×100 stroke space maps onto; null draws in the floating corner panel. */
   anchor: Element | null;
+  /**
+   * Draw inside this part of the anchor (fractions of its box) instead of across all of it, words
+   * included — a video's empty space, so the drawing reads as part of the picture.
+   */
+  region?: FrameRegion | null;
 }
 
 export interface DebugInfo {
