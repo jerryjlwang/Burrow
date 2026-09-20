@@ -147,10 +147,18 @@ export class ProactiveEngine {
     this.deps = deps;
   }
 
+  /**
+   * On the drawing board the page is a canvas app: the only proactive thing there is the tablet
+   * coach (onInkJudgement), never the page's own signals, concepts, paths or step judge. Those
+   * would offer "keyboard shortcuts" from excalidraw's menus and their buttons would hold his
+   * arrival line in the bubble queue.
+   */
+  private get pageQuiet(): boolean {
+    return pageRole() === "board";
+  }
+
   start(): void {
-    // On the drawing board the page is a canvas app: the only proactive thing there is the tablet
-    // coach (onInkJudgement), never the page's own signals, concepts or step judge.
-    if (pageRole() === "board") return;
+    if (this.pageQuiet) return;
     const onPointerDown = (e: PointerEvent) => this.handlePointerDown(e);
     document.addEventListener("pointerdown", onPointerDown, true);
     const onKey = (e: KeyboardEvent) => {
@@ -457,7 +465,7 @@ export class ProactiveEngine {
   onMisconception(m: Misconception): void {
     const s = store.getState();
     const now = Date.now();
-    if (!s.settings.proactiveEnabled) return;
+    if (!s.settings.proactiveEnabled || this.pageQuiet) return;
     if (this.nudgedMisconceptions.has(m.id)) return;
     if (now < this.deps.session.proactiveCooldownUntil) return;
     if (this.offerActive || this.deps.isBusy() || (s.panelOpen && s.busy)) return;
@@ -501,6 +509,7 @@ export class ProactiveEngine {
    * one suggestion that's worth an interruption — an unseen prerequisite of what they're reading.
    */
   onConceptsExtracted(conceptIds: string[], missedIds: string[] = []): void {
+    if (this.pageQuiet) return;
     this.currentConceptIds = conceptIds;
     for (const id of missedIds) this.sessionMisses.set(id, (this.sessionMisses.get(id) ?? 0) + 1);
     // Graded results just came up with misses on them: reconciling those beats any other move.
@@ -528,7 +537,7 @@ export class ProactiveEngine {
   private offerPathSuggestion(kinds: PathKind[], opts: { ignoreCooldown: boolean }): void {
     const s = store.getState();
     const now = Date.now();
-    if (!s.settings.proactiveEnabled) return;
+    if (!s.settings.proactiveEnabled || this.pageQuiet) return;
     if (this.offerActive || this.deps.isBusy() || (s.panelOpen && s.busy)) return;
     if (!opts.ignoreCooldown && now < this.deps.session.proactiveCooldownUntil) return;
     const sessionMisses = [...this.sessionMisses].sort((a, b) => b[1] - a[1]).map(([id]) => id);

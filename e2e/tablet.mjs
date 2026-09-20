@@ -84,8 +84,12 @@ const boardDone = (page) =>
     const labels = [...b.querySelectorAll(".pip-board-label")].map((l) => l.textContent?.trim() ?? "");
     return [...lines, ...labels].filter(Boolean).join(" | ");
   });
-/** Out of the hole and standing: the idle strip with a body that measures. */
-const standing = async (page) => (await strip(page)) === "idle" && !!(await petBox(page));
+/** Out of the hole and standing: a strip that is not a hole or a dive, with a body that measures. */
+const standing = async (page) => {
+  const s = await strip(page);
+  return !!s && !/hole|dive/.test(s) && !!(await petBox(page));
+};
+const look = (page) => inHost(page, () => document.getElementById("pip-companion-host")?.shadowRoot?.querySelector(".pip-char-btn")?.getAttribute("aria-label") ?? "");
 const LEAK = /\b15\b|x\s*=\s*5\b/;
 /** The numbers of the kid's own problem; a note that borrows any of them is the worked step in disguise. */
 const THEIRS = new Set(["3", "5", "20", "25"]);
@@ -155,7 +159,8 @@ try {
 
   // He pops out on the board once the laptop says he is gone (the tunnel, then his ears, about four seconds).
   const out = await until(() => standing(board), 20000);
-  check("the rabbit pops out on the board", !!out, `strip: ${await strip(board)}`);
+  check("the rabbit pops out on the board", !!out, `strip: ${await strip(board)}, ${await look(board)}`);
+  check("he arrives calm, not confused or in error", /: idle/.test(await look(board)), await look(board));
   check("he is gone from the kid's page while on the board", !(await petBox(kid)), `kid strip: ${await strip(kid)}`);
   // His arrival line has its say before the writing starts, so the nudge is not queued behind it.
   await until(async () => ((await bubble(board)) ? null : true), 12000);
