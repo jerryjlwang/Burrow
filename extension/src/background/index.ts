@@ -3,6 +3,7 @@ import { getSettings, setSettings, DEFAULT_SETTINGS } from "../shared/settings";
 import { emptyStudentState } from "@shared/types";
 import type { GraphSnapshot } from "@shared/graph";
 import { GraphHost } from "./graph-host";
+import { fitToViewport, runInput } from "./trusted-input";
 import { log } from "../shared/logger";
 
 const logger = log("bg");
@@ -276,10 +277,17 @@ async function handle(msg: BgRequest, sender: chrome.runtime.MessageSender): Pro
       if (!/^https?:\/\//i.test(msg.url)) throw new Error("only http(s) urls");
       await chrome.tabs.update(tabId, { url: msg.url });
       return { ok: true };
-    case "nav.open":
+    case "nav.open": {
       if (!/^https?:\/\//i.test(msg.url)) throw new Error("only http(s) urls");
-      await chrome.tabs.create({ url: msg.url, active: true });
+      const created = await chrome.tabs.create({ url: msg.url, active: true });
+      // Seed the new tab's session before its content script loads, so the loop (and the
+      // conversation it belongs to) resumes there instead of dying with the origin tab's turn.
+      if (msg.resume && created.id !== undefined) {
+        const origin = tabId == null ? null : await getSession(tabId);
+        await setSession(created.id, { pendingLoop: msg.resume, conversation: origin?.conversation ?? [], student: origin?.student ?? emptyStudentState() });
+      }
       return { ok: true };
+    }
     case "nav.switch": {
       const target = await chrome.tabs.get(msg.tabId).catch(() => null);
       if (!target?.id) return { ok: false };
@@ -288,19 +296,28 @@ async function handle(msg: BgRequest, sender: chrome.runtime.MessageSender): Pro
       return { ok: true };
     }
     case "lookup":
-      return (await postJson("/api/lookup", { query: msg.query }, 15_000));
+      return (await postJson("/api/lookup", { query: msg.query, prefer: msg.prefer }, 15_000));
+    case "steps.plan":
+      return (await postJson("/api/steps/plan", msg.request, 25_000));
+    case "video.analyze":
+      return (await postJson("/api/video/analyze", msg.request, 90_000));
+    case "steps.judge":
+      return (await postJson("/api/steps/judge", msg.request, 25_000));
     case "nav.back":
       if (tabId == null) throw new Error("no tab");
       await chrome.tabs.goBack(tabId);
       return { ok: true };
     case "screenshot": {
       try {
-        const dataUrl = await chrome.tabs.captureVisibleTab(sender.tab?.windowId ?? chrome.windows.WINDOW_ID_CURRENT, { format: "jpeg", quality: 55 });
-        return { ok: true, dataUrl };
+        const dataUrl = await chrome.tabs.captureVisibleTab(sender.tab?.windowId ?? chrome.windows.WINDOW_ID_CURRENT, { format: "jpeg", quality: 70 });
+        return { ok: true, dataUrl: msg.viewport ? await fitToViewport(dataUrl, msg.viewport) : dataUrl };
       } catch (e) {
         return { ok: false, error: String(e) };
       }
     }
+    case "input":
+      if (tabId == null) return { ok: false, error: "no tab" };
+      return runInput(tabId, msg.ops);
     case "open.onboarding":
       await chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html") });
       return { ok: true };

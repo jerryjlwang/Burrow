@@ -39,7 +39,7 @@ Status: open.
 
 ## 5. Unhandled rejection in `runExtract` with two extension pages open
 
-Status: open. Found 2026-09-19 while building the parent view.
+Status: done 2026-09-20 (guard added in `runExtract` and the new `noteQuestion`). Found 2026-09-19 while building the parent view.
 
 With any two extension pages open (two new tabs is enough), `extension/src/content/controller.ts` line 209 throws `TypeError: Cannot read properties of undefined (reading 'length')` because the `{ type: "extract" }` reply comes back without `concepts`. A guard such as `if (!extraction?.concepts?.length && !extraction?.misconceptions?.length) return;` fixes it. Nothing visible breaks, the rejection is just noise in the console.
 

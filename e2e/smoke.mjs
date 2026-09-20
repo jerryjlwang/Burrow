@@ -20,7 +20,8 @@ const root = resolve(here, "..");
 const extPath = resolve(root, "extension/dist");
 const shots = resolve(here, "screenshots");
 mkdirSync(shots, { recursive: true });
-const PORT = 8787;
+// E2E_PORT runs the suite beside a live server on the default port instead of fighting it for 8787.
+const PORT = Number(process.env.E2E_PORT) || 8787;
 const HEADLESS = process.env.HEADED ? false : true;
 
 if (!existsSync(resolve(extPath, "manifest.json"))) {
@@ -105,6 +106,7 @@ try {
   // Reset the persisted learner graph BEFORE anything hydrates it, so reruns on a reused
   // profile start from a blank memory and the recurrence check below stays deterministic.
   if (sw) await sw.evaluate(() => chrome.storage.local.remove("pip.graph"));
+  if (sw && PORT !== 8787) await sw.evaluate((url) => chrome.storage.local.set({ "pip.settings": { serverUrl: url } }), `http://localhost:${PORT}`);
 
   // Close the onboarding tab the extension opens on first install.
   await new Promise((r) => setTimeout(r, 1200));
@@ -231,7 +233,15 @@ try {
       const graded = await ap.locator("#feedback.success.show").waitFor({ timeout: 8000 }).then(() => true).catch(() => false);
       check("'press enter' submits the answer after consent (press_enter)", graded, graded ? await ap.locator("#feedback").textContent() : "(no submit)");
     }
+    // Graded feedback is observed immediately, not after the watcher's 300ms debounce, so an unload
+    // soon after (a quiz auto-advancing, a tab closed on "Correct!") doesn't lose the attempt. 200ms
+    // is well inside the old debounce; a page killed in the same instant is still a coin flip.
+    await new Promise((r) => setTimeout(r, 200));
     await ap.close();
+    await new Promise((r) => setTimeout(r, 2000)); // debounced graph save
+    const flushed = sw ? await sw.evaluate(async () => (await chrome.storage.local.get("pip.graph"))["pip.graph"]?.profile?.plans ?? []) : [];
+    const solvedNow = flushed.find((p) => p.kind === "problem" && /3x \+ 5 = 20/.test(p.key));
+    check("an answer graded 200ms before the tab closes reaches memory (live regions skip the 300ms debounce)", !!solvedNow?.solvedAt, JSON.stringify(solvedNow ? solvedNow.history.map((e) => e.type) : null));
   }
 
   // Password field must be redacted / marked sensitive in the page model.
@@ -373,17 +383,216 @@ try {
     const fixed = await wp.locator("#working-feedback.success.show").waitFor({ timeout: 5000 }).then(() => true).catch(() => false);
     check("corrected working passes the page's final check", fixed);
     // Path consumer: with the seasons misconception recurring in the persistent graph, the win
-    // here should draw a cross-topic "circle back" suggestion a beat after the celebration.
+    // here should draw a cross-topic suggestion a beat after the celebration. The belief already
+    // came back once after a Socratic fix, so the move is "reconcile": offer a resource, not more questions.
     const pathBubble = wp.locator(".pip-bubble");
     let pathText = "";
     for (const t0 = Date.now(); Date.now() - t0 < 15000; ) {
       pathText = (await pathBubble.count()) ? (await pathBubble.first().textContent()) ?? "" : "";
-      if (/circle back/i.test(pathText)) break;
+      if (/seasons/i.test(pathText)) break;
       await new Promise((r) => setTimeout(r, 400));
     }
-    check("after the win, the rabbit suggests revisiting the shaky topic (path consumer)", /circle back/i.test(pathText) && /seasons/i.test(pathText), pathText || "(no bubble)");
+    check("after the win, the rabbit offers to find a resource for the recurring shaky topic (path consumer)", /seasons/i.test(pathText) && /find a (video|lesson|article)/i.test(pathText), pathText || "(no bubble)");
     await wp.screenshot({ path: resolve(shots, "17-path-suggestion.png") });
+
+    // Accepting must DO something: look_up → open_tab on a real resource, not a sentence naming a site.
+    if (/seasons/i.test(pathText)) {
+      const opening = context.waitForEvent("page", { timeout: 25000 }).catch(() => null);
+      await pathBubble.locator("button", { hasText: /yes/i }).first().click();
+      const resourceTab = await opening;
+      const resourceUrl = resourceTab?.url() ?? "";
+      check("accepting the suggestion opens an actual resource in a new tab (look_up → open_tab)", /youtube\.com|khanacademy\.org|wikipedia\.org/.test(resourceUrl) && /season/i.test(decodeURIComponent(resourceUrl)), resourceUrl || "(no new tab)");
+      await new Promise((r) => setTimeout(r, 2200)); // debounced graph save
+      const profile = sw ? await sw.evaluate(async () => (await chrome.storage.local.get("pip.graph"))["pip.graph"]?.profile ?? null) : null;
+      const credited = profile?.resources?.find((r) => r.concept === "seasons");
+      check("the opened resource is remembered against the concept (resource efficacy)", !!credited && credited.reason === "reconcile" && credited.helped === null, JSON.stringify(credited ?? null));
+      check("offer outcomes land in the learner profile", (profile?.offers?.reconcile?.shown ?? 0) >= 1 && (profile?.offers?.reconcile?.accepted ?? 0) >= 1, JSON.stringify(profile?.offers ?? null));
+      await resourceTab?.close().catch(() => undefined);
+    }
+
+    await wp.bringToFront();
+
+    // Sketch: "draw it out" gets a chalkboard worked example with ANALOGOUS numbers, never x = 5.
+    await wp.locator(".pip-input").fill("can you draw it out for me?");
+    await wp.locator(".pip-send").click();
+    const boardEl = wp.locator(".pip-board");
+    await boardEl.waitFor({ timeout: 10000 }).catch(() => null);
+    let boardText = "";
+    for (const t0 = Date.now(); Date.now() - t0 < 8000; ) {
+      boardText = (await boardEl.count()) ? ((await boardEl.first().textContent()) ?? "") : "";
+      if (/x = 3/.test(boardText)) break; // fully revealed
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    check("'draw it out' puts a worked example on the chalkboard (sketch)", /2x \+ 4 = 10/.test(boardText) && /x = 3/.test(boardText), boardText || "(no board)");
+    check("the board teaches with different numbers, never this problem's answer", !/x\s*=\s*5\b/.test(boardText), boardText);
+    await wp.screenshot({ path: resolve(shots, "18-sketch-board.png") });
+    await wp.locator(".pip-board button[aria-label='Close the board']").click({ timeout: 5000 }).catch(() => null);
+    check("the chalkboard closes when its ✕ is clicked", (await wp.locator(".pip-board").count()) === 0);
+
+    // Freeform strokes: a diagram request draws actual shapes (SVG) with HTML labels, not just text.
+    const strokeState = async () => ({
+      shapes: await wp.locator(".pip-board-canvas path, .pip-board-canvas circle, .pip-board-canvas rect").count(),
+      labels: (await wp.locator(".pip-board-label").allTextContents()).join(" "),
+    });
+    await wp.locator(".pip-input").fill("can you draw a right triangle?");
+    await wp.locator(".pip-send").click();
+    let st = { shapes: 0, labels: "" };
+    for (const t0 = Date.now(); Date.now() - t0 < 12000; ) {
+      st = await strokeState();
+      if (st.shapes >= 3 && /a/.test(st.labels) && /c/.test(st.labels)) break;
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    check("'draw a right triangle' renders strokes with labels on the drawing", st.shapes >= 3 && /a/.test(st.labels) && /b/.test(st.labels) && /c/.test(st.labels), `${st.shapes} shapes, labels: ${st.labels}`);
+    await wp.screenshot({ path: resolve(shots, "18b-sketch-strokes.png") });
+
+    // "add" extends the drawing in place: the triangle stays, only the corner mark arrives.
+    await wp.locator(".pip-input").fill("can you also add a square corner mark?");
+    await wp.locator(".pip-send").click();
+    for (const t0 = Date.now(); Date.now() - t0 < 12000; ) {
+      st = await strokeState();
+      if (st.shapes >= 4 && /90/.test(st.labels)) break;
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    check("'add a corner mark' extends the drawing instead of regenerating it", st.shapes >= 4 && /a/.test(st.labels) && /c/.test(st.labels) && /90/.test(st.labels), `${st.shapes} shapes, labels: ${st.labels}`);
+
+    // Anchored sketch: "circle the equation" wraps the drawing onto the equation's own rect.
+    await wp.locator(".pip-input").fill("can you circle the equation?");
+    await wp.locator(".pip-send").click();
+    const eqBox = await wp.locator("#working-equation").boundingBox();
+    let boardBox = null;
+    let wrapped = false;
+    for (const t0 = Date.now(); Date.now() - t0 < 12000 && !wrapped; ) {
+      boardBox = await wp.locator(".pip-board").boundingBox().catch(() => null);
+      wrapped = !!(boardBox && eqBox && Math.abs(boardBox.x - eqBox.x) < 40 && Math.abs(boardBox.y - eqBox.y) < 40 && boardBox.width <= eqBox.width + 80);
+      if (!wrapped) await new Promise((r) => setTimeout(r, 400));
+    }
+    check("'circle the equation' wraps the drawing onto the equation on screen (anchored)", wrapped, JSON.stringify({ boardBox, eqBox }));
+    await wp.screenshot({ path: resolve(shots, "18c-sketch-anchored.png") });
+
+    // The working page's graded feedback became attempt evidence on the page's concept.
+    const nodes = sw ? await sw.evaluate(async () => (await chrome.storage.local.get("pip.graph"))["pip.graph"]?.nodes ?? []) : [];
+    const practiced = nodes.filter((n) => n.state.attempts > 0).map((n) => `${n.id}:${n.state.correct}/${n.state.attempts}`);
+    check("graded feedback is recorded as attempts (precision evidence)", practiced.length > 0, practiced.join(", ") || "(no attempts recorded)");
     await wp.close();
+
+    // Plans are long-term memory with provenance: the worked problem's plan outlives its tab, with
+    // where it came from and the trail of what happened (wrong line → steps reached → solved).
+    await new Promise((r) => setTimeout(r, 2000)); // debounced graph save
+    const storedPlans = sw ? await sw.evaluate(async () => (await chrome.storage.local.get("pip.graph"))["pip.graph"]?.profile?.plans ?? []) : [];
+    // Keyed by the problem itself, so the algebra page and the working page share one record;
+    // provenance is wherever it was first met.
+    const worked = storedPlans.find((p) => p.kind === "problem" && /3x \+ 5 = 20/.test(p.key));
+    const trail = (worked?.history ?? []).map((e) => e.type);
+    check(
+      "a worked problem's plan persists after its tab closes, with provenance and history",
+      !!worked && worked.provenance?.origin === "page" && /\/demo\//.test(worked.provenance?.url ?? "") && !!worked.solvedAt && trail[0] === "created" && trail.includes("wrong_step") && trail.includes("solved") && worked.steps.every((st) => st.done && st.completion),
+      JSON.stringify(worked ? { provenance: worked.provenance, trail, steps: worked.steps.map((st) => st.completion?.by ?? null) } : { stored: storedPlans.map((p) => `${p.kind}:${p.key}`) }),
+    );
+
+    // A brand-new tab on the same problem picks up from memory instead of starting over.
+    const back = await context.newPage();
+    await back.goto(`http://localhost:${PORT}/demo/working.html`, { waitUntil: "load" });
+    await back.locator("#pip-companion-host").waitFor({ state: "attached", timeout: 10000 });
+    await new Promise((r) => setTimeout(r, 1200));
+    await back.evaluate(() => document.getElementById("pip-companion-host").shadowRoot.querySelector(".pip-char-btn")?.click());
+    await back.locator(".pip-panel").waitFor({ timeout: 5000 });
+    await back.locator(".pip-input").fill("where am I in the plan?");
+    await back.locator(".pip-send").click();
+    await back.locator(".pip-plan").waitFor({ timeout: 8000 }).catch(() => null);
+    const restored = await back.evaluate(() => [...(document.getElementById("pip-companion-host")?.shadowRoot?.querySelectorAll(".pip-plan-route[data-kind='problem'] .pip-plan-step") ?? [])].map((li) => li.className.replace("pip-plan-step ", "")));
+    check("coming back to the problem in a new tab restores its progress from memory", restored.length >= 2 && restored.every((st) => st === "done"), JSON.stringify(restored));
+    await back.close();
+  }
+
+  // "I want to learn about X": make_plan → the plan is saved to the learner profile → its first step
+  // is acted on immediately (look_up → open_tab), and the loop RESUMES on the tab it opened.
+  {
+    const lp = await context.newPage();
+    await lp.goto(`http://localhost:${PORT}/demo/index.html`, { waitUntil: "load" });
+    await lp.locator("#pip-companion-host").waitFor({ state: "attached", timeout: 10000 });
+    await new Promise((r) => setTimeout(r, 800));
+    await lp.evaluate(() => document.getElementById("pip-companion-host").shadowRoot.querySelector(".pip-char-btn")?.click());
+    await lp.locator(".pip-panel").waitFor({ timeout: 5000 });
+    const opening = context.waitForEvent("page", { timeout: 30000 }).catch(() => null);
+    await lp.locator(".pip-input").fill("I want to learn about volcanoes");
+    await lp.locator(".pip-send").click();
+    const planTab = await opening;
+    const planUrl = decodeURIComponent(planTab?.url() ?? "");
+    check("a learning goal ends in an opened resource, not advice (make_plan → look_up → open_tab)", /volcano/i.test(planUrl), planUrl || "(no new tab)");
+    await new Promise((r) => setTimeout(r, 2200));
+    const plans = sw ? await sw.evaluate(async () => (await chrome.storage.local.get("pip.graph"))["pip.graph"]?.profile?.plans ?? []) : [];
+    const volcano = plans.find((p) => /volcano/i.test(p.goal));
+    check("the learning plan persists with its first step done", !!volcano && volcano.steps.length >= 3 && volcano.steps[0].done && !volcano.steps[1].done, JSON.stringify(volcano ?? null));
+    check(
+      "the plan records who asked for it and what completed the step (provenance)",
+      volcano?.provenance?.origin === "asked" && /volcanoes/i.test(volcano?.provenance?.utterance ?? "") && volcano?.steps[0].completion?.by === "resource" && /khanacademy|youtube|wikipedia/.test(volcano?.steps[0].completion?.url ?? ""),
+      JSON.stringify({ provenance: volcano?.provenance, completion: volcano?.steps[0].completion }),
+    );
+    if (planTab) {
+      // The opened tab inherited the loop and the conversation: its content script consumes the
+      // pending loop and the rabbit's next line lands in THAT tab's session.
+      let handoff = null;
+      for (const t0 = Date.now(); Date.now() - t0 < 25000; ) {
+        handoff = sw
+          ? await sw.evaluate(async () => {
+              const all = await chrome.storage.session.get(null);
+              const s = Object.values(all).find((v) => v?.conversation?.some((t) => /here we are/i.test(t.text)));
+              return s ? { pendingLoop: s.pendingLoop, turns: s.conversation.map((t) => t.text) } : null;
+            })
+          : null;
+        if (handoff) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      check("the loop resumes on the tab it opened, with the conversation carried over (cross-tab handoff)", !!handoff && handoff.pendingLoop === null && handoff.turns.some((t) => /volcanoes/i.test(t)), JSON.stringify(handoff)?.slice(0, 300) ?? "(no resumed session)");
+      await planTab.close().catch(() => undefined);
+    }
+
+    // The plan is SHOWN, not recited: make_plan opened the map, and it stayed live while step 1 completed.
+    await lp.bringToFront();
+    const mapState = () => lp.evaluate(() => [...(document.getElementById("pip-companion-host")?.shadowRoot?.querySelectorAll(".pip-plan .pip-plan-step") ?? [])].map((li) => li.className.replace("pip-plan-step ", "")));
+    const afterMake = await mapState();
+    check("making a plan opens the plan map, live-updated as step 1 completed", afterMake.length >= 3 && afterMake[0] === "done" && afterMake[1] === "current", JSON.stringify(afterMake));
+    await lp.screenshot({ path: resolve(shots, "19-plan-map.png") });
+
+    // Asking about it later reopens the map from long-term memory rather than answering in chat.
+    await lp.locator(".pip-plan button[aria-label='Close the plan']").click();
+    await lp.locator(".pip-input").fill("what's my plan?");
+    await lp.locator(".pip-send").click();
+    await lp.locator(".pip-plan").waitFor({ timeout: 8000 }).catch(() => null);
+    const goal = (await lp.locator(".pip-plan .pip-plan-goal").first().textContent().catch(() => "")) ?? "";
+    check("'what's my plan?' opens the plan map instead of reciting it", /volcanoes/i.test(goal) && (await mapState()).length >= 3, goal || "(no map)");
+
+    // The map is a control: tapping the current step runs its playbook and opens that step's resource.
+    const stepTab = context.waitForEvent("page", { timeout: 30000 }).catch(() => null);
+    await lp.locator(".pip-plan .pip-plan-start").first().click();
+    const stepUrl = decodeURIComponent((await stepTab)?.url() ?? "");
+    check("tapping a step on the map starts it (look_up → open_tab for that step)", /volcanoes explained with examples/i.test(stepUrl), stepUrl || "(no new tab)");
+    await (await stepTab)?.close().catch(() => undefined);
+    await lp.close();
+  }
+
+  // Region inspector: observe with a quote reads a region IN FULL — the reply carries content from
+  // deep inside the description, far past what the page summary or a spoken line would include.
+  {
+    const rp = await context.newPage();
+    await rp.goto(`http://localhost:${PORT}/demo/assignment.html`, { waitUntil: "load" });
+    await rp.locator("#pip-companion-host").waitFor({ state: "attached", timeout: 10000 });
+    await new Promise((r) => setTimeout(r, 800));
+    await rp.evaluate(() => document.getElementById("pip-companion-host").shadowRoot.querySelector(".pip-char-btn")?.click());
+    await rp.locator(".pip-panel").waitFor({ timeout: 5000 });
+    await rp.locator(".pip-input").fill("What does the description say?");
+    await rp.locator(".pip-send").click();
+    let regionReply = "";
+    for (const t0 = Date.now(); Date.now() - t0 < 15000; ) {
+      regionReply = await rp.evaluate(() => {
+        const sr = document.getElementById("pip-companion-host")?.shadowRoot;
+        return [...(sr?.querySelectorAll(".pip-msg.companion") ?? [])].map((m) => m.textContent ?? "").join("\n");
+      });
+      if (/golden ratio/i.test(regionReply)) break;
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    check("observe with a quote reads the whole region (deep content reaches the reply)", /golden ratio/i.test(regionReply), regionReply.slice(0, 160) || "(no reply)");
+    await rp.close();
   }
 
   // Consequential action asks for confirmation.

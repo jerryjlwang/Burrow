@@ -376,3 +376,7 @@
   87.5% { mask-image: var(--px-cell), var(--px-cell); mask-position: 6px 3px, 0px 9px; }
   100% { mask-image: linear-gradient(transparent, transparent); }
 }
+
+/* ---------- Chalkboard strokes ---------- */
+@keyframes pip-chalk { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+@keyframes pip-chalk-fade { from { opacity: 0; } to { opacity: 1; } }

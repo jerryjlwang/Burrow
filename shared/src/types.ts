@@ -1,4 +1,6 @@
 import type { AgentDecision, InterventionDecision, TaskType } from "./actions";
+import type { StepPlan } from "./plan";
+import type { VideoContext } from "./video";
 
 export interface Rect {
   x: number;
@@ -116,6 +118,15 @@ export interface StudentSessionState {
   successes: number;
 }
 
+/** The path suggestion a loop is carrying out, so resources it opens are credited to the concept. */
+export interface PathContext {
+  kind: string;
+  conceptLabel: string;
+  /** What to look up, and the kind of resource to prefer, when the suggestion is resource-backed. */
+  query?: string;
+  prefer?: string;
+}
+
 export interface PendingOffer {
   type: InterventionDecision["type"];
   message: string;
@@ -123,6 +134,8 @@ export interface PendingOffer {
   at: number;
   /** Pre-composed loop goal for when the offer is accepted (e.g. misconception nudges). */
   goal?: string | null;
+  /** Set when the offer is a path suggestion. */
+  path?: PathContext | null;
 }
 
 export interface AgentInput {
@@ -149,6 +162,21 @@ export interface AgentInput {
   openTabs?: { id: number; title: string; url: string; active: boolean }[];
   /** Results of the previous step's look_up, pre-formatted for the prompt. */
   lookupResults?: string | null;
+  /** The path suggestion being carried out, if this loop came from one. */
+  path?: PathContext | null;
+  /** Step plan for the problem on screen, and the furthest step the student's working has reached. */
+  plan?: StepPlan | null;
+  planStep?: number | null;
+  /** A plan the previous step's make_plan produced, pre-formatted for the prompt. */
+  planResults?: string | null;
+  /** Full text of the region the previous step's observe targeted (label line + body). */
+  readout?: string | null;
+  /** Longitudinal learner diagnostics, pre-formatted (see formatDiagnostics). */
+  learner?: string | null;
+  /** The video the student is watching, as the rabbit has followed it so far. */
+  video?: VideoContext | null;
+  /** `screenshot` is the frame read off the video element, not a viewport capture — its pixels are NOT click coordinates. */
+  screenshotIsVideoFrame?: boolean;
 }
 
 export interface AgentOutput {

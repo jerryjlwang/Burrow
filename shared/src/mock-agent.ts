@@ -103,11 +103,41 @@ function resolveTarget(input: AgentInput, phrase: string, prefer: "clickable" | 
   return findBestElement(input.page.elements, p, opts);
 }
 
+/** Pick a line from formatted LOOKUP RESULTS ("1. [video] Title — https://…"), preferring a modality. */
+export function pickLookupResult(results: string, prefer?: string): { title: string; url: string } | null {
+  const parsed = results
+    .split("\n")
+    .map((line) => line.match(/^\d+\.\s*(?:\[(\w+)\]\s*)?(.+?) — (https?:\/\/\S+)/))
+    .filter((m): m is RegExpMatchArray => m !== null)
+    .map((m) => ({ kind: m[1] ?? "", title: m[2], url: m[3] }));
+  return parsed.find((r) => prefer && r.kind === prefer) ?? parsed[0] ?? null;
+}
+
+/** Runs a resource-backed path suggestion's playbook: look_up, then open the best result. */
+function pathDecision(input: AgentInput): AgentDecision | null {
+  const path = input.path;
+  if (!path?.query) return null;
+  const lookedUp = input.history.find((h) => h.decision.action === "look_up");
+  if (!lookedUp) {
+    return d({ action: "look_up", text: path.query, say: `Let me find something good on ${truncate(path.conceptLabel, 40)}.`, taskType: "learning", reason: "path playbook: look up a resource" });
+  }
+  // Resumed on the tab it opened: the offline brain can't vet a results page, so it hands over.
+  if (input.history.some((h) => h.decision.action === "open_tab")) return d({ action: "finish", say: "Here we are. Pick the one that looks best, and tell me what you notice.", done: true, taskType: "learning" });
+  const pick = lookedUp.result.ok && input.lookupResults ? pickLookupResult(input.lookupResults, path.prefer) : null;
+  if (!pick) return d({ action: "speak", say: "I couldn't find a good one just now. Want to try again in a bit?", done: true, taskType: "learning" });
+  return d({ action: "open_tab", url: pick.url, say: `This one looks right for ${truncate(path.conceptLabel, 40)}. Opening it.`, done: false, taskType: "learning", reason: "path playbook: open the chosen resource" });
+}
+
+const LEARN_GOAL_RE = /\b(?:i (?:want|wanna|would like|d like) to|help me|teach me|let s|lets|can we)\s+(?:learn|study|understand|know)?\s*(?:more\s+)?(?:about\s+)?(.{3,80})$/;
+
 export function decideMock(input: AgentInput): AgentDecision {
   const utterance = input.utterance;
   const u = normalizeText(utterance);
   const page = input.page;
   const last = input.history[input.history.length - 1];
+
+  const pathStep = pathDecision(input);
+  if (pathStep) return pathStep;
 
   // ---- Continuation steps (after an action was executed) ----
   if (input.step > 0 && last) {
@@ -121,6 +151,7 @@ export function decideMock(input: AgentInput): AgentDecision {
     if (a === "type") return d({ action: "finish", say: last.result.ok ? "Typed it in." : "I couldn't type there.", done: true });
     if (a === "navigate" || a === "go_back") return d({ action: "finish", say: "Here we are.", done: true, taskType: "navigation" });
     if (a === "select") return d({ action: "finish", say: last.result.ok ? "Selected." : "I couldn't select that.", done: true });
+    if (a === "make_plan") return d({ action: "finish", say: last.result.ok ? "I made us a plan. Want to start with the first step?" : "I couldn't plan that one right now.", done: true, taskType: "learning" });
     if (a !== "observe") return d({ action: "finish", done: true });
   }
 
@@ -136,9 +167,40 @@ export function decideMock(input: AgentInput): AgentDecision {
   }
   if (isStopCommand(u)) return d({ action: "finish", say: null, done: true });
 
+  // ---- Watching a video: answer from what was just said — never "let me look at the frame" ----
+  if (input.video && input.step === 0 && /\b(video|he|she|just (said|say|did)|mean|explain|don t (get|understand)|didn t (get|understand)|say that again|what did)\b/.test(u)) {
+    if (!input.video.hasTranscript) return d({ action: "speak", say: "I can see the picture, but I can't hear this one.", done: true, taskType: "learning", reason: "video without transcript" });
+    const sentences = input.video.heard.split(/(?<=[.!?])\s+/).filter((sentence) => sentence.trim().length > 8);
+    const lastSaid = sentences[sentences.length - 1];
+    return d({ action: "speak", say: lastSaid ? `The bit just now: "${truncate(lastSaid.trim(), 140)}" Want me to break that down?` : "Nothing's been said in this part yet.", done: true, taskType: "learning", reason: "video question answered from the transcript" });
+  }
+
+  // ---- "I want to learn about X" → a learning plan the path consumer then walks ----
+  const learnGoal = /\b(learn|study|teach me|understand more)\b/.test(u) ? u.match(LEARN_GOAL_RE) : null;
+  if (learnGoal && input.step === 0) {
+    return d({ action: "make_plan", text: learnGoal[1].trim(), say: "Ooh, let's map that out.", taskType: "learning", reason: "learning goal → plan" });
+  }
+
+  // ---- "What's my plan?" → show it, don't recite it ----
+  if (/\b(plans?|steps)\b/.test(u) && /(what s|whats|what is|what are|show|see|open|where am i|how far|what s next|whats next)/.test(u) && /\b(my|our|the|we)\b/.test(u)) {
+    return d({ action: "show_plan", say: "Here's the map.", done: true, taskType: "learning", reason: "plans are shown, not recited" });
+  }
+
   // ---- Greetings ----
   if (/^(hi|hello|hey|yo|hiya|good (morning|afternoon|evening))( pip)?$/.test(u)) {
     return d({ action: "speak", say: "Hey! I'm here. Ask me where something is, or say 'what's on this page'.", done: true, taskType: "chat" });
+  }
+
+  // ---- Region reading: observe with a target, then answer from the full text ----
+  const region = /\b(?:read|check|look at|what does|what do|tell me about|tell me what)\b.*\b(description|instructions|directions|details|summary|caption|fine print)\b/.exec(u);
+  if (region) {
+    if (input.readout) {
+      // The readout's first line is its label; the body is the region's full text.
+      const body = input.readout.slice(input.readout.indexOf("\n") + 1).trim();
+      return d({ action: "explain", say: `Here's what it says: ${truncate(body, 240)}`, text: truncate(body, 2000), done: true, taskType: "accessibility", reason: "answer from region readout" });
+    }
+    if (last?.decision.action === "observe") return d({ action: "speak", say: `I don't see a ${region[1]} on this page.`, done: true, taskType: "accessibility" });
+    return d({ action: "observe", quote: region[1], done: false, taskType: "accessibility", reason: "read the region in full" });
   }
 
   // ---- Page description / accessibility ----
@@ -199,6 +261,30 @@ export function decideMock(input: AgentInput): AgentDecision {
   if (/^(go|take me|head) back$/.test(u) || /^back$/.test(u)) return d({ action: "go_back", say: "Going back.", taskType: "navigation" });
 
   // ---- Clicking / navigating ----
+  // ---- Sketch: draw a worked example or a diagram, extend it, or wrap it onto the page ----
+  if (/\b(add|also)\b.*\b(mark|corner|angle|label|arrow|line|dot|square)\b/.test(u)) {
+    // Only the new shape rides in an "add" sketch; what's drawn stays drawn.
+    return d({ action: "sketch", value: "add", text: "rect 20 72 8 8\nlabel 30 72 90°", say: "Added the square corner.", done: true, taskType: "learning", reason: "extend the drawing" });
+  }
+  if (/\b(circle|ring|mark)\b.*\b(equation|problem|question)\b/.test(u)) {
+    const eq = page.textSummary.match(/-?\d*\s*x\s*[+\-]\s*\d+\s*=\s*-?\d+/);
+    if (eq) return d({ action: "sketch", quote: eq[0], text: "circle 50 50 46", say: "Right around here.", done: true, taskType: "learning", reason: "wrap a ring onto the equation" });
+    return d({ action: "speak", say: "I don't see an equation on this page to circle.", done: true, taskType: "learning" });
+  }
+  if (/\b(draw|sketch|write (it|this) out|draw (it|this) out|show me how to (solve|do))\b/i.test(u)) {
+    if (/\b(triangle|diagram|number line|shape)\b/.test(u)) {
+      const spec = "A right triangle:\nline 20 80 80 80\nline 20 80 20 30\nline 20 30 80 80\nlabel 12 58 a\nlabel 48 92 b\nlabel 54 50 c\nThe square corner is between a and b.";
+      return d({ action: "sketch", text: spec, say: "Here—labeled the sides for you.", done: true, taskType: "learning", reason: "drawn diagram" });
+    }
+    const problem = detectProblem(page);
+    if (problem.kind === "linear-equation") {
+      // Analogous numbers on purpose: the board teaches the moves, never this problem's answer.
+      const spec = "A similar one:\n2x + 4 = 10\n− 4 from both sides\n2x = 6\n÷ 2 on both sides\nx = 3";
+      return d({ action: "sketch", text: spec, say: "Here—same moves, different numbers.", done: true, taskType: "learning", reason: "drawn worked example" });
+    }
+    return d({ action: "speak", say: "I can draw out worked examples for equations—want one for the problem on this page?", done: true, taskType: "learning" });
+  }
+
   // ---- Tab switching / enter (must outrank plain click/open handling) ----
   const switchTo = /\bswitch (?:to|back to)\s+(?:the\s+)?(.+?)\s+tab\b/i.exec(utterance);
   if (switchTo && input.openTabs?.length) {
@@ -210,6 +296,32 @@ export function decideMock(input: AgentInput): AgentDecision {
   if (/\b(?:press|hit) enter\b/i.test(u) && input.lastReferencedElementId != null) {
     return d({ action: "press_enter", elementId: input.lastReferencedElementId, say: "Done.", done: true, taskType: "administrative", reason: "enter on the referenced field" });
   }
+
+  // ---- The visible surface: hover, double/right click, drag, keys (must outrank plain click handling) ----
+  const pointer = /^(?:please |pip |ok |okay |can you |could you )*(hover (?:over|on)|double[- ]click(?: on)?|right[- ]click(?: on)?)\s+(?:the\s+)?(.+)$/.exec(u);
+  if (pointer) {
+    const el = resolveTarget(input, pointer[2], "any");
+    const action = pointer[1].startsWith("hover") ? "hover" : pointer[1].startsWith("double") ? "double_click" : "right_click";
+    if (el) return d({ action, elementId: el.id, say: "Yep.", done: true, taskType: "navigation", reason: `${action} by name` });
+  }
+  const at = /^(?:please |pip |can you |could you )*(double[- ]click|right[- ]click|click|hover)(?: (?:at|on|over))? (\d+) (\d+)$/.exec(u);
+  if (at) {
+    const action = at[1] === "click" ? "click" : at[1] === "hover" ? "hover" : at[1].startsWith("double") ? "double_click" : "right_click";
+    return d({ action, x: Number(at[2]), y: Number(at[3]), say: "Right there.", done: true, taskType: "navigation", reason: `${action} at a point` });
+  }
+  const dragPoints = /\bdrag from (\d+) (\d+) to (\d+) (\d+)$/.exec(u);
+  if (dragPoints) {
+    const [x, y, toX, toY] = dragPoints.slice(1).map(Number);
+    return d({ action: "drag", x, y, toX, toY, say: "Moving it.", done: true, taskType: "administrative", reason: "drag between points" });
+  }
+  const dragging = /\bdrag\s+(?:the\s+)?(.+?)\s+(?:to|onto|into|over to)\s+(?:the\s+)?(.+)$/.exec(u);
+  if (dragging) {
+    const from = resolveTarget(input, dragging[1], "any");
+    const to = resolveTarget(input, dragging[2], "any");
+    if (from && to && from.id !== to.id) return d({ action: "drag", elementId: from.id, toElementId: to.id, say: "Moving it.", done: true, taskType: "administrative", reason: "drag by name" });
+  }
+  const key = /\b(?:press|hit)\s+(?:the\s+)?(escape|esc|tab|space|backspace|delete|(?:arrow )?(?:up|down|left|right)|page ?(?:up|down)|home|end)\b/.exec(u);
+  if (key) return d({ action: "press_key", text: key[1].replace(/^arrow |\s/g, ""), say: "Done.", done: true, taskType: "navigation", reason: "key by name" });
 
   // ---- New tab / window (must outrank plain click/open handling) ----
   const newTab = /\b(?:open|show|take me to)\b(.*)\bin a new (?:tab|window)\b|\bnew (?:tab|window)\b.*\b(?:for|with|of)\b(.*)/i.exec(utterance);

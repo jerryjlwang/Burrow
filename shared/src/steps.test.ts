@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { judgeWorking, parseLinearSide, parseWorkingLine } from "./steps";
+import { judgeWorking, parseJudgement, parseLinearSide, parseWorkingLine } from "./steps";
 import type { DetectedProblem } from "./hints";
 
 // 3x + 5 = 20 → x = 5
@@ -67,5 +67,38 @@ describe("judgeWorking", () => {
     const json = JSON.stringify(j.steps.map(({ line, ...rest }) => rest));
     expect(json).not.toContain("15"); // the corrected intermediate never appears
     expect(json).not.toMatch(/"5"/); // nor the final answer as a value
+  });
+});
+
+describe("plan progress and the remote judge's verdict shape", () => {
+  const problem = { kind: "linear-equation", a: 3, op: "+", b: 5, c: 20, raw: "3x + 5 = 20" } as const;
+
+  it("reports how far along the linear plan the working is", () => {
+    expect(judgeWorking(problem, "3x + 5 = 20").planStep).toBe(0);
+    expect(judgeWorking(problem, "3x + 5 = 20\n3x = 15").planStep).toBe(1);
+    expect(judgeWorking(problem, "3x + 5 = 20\n3x = 15\nx = 5").planStep).toBe(2);
+  });
+
+  it("parseJudgement keeps only indices, flags and the category enum — never model text", () => {
+    const working = "plants make food from light\n\nso they need soil to eat\nthe answer is soil";
+    const j = parseJudgement(
+      { judged: true, solved: true, planStep: 99, steps: [{ step: 1, ok: true, category: null }, { step: 2, ok: false, category: "it should say photosynthesis", line: "LEAK", fix: "LEAK" }, { step: 9, ok: false }] },
+      working,
+      3,
+    );
+    expect(JSON.stringify(j)).not.toContain("LEAK");
+    expect(JSON.stringify(j)).not.toContain("photosynthesis");
+    expect(j.steps.map((s) => s.line)).toEqual(["plants make food from light", "so they need soil to eat", "the answer is soil"]);
+    expect(j.steps[1]).toMatchObject({ ok: false, category: "unknown" });
+    expect(j.steps[2].ok).toBeNull();
+    expect(j.firstWrongStep).toBe(2);
+    expect(j.solved).toBe(false); // a wrong step overrides a claimed solve
+    expect(j.planStep).toBe(3); // clamped to the plan
+  });
+
+  it("parseJudgement degrades to not-judged on junk", () => {
+    expect(parseJudgement(null, "a\nb", 2).judged).toBe(false);
+    expect(parseJudgement({ judged: false, steps: [] }, "a\nb", 2).judged).toBe(false);
+    expect(parseJudgement({ judged: true, steps: [] }, "", 2).judged).toBe(false);
   });
 });

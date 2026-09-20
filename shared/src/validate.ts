@@ -1,11 +1,15 @@
+import { parseKeyChord } from "./keys";
 import { ACTIONS, DECISION_DEFAULTS, INTERVENTION_TYPES, TASK_TYPES, type ActionName, type AgentDecision, type InterventionDecision, type PendingAction } from "./actions";
 
 const ACTION_SET = new Set<string>(ACTIONS);
 const TASK_SET = new Set<string>(TASK_TYPES);
 const INTERVENTION_SET = new Set<string>(INTERVENTION_TYPES);
-const ELEMENT_ACTIONS = new Set<ActionName>(["highlight", "point_to", "click", "focus", "type", "clear", "select", "press_enter", "scroll_to"]);
-/** Actions that may anchor to a sub-element target (a verbatim quote or a line of a field's value). */
-const ANCHOR_ACTIONS = new Set<ActionName>(["highlight", "point_to"]);
+const ELEMENT_ACTIONS = new Set<ActionName>(["highlight", "point_to", "focus", "clear", "select", "press_enter", "scroll_to"]);
+/** Pointer actions aim at an element OR a viewport point, so the agent can work canvases, maps and anything the element list misses. */
+const POINTER_ACTIONS = new Set<ActionName>(["click", "double_click", "right_click", "hover", "drag"]);
+const MAX_COORD = 20000;
+/** Actions that may carry a sub-element target (a verbatim quote or a line of a field's value): pointing, and observe's full-region read. */
+const ANCHOR_ACTIONS = new Set<ActionName>(["highlight", "point_to", "observe", "sketch"]);
 
 export type DecisionValidation = { ok: true; decision: AgentDecision } | { ok: false; error: string };
 
@@ -68,6 +72,11 @@ export function validateDecision(raw: unknown): DecisionValidation {
       quote: optStr(raw.quote, "quote"),
       line: optInt(raw.line, "line"),
       tabId: optInt(raw.tabId, "tabId"),
+      x: optNum(raw.x, "x"),
+      y: optNum(raw.y, "y"),
+      toElementId: optInt(raw.toElementId, "toElementId"),
+      toX: optNum(raw.toX, "toX"),
+      toY: optNum(raw.toY, "toY"),
       pendingAction: parsePending(raw.pendingAction),
       taskType: taskType as AgentDecision["taskType"],
       reason: typeof raw.reason === "string" ? raw.reason : "",
@@ -78,6 +87,8 @@ export function validateDecision(raw: unknown): DecisionValidation {
       d.quote = null;
       d.line = null;
     } else {
+      // observe/sketch take whole-region targets; only quote/elementId apply — a stray line is noise, not an error.
+      if (d.action === "observe" || d.action === "sketch") d.line = null;
       if (d.quote !== null) d.quote = d.quote.trim().slice(0, 200) || null;
       if (d.line !== null && d.line < 1) return { ok: false, error: "line must be >= 1" };
       if (d.line !== null && d.elementId === null) return { ok: false, error: "line anchoring requires an elementId" };
@@ -88,13 +99,30 @@ export function validateDecision(raw: unknown): DecisionValidation {
       return { ok: false, error: `${d.action} requires a valid elementId` };
     }
     if (ELEMENT_ACTIONS.has(d.action) && d.elementId !== null && d.elementId < 0) return { ok: false, error: `${d.action} requires a valid elementId` };
+    for (const [name, v] of [["x", d.x], ["y", d.y], ["toX", d.toX], ["toY", d.toY]] as const) {
+      if (v !== null && (v < 0 || v > MAX_COORD)) return { ok: false, error: `${name} is outside the page` };
+    }
+    // A half-specified point is a model slip, not a target.
+    if ((d.x === null) !== (d.y === null)) return { ok: false, error: "x and y must be given together" };
+    if ((d.toX === null) !== (d.toY === null)) return { ok: false, error: "toX and toY must be given together" };
+    if (d.elementId !== null && d.elementId < 0 && (POINTER_ACTIONS.has(d.action) || d.action === "type")) d.elementId = null;
+    const hasSource = (d.elementId !== null && d.elementId >= 0) || d.x !== null;
+    if (POINTER_ACTIONS.has(d.action) && !hasSource) return { ok: false, error: `${d.action} requires an elementId or x,y` };
+    if (d.action === "drag" && !((d.toElementId !== null && d.toElementId >= 0) || d.toX !== null)) return { ok: false, error: "drag requires a destination: toElementId or toX,toY" };
+    if (d.action === "press_key" && (!d.text || !parseKeyChord(d.text))) return { ok: false, error: 'press_key requires text naming a key or chord, e.g. "Escape", "ArrowDown", "Control+a"' };
     if (d.action === "type" && (d.text === null || d.text.length === 0)) return { ok: false, error: "type requires text" };
     if (d.action === "type" && d.text!.length > 2000) return { ok: false, error: "type text too long" };
     if (d.action === "select" && d.value === null) return { ok: false, error: "select requires value" };
     if ((d.action === "navigate" || d.action === "open_tab") && (!d.url || !/^https?:\/\//i.test(d.url))) return { ok: false, error: `${d.action} requires an absolute http(s) url` };
     if (d.action === "switch_tab" && d.tabId === null) return { ok: false, error: "switch_tab requires a tabId from the open tabs list" };
     if (d.action === "look_up" && (!d.text || !d.text.trim())) return { ok: false, error: "look_up requires text (the query)" };
+    if (d.action === "sketch" && (!d.text || !d.text.trim())) return { ok: false, error: "sketch requires text (the lines to draw)" };
+    if (d.action === "sketch" && d.text!.length > 1200) return { ok: false, error: "sketch text too long" };
+    // sketch's value is a mode switch: "add" extends the drawing on screen; anything else means a fresh one.
+    if (d.action === "sketch" && d.value !== null && d.value !== "add") d.value = null;
     if (d.action === "look_up" && d.text!.length > 200) return { ok: false, error: "look_up query too long" };
+    if (d.action === "make_plan" && (!d.text || !d.text.trim())) return { ok: false, error: "make_plan requires text (what the student wants to learn)" };
+    if (d.action === "make_plan" && d.text!.length > 200) return { ok: false, error: "make_plan goal too long" };
     if (d.action === "scroll" && d.direction === null) return { ok: false, error: "scroll requires direction" };
     if (d.action === "ask_confirmation") {
       if (!d.pendingAction) return { ok: false, error: "ask_confirmation requires pendingAction" };

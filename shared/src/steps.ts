@@ -5,13 +5,17 @@ import type { DetectedProblem } from "./hints";
  * WHICH step is wrong — never what the fix is. Verdicts carry only a step index and a coarse
  * category, so they are leak-safe by construction.
  *
- * Deterministic core: a line of algebra that is a valid transformation must still hold at the
- * problem's true solution; the first parsed line that doesn't is the wrong step. This runs
- * locally in the content script — no model, no latency — for every problem shape we can solve
- * ourselves. An LLM judge can sit behind the same output shape for arbitrary math later.
+ * Two judges, one verdict shape:
+ *  - Deterministic: a line of algebra that is a valid transformation must still hold at the
+ *    problem's true solution; the first parsed line that doesn't is the wrong step. Runs locally
+ *    in the content script — no model, no latency — for every shape we can solve ourselves.
+ *  - LLM (server): any other problem, judged against its step plan. Its output goes through
+ *    {@link parseJudgement}, which keeps only indices, booleans and a coarse category and copies
+ *    each line from the student's own working — so no model text can ever reach the student.
  */
 
-export type StepCategory = "sign" | "arithmetic" | "unknown";
+export type StepCategory = "sign" | "arithmetic" | "reasoning" | "unknown";
+const CATEGORIES = new Set<string>(["sign", "arithmetic", "reasoning", "unknown"]);
 
 export interface StepVerdict {
   /** 1-based line number in the working. */
@@ -30,6 +34,15 @@ export interface WorkingJudgement {
   firstWrongStep: number | null;
   /** The working ends in a correct final answer (e.g. "x = 5"). */
   solved: boolean;
+  /** Furthest step of the problem's plan the working has completed (0 = none), or null if unknown. */
+  planStep: number | null;
+}
+
+export function splitWorking(working: string): string[] {
+  return working
+    .split(/\n+/)
+    .map((l) => l.trim())
+    .filter(Boolean);
 }
 
 /** One side of an equation reduced to coefficient·x + constant. */
@@ -112,14 +125,12 @@ function solutionOf(problem: DetectedProblem): number | null {
 /** Judge the student's working against the problem's true solution. */
 export function judgeWorking(problem: DetectedProblem, working: string): WorkingJudgement {
   const x = solutionOf(problem);
-  const lines = working
-    .split(/\n+/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  if (x === null) return { judged: false, steps: [], firstWrongStep: null, solved: false };
+  const lines = splitWorking(working);
+  if (x === null) return { judged: false, steps: [], firstWrongStep: null, solved: false, planStep: null };
   const steps: StepVerdict[] = [];
   let firstWrongStep: number | null = null;
   let solved = false;
+  let constantCleared = false;
   for (let i = 0; i < lines.length; i++) {
     const parsed = parseWorkingLine(lines[i]);
     if (!parsed) {
@@ -131,11 +142,39 @@ export function judgeWorking(problem: DetectedProblem, working: string): Working
     if (!ok) {
       verdict.category = categorize(parsed, x);
       if (firstWrongStep === null) firstWrongStep = i + 1;
-    } else if (parsed.lhs.coef === 1 && parsed.lhs.konst === 0 && parsed.rhs.coef === 0) {
+    } else if (parsed.lhs.konst === 0 && parsed.rhs.coef === 0 && parsed.lhs.coef !== 0) {
+      constantCleared = true;
       // "x = <value>" and it holds → they landed the solution.
-      solved = true;
+      if (parsed.lhs.coef === 1) solved = true;
     }
     steps.push(verdict);
   }
-  return { judged: true, steps, firstWrongStep, solved };
+  // Mirrors linearPlan: clear the constant, (divide out the coefficient), check.
+  const divides = problem.kind === "linear-equation" && Math.abs(problem.a) !== 1;
+  const planStep = solved ? (divides ? 2 : 1) : constantCleared ? 1 : 0;
+  return { judged: true, steps, firstWrongStep, solved, planStep };
+}
+
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+
+/**
+ * Turn a remote judge's raw output into a WorkingJudgement. Only step numbers, ok flags, the
+ * category enum, solved and planStep survive; `line` always comes from the student's working.
+ */
+export function parseJudgement(raw: unknown, working: string, planLength: number): WorkingJudgement {
+  const none: WorkingJudgement = { judged: false, steps: [], firstWrongStep: null, solved: false, planStep: null };
+  const lines = splitWorking(working);
+  if (!isObj(raw) || raw.judged !== true || !Array.isArray(raw.steps) || !lines.length) return none;
+  const byStep = new Map<number, StepVerdict>();
+  for (const v of raw.steps) {
+    if (!isObj(v) || typeof v.step !== "number" || !Number.isInteger(v.step) || v.step < 1 || v.step > lines.length) continue;
+    const ok = v.ok === true ? true : v.ok === false ? false : null;
+    const verdict: StepVerdict = { step: v.step, line: lines[v.step - 1], ok };
+    if (ok === false) verdict.category = typeof v.category === "string" && CATEGORIES.has(v.category) ? (v.category as StepCategory) : "unknown";
+    byStep.set(v.step, verdict);
+  }
+  const steps = lines.map((line, i) => byStep.get(i + 1) ?? { step: i + 1, line, ok: null });
+  const firstWrongStep = steps.find((st) => st.ok === false)?.step ?? null;
+  const reached = typeof raw.planStep === "number" && Number.isInteger(raw.planStep) ? Math.min(Math.max(raw.planStep, 0), planLength) : null;
+  return { judged: true, steps, firstWrongStep, solved: raw.solved === true && firstWrongStep === null, planStep: reached };
 }

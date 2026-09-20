@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { ConversationTurn, PageSummary, StruggleSignals, Rect, ActionResult } from "@shared/types";
+import type { SketchItem } from "@shared/sketch";
 import type { AgentDecision } from "@shared/actions";
 import { emptySignals } from "@shared/types";
 import type { VoiceState } from "../shared/messages";
@@ -29,13 +30,29 @@ export interface Bubble {
   kind: "offer" | "confirmation" | "info" | "error" | "reply";
   actions?: BubbleAction[];
   expiresAt?: number;
+  /** Handles this bubble's buttons itself instead of the offer/confirmation flows. */
+  onAction?: (value: BubbleAction["value"]) => void;
 }
 
-/** A worked example the rabbit "draws out" line by line on its chalkboard. */
+/** One plan as the plan map draws it: the problem on screen, or a learning plan from long-term memory. */
+export interface PlanRoute {
+  key: string;
+  kind: "problem" | "topic";
+  goal: string;
+  steps: Array<{ title: string; state: "done" | "current" | "todo" }>;
+}
+
+export interface PlanView {
+  routes: PlanRoute[];
+}
+
+/** A drawing the rabbit overlays on the screen: text lines and freeform strokes, optionally wrapped to a page region. */
 export interface SketchBoard {
   id: string;
   title?: string;
-  lines: string[];
+  items: SketchItem[];
+  /** Page element the 100×100 stroke space maps onto; null draws in the floating corner panel. */
+  anchor: Element | null;
 }
 
 export interface DebugInfo {
@@ -65,11 +82,12 @@ export interface UIState {
   voice: VoiceState;
   bubble: Bubble | null;
   board: SketchBoard | null;
+  /** The plan map, when open. Shares the chalkboard's corner, so opening one closes the other. */
+  planView: PlanView | null;
   highlights: HighlightBox[];
   pointer: { from: { x: number; y: number }; to: { x: number; y: number } } | null;
   busy: boolean;
   status: string;
-  offline: boolean;
   page: PageSummary | null;
   signals: StruggleSignals;
   debug: DebugInfo;
@@ -92,11 +110,11 @@ export const initialState: UIState = {
   voice: { mode: "off", ttsPlaying: false, serverOk: null },
   bubble: null,
   board: null,
+  planView: null,
   highlights: [],
   pointer: null,
   busy: false,
   status: "",
-  offline: false,
   page: null,
   signals: emptySignals(),
   debug: { lastDecision: null, lastResult: null, provider: null, degraded: false, goal: null, lastTranscript: null, loopStep: 0, latencyMs: null, proactiveLevel: 0 },

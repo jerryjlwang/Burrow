@@ -11,6 +11,9 @@ const TYPES: Record<string, string> = {
   ".json": "application/json",
   ".ico": "image/x-icon",
   ".pdf": "application/pdf",
+  ".webm": "video/webm",
+  ".mp4": "video/mp4",
+  ".vtt": "text/vtt; charset=utf-8",
 };
 
 /** Serves files under `root` for URLs beginning with `prefix`. Returns false if not handled. */
@@ -32,7 +35,22 @@ export function serveStatic(req: IncomingMessage, res: ServerResponse, prefix: s
     } else res.writeHead(404).end("not found");
     return true;
   }
-  res.writeHead(200, { "content-type": TYPES[extname(file)] ?? "application/octet-stream", "cache-control": "no-cache" });
+  const headers = { "content-type": TYPES[extname(file)] ?? "application/octet-stream", "cache-control": "no-cache", "accept-ranges": "bytes" };
+  // Byte ranges: a <video> cannot seek backwards in a file served without them.
+  const size = statSync(file).size;
+  const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? "");
+  if (range && (range[1] || range[2])) {
+    const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+    const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+    if (start > end || start >= size) {
+      res.writeHead(416, { "content-range": `bytes */${size}` }).end();
+      return true;
+    }
+    res.writeHead(206, { ...headers, "content-range": `bytes ${start}-${end}/${size}`, "content-length": end - start + 1 });
+    createReadStream(file, { start, end }).pipe(res);
+    return true;
+  }
+  res.writeHead(200, { ...headers, "content-length": size });
   createReadStream(file).pipe(res);
   return true;
 }

@@ -82,3 +82,12 @@ describe("leakedAnswer", () => {
     expect(leakedAnswer("Yes, exactly—do both sides.", answers, { utterance: "do I do it to both sides?" }).leaked).toBe(false);
   });
 });
+
+describe("worded answers from the step planner", () => {
+  it("flags the whole answer phrase, not words that merely overlap with it", () => {
+    expect(leakedAnswer("It's called photosynthesis!", ["photosynthesis"]).leaked).toBe(true);
+    expect(leakedAnswer("Try this: Add 3 to both sides, then divide by 4.", ["add 3 to both sides, then divide by 4"]).leaked).toBe(true);
+    expect(leakedAnswer("What could you add to both sides first?", ["add 3 to both sides, then divide by 4"]).leaked).toBe(false);
+    expect(leakedAnswer("What do plants need light for?", ["photosynthesis"]).leaked).toBe(false);
+  });
+});

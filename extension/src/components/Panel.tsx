@@ -20,7 +20,6 @@ export function Panel({ controller }: { controller: CompanionController }) {
   const status = useStore((s) => s.status);
   const busy = useStore((s) => s.busy);
   const settings = useStore((s) => s.settings);
-  const offline = useStore((s) => s.offline);
   const characterState = useStore((s) => s.characterState);
   const [text, setText] = useState("");
   const [showSettings, setShowSettings] = useState(false);
@@ -81,6 +80,10 @@ export function Panel({ controller }: { controller: CompanionController }) {
             <span>Notice when I'm stuck and offer help</span>
           </label>
           <label className="pip-toggle">
+            <input type="checkbox" checked={settings.videoCompanion === "on"} onChange={(e) => void controller.updateSetting({ videoCompanion: e.target.checked ? "on" : "off" })} />
+            <span>Watch videos along with me (may pause for what really matters)</span>
+          </label>
+          <label className="pip-toggle">
             <input type="checkbox" checked={settings.ttsEnabled} onChange={(e) => void controller.updateSetting({ ttsEnabled: e.target.checked })} />
             <span>Speak replies out loud</span>
           </label>
@@ -128,7 +131,6 @@ export function Panel({ controller }: { controller: CompanionController }) {
         )}
       </div>
 
-      {offline && <div className="pip-offline">Server not reachable. Running in offline mode: no voice, simple answers.</div>}
       {voice.mode === "error" && voice.error && <div className="pip-offline">{voice.error}</div>}
 
       <form

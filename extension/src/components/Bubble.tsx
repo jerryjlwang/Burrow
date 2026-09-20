@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { Bubble as BubbleModel, BubbleAction } from "../content/store";
+import { TYPE_CHARS_PER_SECOND } from "../content/bubbles";
 import { voiceBlip } from "./sounds";
 import { plainCopy } from "./copy";
 
-/** Characters revealed per second while the rabbit "talks". */
-const CHARS_PER_SECOND = 42;
 /** Buttons never wait longer than this, even on a long sentence. */
 const MAX_BUTTON_WAIT_MS = 2200;
 const TICK_MS = 40;
@@ -32,7 +31,7 @@ function useTypewriter(text: string, id: string): { shown: number; done: boolean
     let timer = 0;
     const tick = () => {
       if (skipped.current) return;
-      const n = document.visibilityState === "hidden" ? text.length : Math.min(text.length, Math.floor(((performance.now() - start) / 1000) * CHARS_PER_SECOND));
+      const n = document.visibilityState === "hidden" ? text.length : Math.min(text.length, Math.floor(((performance.now() - start) / 1000) * TYPE_CHARS_PER_SECOND));
       if (n !== last) {
         for (let i = last; i < Math.min(n, last + 8); i++) {
           const ch = text[i];

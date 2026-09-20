@@ -31,11 +31,14 @@ export class OpenAIProvider implements AgentProvider {
   constructor(opts: OpenAIProviderOptions) {
     this.opts = opts;
     this.name = `openai:${opts.model}`;
-    this.client = new OpenAI({ apiKey: opts.apiKey, timeout: 35_000, maxRetries: 1 });
-    this.reasoningModel = /^(gpt-5|o\d)/.test(opts.model);
+    // Bounded so the worst-case decide pipeline (call + one corrective retry) stays inside the
+    // client's 40s budget — a slow answer must never look like a dead server.
+    this.client = new OpenAI({ apiKey: opts.apiKey, timeout: 15_000, maxRetries: 0 });
+    this.reasoningModel = /^(gpt-[5-9]|o\d)/.test(opts.model);
   }
 
-  private async complete<T>(system: string, user: ContentPart[], schemaName: string, schema: Record<string, unknown>, maxTokens: number, effort?: OpenAIProviderOptions["effort"]): Promise<T> {
+  /** One strict-JSON-schema completion. Shared by the agent, the step planner and the step judge. */
+  async complete<T>(system: string, user: ContentPart[], schemaName: string, schema: Record<string, unknown>, maxTokens: number, effort?: OpenAIProviderOptions["effort"]): Promise<T> {
     const params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming = {
       model: this.opts.model,
       messages: [
@@ -78,7 +81,7 @@ export class OpenAIProvider implements AgentProvider {
   async decide(input: AgentInput): Promise<AgentDecision> {
     const parts: ContentPart[] = [];
     if (input.screenshot && /^data:image\/(jpeg|png|webp|gif);base64,/.test(input.screenshot)) {
-      parts.push({ type: "image_url", image_url: { url: input.screenshot, detail: "low" } });
+      parts.push({ type: "image_url", image_url: { url: input.screenshot, detail: "high" } });
     }
     parts.push({ type: "text", text: formatDecisionContext(input) });
     return this.complete<AgentDecision>(SYSTEM_PROMPT, parts, "agent_decision", DECISION_JSON_SCHEMA as unknown as Record<string, unknown>, 900);

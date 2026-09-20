@@ -22,10 +22,9 @@ export class VoiceController {
   private lastTtsEndedAt = 0;
   /** Recent TTS texts, for discriminating the rabbit's own voice from the student's (echo gate). */
   private spokenRecently: { text: string; at: number }[] = [];
-  /** Speech queue: utterances chain; bumping the generation flushes everything not yet started. */
-  private speakChain: Promise<void> = Promise.resolve();
-  private queueGen = 0;
-  private pendingSpeaks = 0;
+  /** Speech queue: the playing sentence finishes; at most ONE unstarted line waits (latest wins). */
+  private nextUp: { text: string; resolve: () => void }[] = [];
+  private pumping = false;
   /** Dedupe for STT finals the upstream occasionally re-sends. */
   private lastFinalNorm = "";
   private lastFinalAt = 0;
@@ -83,22 +82,32 @@ export class VoiceController {
 
   /** Speaks text via Deepgram TTS (through the offscreen document). Resolves when playback ends or fails. */
   /**
-   * Agent speech QUEUES: an in-flight sentence always finishes before the next begins, so an
-   * action mid-response (open_tab, a resumed loop on a new tab) never cuts the dialogue — audio
-   * lives in the offscreen document and plays on across tab switches. Only explicit interrupts
-   * (the student's voice, a click on the rabbit, Escape, typed input) flush the queue.
+   * Agent speech QUEUES, latest-wins: the in-flight sentence always finishes (audio lives in the
+   * offscreen document, so it plays on across tab switches), but only the NEWEST unstarted line
+   * waits behind it — stale narration of steps the screen has already moved past is dropped, so
+   * speech never lags the action by more than one sentence. Only explicit interrupts (the
+   * student's voice, a click on the rabbit, Escape, typed input) cut audio mid-sentence.
    */
   speak(text: string): Promise<void> {
-    if (this.pendingSpeaks >= 4) return Promise.resolve(); // runaway chains drop, not lag
-    const gen = this.queueGen;
-    this.pendingSpeaks++;
-    const run = this.speakChain
-      .then(() => (gen === this.queueGen ? this.speakNow(text) : undefined))
-      .finally(() => {
-        this.pendingSpeaks--;
-      });
-    this.speakChain = run.catch(() => undefined);
-    return run;
+    return new Promise<void>((resolve) => {
+      const replaced = this.nextUp.splice(0, this.nextUp.length, { text, resolve });
+      for (const r of replaced) r.resolve();
+      void this.pump();
+    });
+  }
+
+  private async pump(): Promise<void> {
+    if (this.pumping) return;
+    this.pumping = true;
+    try {
+      while (this.nextUp.length) {
+        const item = this.nextUp.shift()!;
+        await this.speakNow(item.text).catch(() => undefined);
+        item.resolve();
+      }
+    } finally {
+      this.pumping = false;
+    }
   }
 
   private speakNow(text: string): Promise<void> {
@@ -123,9 +132,8 @@ export class VoiceController {
   }
 
   stopSpeaking(): void {
-    // Flush queued utterances first so nothing starts up right after the stop.
-    this.queueGen++;
-    this.speakChain = Promise.resolve();
+    // Flush the queued line first so nothing starts up right after the stop.
+    for (const r of this.nextUp.splice(0)) r.resolve();
     const id = this.currentSpeechId;
     if (!id) return;
     void sendToBackground({ type: "tts.stop" }, 3000).catch(() => undefined);

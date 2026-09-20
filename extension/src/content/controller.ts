@@ -1,17 +1,25 @@
 import type { PageSummary, PendingOffer } from "@shared/types";
 import { isStopCommand, truncate } from "@shared/text";
-import { HeuristicConceptExtractor, applyExtraction, pageToExtractionInput, type ConceptExtraction, type ExtractionInput } from "@shared/concepts";
+import { HeuristicConceptExtractor, pageToExtractionInput, type ConceptExtraction, type ExtractionInput } from "@shared/concepts";
 import { slugify } from "@shared/graph";
+import { parsePlan, topicPlanKey } from "@shared/plan";
+import { parseSketch } from "@shared/sketch";
+import { planStepSuggestion } from "@shared/path";
+import type { PlanRoute } from "./store";
+import { classifyTask } from "../actions/policy";
+import { quoteRegion } from "../actions/inspect";
 import { ElementRegistry } from "../page-understanding/registry";
-import { extractPage } from "../page-understanding/extract";
+import { extractPage, HOST_ID } from "../page-understanding/extract";
 import { PageWatcher, type ChangeReason } from "../page-understanding/watcher";
 import { OverlayController } from "../actions/overlay";
 import { AgentLoop } from "../agent/loop";
 import { Session } from "../agent/session";
 import { SignalTracker } from "../proactive/signals";
 import { ProactiveEngine } from "../proactive/engine";
+import { VideoCompanion } from "../proactive/video-companion";
 import { VoiceController } from "../voice/controller";
 import { store, type Bubble } from "./store";
+import { BubbleQueue } from "./bubbles";
 import { getSettings, onSettingsChange, setSettings, type Settings } from "../shared/settings";
 import { sendToBackground, isExtensionContextValid, type ContentBroadcast } from "../shared/messages";
 import { log, onLog, setDebugLogging } from "../shared/logger";
@@ -28,6 +36,8 @@ export class CompanionController {
   readonly loop: AgentLoop;
   readonly voice: VoiceController;
   readonly engine: ProactiveEngine;
+  readonly video: VideoCompanion;
+  private readonly bubbles = new BubbleQueue({ get: () => store.getState().bubble, set: (bubble) => store.setState({ bubble }) });
   private readonly extractor = new HeuristicConceptExtractor();
   /** Topic signature of the last page scheduled for extraction, to skip SPA mutations that change nothing. */
   private extractSig = "";
@@ -37,6 +47,7 @@ export class CompanionController {
   private pendingOffer: PendingOffer | null = null;
   private bubbleTimer: number | null = null;
   private celebrateTimer: number | null = null;
+  private errorTimer: number | null = null;
   private lastMutationSeen = 0;
   private disposed = false;
 
@@ -59,9 +70,11 @@ export class CompanionController {
             location.href = url;
           }
         },
-        openTab: async (url) => {
+        openTab: async (url, resume) => {
+          // The new tab inherits this conversation from the synced session; don't leave it to the debounce.
+          if (resume) await this.session.sync();
           try {
-            await sendToBackground({ type: "nav.open", url }, 3000);
+            await sendToBackground({ type: "nav.open", url, resume }, 3000);
           } catch {
             window.open(url, "_blank", "noopener");
           }
@@ -69,9 +82,33 @@ export class CompanionController {
         switchTab: async (tabId) => {
           await sendToBackground({ type: "nav.switch", tabId }, 3000);
         },
-        lookup: async (query) => {
-          const r = await sendToBackground({ type: "lookup", query }, 15_000);
+        lookup: async (query, prefer) => {
+          const r = await sendToBackground({ type: "lookup", query, prefer }, 15_000);
           return r.results;
+        },
+        makePlan: async (topic) => {
+          const r = await sendToBackground({ type: "steps.plan", request: { topic } }, 25_000);
+          return parsePlan(r.plan, { key: topicPlanKey(topic), source: "llm" });
+        },
+        showPlan: () => this.showPlan(),
+        input: async (ops) => {
+          try {
+            return await sendToBackground({ type: "input", ops }, 8000);
+          } catch (e) {
+            return { ok: false, error: String(e) };
+          }
+        },
+        sketch: (spec, opts) => {
+          const sk = parseSketch(spec);
+          if (!sk.items.length) return;
+          const anchor = opts?.elementId != null ? this.registry.get(opts.elementId) : opts?.quote ? quoteRegion(document.body, opts.quote, HOST_ID, { grow: false }) : null;
+          const prev = store.getState().board;
+          if (opts?.add && prev) {
+            // Extend the drawing on screen: same board id so the reveal continues, not restarts.
+            store.setState({ board: { ...prev, title: sk.title ?? prev.title, items: [...prev.items, ...sk.items].slice(0, 48), anchor: anchor ?? prev.anchor }, planView: null });
+            return;
+          }
+          store.setState({ board: { id: `${Date.now()}`, title: sk.title, items: sk.items, anchor }, planView: null });
         },
         goBack: async () => {
           try {
@@ -89,6 +126,24 @@ export class CompanionController {
       stopSpeaking: () => this.voice.stopSpeaking(),
       confirm: (message) => this.confirm(message),
       onIdle: () => this.afterLoopIdle(),
+      onError: (message) => this.showAgentError(message),
+      getPlan: () => this.engine.planContext,
+      onHint: () => this.engine.notePlanEngaged(),
+      getVideo: () => {
+        const context = this.video.context();
+        return context ? { context, frame: () => this.video.watcher.frame() } : null;
+      },
+    });
+    this.video = new VideoCompanion({
+      session: this.session,
+      isBusy: () => this.loop.running || this.pendingConfirmation !== null || this.pendingOffer !== null || this.voice.speaking,
+      speak: (text) => this.voice.speak(text),
+      stopSpeaking: () => this.voice.stopSpeaking(),
+      showBubble: (bubble) => this.showBubble(bubble),
+      clearBubble: (id) => this.bubbles.clear((b) => b.id === id),
+      onOffer: (offer) => this.showOffer(offer),
+      explain: (goal) => void this.loop.run("Tell me more", { source: "proactive", goal }),
+      updateSetting: (patch) => this.updateSetting(patch),
     });
     this.engine = new ProactiveEngine({
       tracker: this.tracker,
@@ -98,9 +153,11 @@ export class CompanionController {
       watcher: this.watcher,
       getPage: () => this.page,
       refreshPage: () => this.observe(),
-      isBusy: () => this.loop.running || this.pendingConfirmation !== null || this.voice.speaking,
+      // A playing video has the student's attention: over it, only the video companion's own gate may surface anything.
+      isBusy: () => this.loop.running || this.pendingConfirmation !== null || this.voice.speaking || this.video.watcher.playing,
       speak: (text) => this.voice.speak(text),
       onOffer: (offer) => this.showOffer(offer),
+      onPlanProgress: () => this.refreshPlanView(),
       onCelebrate: (say) => this.celebrate(say),
     });
   }
@@ -122,18 +179,22 @@ export class CompanionController {
     // Escape is the universal interrupt: stop talking, stop acting, clear the overlay.
     const onKeydown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (!this.voice.speaking && !this.loop.running) return;
+      if (!this.voice.speaking && !this.loop.running && !store.getState().board) return;
       this.voice.stopSpeaking();
       this.loop.cancel();
       this.overlay.clear();
-      store.setState({ characterState: this.voice.listening ? "listening" : "idle", status: "" });
+      store.setState({ characterState: this.voice.listening ? "listening" : "idle", status: "", board: null });
     };
     document.addEventListener("keydown", onKeydown, true);
+    // Observe whatever changed in the last debounce window before this document goes away.
+    window.addEventListener("pagehide", () => this.watcher.flush());
 
+    this.session.onRecord = () => this.refreshPlanView();
     const session = await this.session.load();
     this.extractToGraph(this.observe());
     this.watcher.start();
     this.engine.start();
+    this.video.watcher.refresh();
     void this.voice.refreshStatus();
     void this.checkServer();
 
@@ -162,8 +223,10 @@ export class CompanionController {
     // Resume an agent loop interrupted by navigation (e.g. "open it" → click → new page).
     const pending = session?.pendingLoop;
     if (pending && Date.now() - pending.at < 25_000) {
+      // The pending loop is cleared by the loop itself once it has a decision in hand — not here.
+      // Sites that replace their document right after load (redirects, SPA shells) would otherwise
+      // eat the handoff in a page that dies before the loop ever runs.
       logger.info("resuming loop after navigation", { utterance: pending.utterance, step: pending.step });
-      await this.session.setPendingLoop(null);
       window.setTimeout(() => void this.loop.run(pending.utterance, { source: "resume", resume: pending }), 350);
     } else if (pending) {
       await this.session.setPendingLoop(null);
@@ -175,6 +238,8 @@ export class CompanionController {
     if (this.extractTimer) window.clearTimeout(this.extractTimer);
     this.watcher.stop();
     this.engine.stop();
+    this.video.stop();
+    this.bubbles.dispose();
     this.overlay.clear();
     this.loop.cancel();
   }
@@ -206,6 +271,7 @@ export class CompanionController {
     if (reason === "url") this.overlay.clear();
     this.extractToGraph(page);
     this.engine.onPageChange(page, reason);
+    this.video.watcher.refresh();
   }
 
   /**
@@ -214,7 +280,7 @@ export class CompanionController {
    * extraction per topic the learner settles on — the main cost lever for the LLM path.
    */
   private extractToGraph(page: PageSummary): void {
-    const sig = `${page.title} ${page.headings.join("|")}`;
+    const sig = `${page.title}\0${page.headings.join("|")}`;
     if (sig === this.extractSig) return;
     this.extractSig = sig;
     const input = pageToExtractionInput(page);
@@ -232,26 +298,51 @@ export class CompanionController {
       extraction = this.extractor.extract(input);
     }
     if (this.disposed || sig !== this.extractSig) return; // a newer topic superseded this one
-    if (!extraction.concepts.length && !extraction.misconceptions.length) return;
-    const at = Date.now();
-    const ctx = { url: input.url, title: input.title, kind: "page" as const };
-    const summary = applyExtraction(this.session.graph, extraction, ctx, at);
-    logger.debug("graph updated", { ...summary, size: this.session.graph.size });
-    // Mirror the mutation to the background's canonical persisted graph (single writer).
-    void sendToBackground({ type: "graph.event", event: { kind: "extraction", extraction, ctx, at } }, 5000).catch(() => undefined);
-    // Surface newly recorded misconceptions to the proactive engine (Socratic nudge).
-    for (const em of extraction.misconceptions) {
-      const cid = this.session.graph.resolve(em.concept);
-      const m = cid ? this.session.graph.get(cid)?.misconceptions.find((x) => x.id === slugify(em.belief)) : undefined;
-      if (m) this.engine.onMisconception(m);
-    }
+    if (!extraction?.concepts?.length && !extraction?.misconceptions?.length) return;
+    this.session.record({ kind: "extraction", extraction, ctx: { url: input.url, title: input.title, kind: "page" }, at: Date.now() });
+    logger.debug("graph updated", { concepts: extraction.concepts.length, size: this.session.graph.size });
+    this.surfaceMisconceptions(extraction);
     // Hand the page's top concepts to the path consumer (prerequisite gaps, next-step suggestions).
     const topIds = [...extraction.concepts]
       .sort((a, b) => b.salience - a.salience)
       .map((c) => this.session.graph.resolve(c.label))
       .filter((id): id is string => id !== null)
       .slice(0, 3);
-    this.engine.onConceptsExtracted(topIds);
+    const missedIds = (extraction.missed ?? []).map((label) => this.session.graph.resolve(label)).filter((id): id is string => id !== null);
+    this.engine.onConceptsExtracted(topIds, missedIds);
+  }
+
+  /** Hand newly recorded misconceptions to the proactive engine (Socratic nudge). */
+  private surfaceMisconceptions(extraction: ConceptExtraction): void {
+    for (const em of extraction.misconceptions) {
+      const cid = this.session.graph.resolve(em.concept);
+      const m = cid ? this.session.graph.get(cid)?.misconceptions.find((x) => x.id === slugify(em.belief)) : undefined;
+      if (m) this.engine.onMisconception(m);
+    }
+  }
+
+  /**
+   * What the student asks about in their own words is the cleanest curiosity signal there is.
+   * Runs the same extractor over the utterance (kind "query"): concepts get voluntary exposure,
+   * the most salient one an ask, and a misconception voiced out loud surfaces like a searched one.
+   */
+  private async noteQuestion(text: string): Promise<void> {
+    const task = classifyTask(text, this.page);
+    if (text.length < 12 || (task !== "learning" && task !== "chat")) return;
+    // No title/headings: only the student's words count here, not the page they happen to be on.
+    const input: ExtractionInput = { url: location.href, title: "", query: text };
+    let extraction: ConceptExtraction;
+    try {
+      extraction = await sendToBackground({ type: "extract", input }, 25_000);
+    } catch {
+      extraction = this.extractor.extract(input);
+    }
+    if (this.disposed || (!extraction?.concepts?.length && !extraction?.misconceptions?.length)) return;
+    const at = Date.now();
+    this.session.record({ kind: "extraction", extraction, ctx: { url: input.url, title: document.title, kind: "query" }, at });
+    const top = [...extraction.concepts].sort((a, b) => b.salience - a.salience)[0];
+    if (top) this.session.record({ kind: "ask", concept: top.label, at });
+    this.surfaceMisconceptions(extraction);
   }
 
   waitForChange(timeoutMs: number): Promise<{ changed: boolean; urlChanged: boolean }> {
@@ -297,6 +388,14 @@ export class CompanionController {
       this.resolveConfirmation(false);
     }
 
+    // A spoken yes/no answers a bubble that carries its own buttons (watch-along consent, a video pause).
+    const asking = store.getState().bubble;
+    if (asking?.onAction && yesNo && !this.pendingConfirmation) {
+      this.session.addTurn({ role: "user", text, at: Date.now() });
+      this.bubbleAction(yesNo === "yes" ? "accept" : "decline");
+      return;
+    }
+
     if (isStopCommand(text)) {
       this.voice.stopSpeaking();
       this.loop.cancel();
@@ -316,6 +415,7 @@ export class CompanionController {
         await this.loop.run(text, {
           source,
           pendingOffer: offer,
+          path: offer.path,
           goal:
             offer.goal ??
             (offer.type === "hint" || offer.type === "nudge" || offer.type === "explain"
@@ -333,6 +433,7 @@ export class CompanionController {
     this.voice.stopSpeaking();
     this.overlay.clear();
     this.session.addTurn({ role: "user", text, at: Date.now() });
+    void this.noteQuestion(text);
     await this.loop.run(text, { source });
   }
 
@@ -351,7 +452,16 @@ export class CompanionController {
   }
 
   private afterLoopIdle(): void {
-    store.setState((s) => ({ characterState: s.characterState === "speaking" ? "speaking" : s.voice.mode === "listening" ? "listening" : "idle" }));
+    // "error" outlives the loop's finally: showAgentError owns its reset.
+    store.setState((s) => ({ characterState: s.characterState === "error" ? "error" : s.characterState === "speaking" ? "speaking" : s.voice.mode === "listening" ? "listening" : "idle" }));
+  }
+
+  /** Hard failure presentation: confused rabbit + error bubble. Nothing is spoken — no brain, no words. */
+  private showAgentError(message: string): void {
+    store.setState({ characterState: "error", busy: false });
+    this.showBubble({ id: `agent-error-${Date.now()}`, text: message, kind: "error", expiresAt: Date.now() + 8000 });
+    if (this.errorTimer) window.clearTimeout(this.errorTimer);
+    this.errorTimer = window.setTimeout(() => store.setState((s) => (s.characterState === "error" ? { characterState: s.voice.mode === "listening" ? "listening" : "idle" } : {})), 8000);
   }
 
   // ---------- Offers & confirmations ----------
@@ -380,7 +490,7 @@ export class CompanionController {
 
   private clearOffer(): void {
     this.pendingOffer = null;
-    store.setState((s) => (s.bubble?.kind === "offer" ? { bubble: null } : {}));
+    this.bubbles.clear((b) => b.kind === "offer" && !b.onAction);
   }
 
   confirm(message: string): Promise<boolean> {
@@ -406,13 +516,18 @@ export class CompanionController {
     if (!pc) return;
     this.pendingConfirmation = null;
     window.clearTimeout(pc.timer);
-    store.setState((s) => (s.bubble?.id === pc.id ? { bubble: null } : {}));
+    this.bubbles.clear((b) => b.id === pc.id);
     pc.resolve(yes);
   }
 
   bubbleAction(value: "accept" | "decline" | "dismiss" | "open"): void {
     const bubble = store.getState().bubble;
     if (!bubble) return;
+    if (bubble.onAction) {
+      bubble.onAction(value);
+      this.bubbles.clear((b) => b.id === bubble.id);
+      return;
+    }
     if (bubble.kind === "confirmation") {
       if (value === "accept") this.resolveConfirmation(true);
       else this.resolveConfirmation(false);
@@ -428,15 +543,11 @@ export class CompanionController {
       return;
     }
     if (value === "open") void sendToBackground({ type: "open.onboarding" }).catch(() => undefined);
-    store.setState({ bubble: null });
+    this.bubbles.clear((b) => b.id === bubble.id);
   }
 
   showBubble(bubble: Bubble): void {
-    store.setState({ bubble });
-    if (bubble.expiresAt) {
-      const ttl = bubble.expiresAt - Date.now();
-      window.setTimeout(() => store.setState((s) => (s.bubble?.id === bubble.id ? { bubble: null } : {})), Math.max(500, ttl));
-    }
+    this.bubbles.show(bubble);
   }
 
   private celebrate(say: string | null): void {
@@ -444,6 +555,57 @@ export class CompanionController {
     if (say) this.reply(say);
     if (this.celebrateTimer) window.clearTimeout(this.celebrateTimer);
     this.celebrateTimer = window.setTimeout(() => store.setState((s) => (s.characterState === "celebrating" ? { characterState: s.voice.mode === "listening" ? "listening" : "idle" } : {})), 2600);
+  }
+
+  // ---------- Plan map ----------
+
+  /**
+   * Everything plan-shaped the rabbit knows, as routes: the problem on screen (progress from the
+   * step judge) first, then the learning plans in long-term memory, most recently touched first.
+   */
+  private planRoutes(): PlanRoute[] {
+    const routes: PlanRoute[] = [];
+    const { plan, planStep } = this.engine.planContext;
+    if (plan?.kind === "problem") {
+      const reached = planStep ?? 0;
+      routes.push({ key: plan.key, kind: "problem", goal: plan.goal, steps: plan.steps.map((s, i) => ({ title: s.title, state: i < reached ? "done" : i === reached ? "current" : "todo" })) });
+    }
+    for (const p of this.session.graph.profile.plans.filter((x) => x.kind === "topic").sort((a, b) => b.updatedAt - a.updatedAt)) {
+      const next = p.steps.findIndex((s) => !s.done);
+      routes.push({ key: p.key, kind: "topic", goal: p.goal, steps: p.steps.map((s, i) => ({ title: s.title, state: s.done ? "done" : i === next ? "current" : "todo" })) });
+    }
+    return routes;
+  }
+
+  /** Open the plan map (it shares the chalkboard's corner). False when there is nothing to show. */
+  showPlan(): boolean {
+    this.engine.recallPlan();
+    const routes = this.planRoutes();
+    if (!routes.length) return false;
+    store.setState({ planView: { routes }, board: null });
+    return true;
+  }
+
+  closePlan(): void {
+    store.setState({ planView: null });
+  }
+
+  /** Keep an open map honest as steps complete (a resource opened, an attempt landed, working advanced). */
+  private refreshPlanView(): void {
+    if (store.getState().planView) store.setState({ planView: { routes: this.planRoutes() } });
+  }
+
+  /** A tap on a learning-plan step: run that step's playbook, exactly as if the offer had been accepted. */
+  startPlanStep(planKey: string, index: number): void {
+    const plan = this.session.graph.profile.plans.find((p) => p.key === planKey);
+    const suggestion = plan ? planStepSuggestion(this.session.graph, plan, index) : null;
+    if (!suggestion) return;
+    if (this.pendingOffer) this.clearOffer(), this.engine.offerResolved("dismissed");
+    this.voice.stopSpeaking();
+    this.closePlan();
+    const text = `Let's do step ${index + 1}: ${plan!.steps[index].title}`;
+    this.session.addTurn({ role: "user", text, at: Date.now() });
+    void this.loop.run(text, { source: "text", goal: suggestion.goal, path: { kind: "plan", conceptLabel: suggestion.conceptLabel, query: suggestion.resource?.query, prefer: suggestion.resource?.prefer } });
   }
 
   // ---------- UI intents ----------

@@ -111,7 +111,7 @@ Or separately: `npm run dev:server` and `npm run build` (one‑off production bu
 | `DEEPGRAM_API_KEY` | **Secret.** Enables voice (STT + TTS). Without it Pip is text‑only. |
 | `LLM_API_KEY` | **Secret.** OpenAI (`sk-…`) key; `OPENAI_API_KEY` also works. Without it the server runs the rule‑based mock agent. |
 | `LLM_PROVIDER` | `openai` or `mock`. If omitted, an `sk-…` key selects `openai` and no key falls back to `mock`. |
-| `LLM_MODEL` | Default `gpt-5.4-mini`. |
+| `LLM_MODEL` | Default `gpt-6-astra`. |
 | `LLM_EFFORT` | Reasoning effort for decisions: `none` (fastest, recommended for voice) / `minimal` / `low` (default) / `medium` / `high`. The server adapts the name to what the model supports. |
 | `DEEPGRAM_TTS_MODEL` | `flux-rufus-en` (default) |
 | `DEEPGRAM_TTS_SPEED` | `1` (default) |

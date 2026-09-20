@@ -1,5 +1,5 @@
 import { KnowledgeGraph, type GraphSnapshot, type GraphStore } from "@shared/graph";
-import { applyExtraction } from "@shared/concepts";
+import { applyLearnerEvent } from "@shared/events";
 import type { GraphEvent } from "../shared/messages";
 import { log } from "../shared/logger";
 
@@ -50,12 +50,7 @@ export class GraphHost {
 
   async apply(event: GraphEvent): Promise<void> {
     const g = await this.ensureLoaded();
-    if (event.kind === "extraction") {
-      applyExtraction(g, event.extraction, event.ctx, event.at);
-    } else {
-      const resolved = g.resolveMisconception(event.concept, event.belief, event.at, event.resolution);
-      if (!resolved) logger.warn("resolve event for unknown misconception; dropped", { concept: event.concept });
-    }
+    applyLearnerEvent(g, event);
     this.dirty = true;
     this.scheduleSave();
   }
