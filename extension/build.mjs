@@ -19,6 +19,7 @@ const entryPoints = {
   "pcm-worklet": join(here, "src/offscreen/pcm-worklet.ts"),
   onboarding: join(here, "src/onboarding/index.tsx"),
   popup: join(here, "src/popup/index.tsx"),
+  fx: join(here, "src/fx/index.ts"),
   newtab: join(here, "src/newtab/index.tsx"),
   parent: join(here, "src/parent/index.tsx"),
 };
