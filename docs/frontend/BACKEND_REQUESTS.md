@@ -22,7 +22,7 @@ One line in `e2e/smoke.mjs` was changed by the front end to match the new onboar
 
 ## 2. Cross-laptop jump handoff
 
-Status: heads-up, not needed until the on-page pet exists. Will be mocked with a local timer.
+Status: the pet side is ready. `PetController.jumpOut()` and `jumpIn(ready)` exist in `extension/src/components/pet` and the debug panel drives them with a timer. Needed from the backend: the message path below.
 
 The jump is a two-step handoff. The receiving laptop confirms it is ready, then the sending laptop plays the dive. The front end needs a way to send a "ready?" question to the other laptop and get a "ready" answer back, plus a final "done" message with whatever the rabbit carries over. A proposal: three messages over the existing server socket, `jump.request`, `jump.ready` and `jump.done`, keyed by a pairing code the parent view shows.
 

@@ -19,22 +19,25 @@ Updated: 2026-09-19
 
 - Task 5, audit: `tools/sprites/audit.py` checks every frame for a complete cream rim, left right symmetry outside the watch, chain and glyphs, feet ending on row 53 when grounded, hole pixels only in rows 50 to 55, two pixel thick outlines, stray pixels, and blink and mouth overlays covering the eyes and mouth on every frame that lists them. It found one real problem, the swung watch doubling the jacket outline in the celebrate recover frame, which now swings two pixels clear. Zero findings across 103 frames, plus an eyeball pass of the full cast at 4x on light and dark.
 
+- Task 6, on-page pet: `extension/src/components/pet` holds the manifest loader, the `SpritePlayer` state machine (fps, loop, hold, reverse, enter and exit chains with a latest-wins queue, one-shots back to idle, weighted idle variants, blink timer, loudness-driven mouth, `head_dy`, drag override, manifest jump sequences) and the `SpritePet` canvas component (whole-number scale, body-box hit area, pointer-capture dragging, viewport clamping, `moveTo`, `jumpOut`, `jumpIn`). `Character.tsx` maps the store's states to manifest states. The dock, bubble and panel follow the rabbit and never overlap it. The debug panel has buttons to force every state, hop across, jump out and jump in without voice. Checked with a Playwright run of the built extension on a light and a dark page: 32 of 32 checks pass, no console warnings, screenshots viewed on both backgrounds. Nine unit tests cover the player. Onboarding now renders the rabbit at 2x.
+
 ## In progress
-
-- Task 6, the on-page player, is being built in parallel in `extension/src/components/pet`.
-
-## Blocked
 
 - Nothing.
 
+## Blocked
+
+- Task 7 waits for Micah to sign off on the rabbit.
+
 ## Next three tasks
 
-1. Task 6: integrate and check the on-page player on light and dark pages.
-2. Micah signs off on the rabbit.
-3. Task 7: kid UI, then parent UI.
+1. Micah signs off on the rabbit.
+2. Task 7: kid UI (hold to talk, the teach loop).
+3. Task 7: parent UI (what the kid taught, shaky spots, permission cards), then wire `jumpOut` and `jumpIn` to the real handoff.
 
 ## Notes
 
 - `python tools/sprites/contact_sheet.py --states idle,thinking --frames 0,2 --scale 8 --out sheet.png` renders any states at any scale on light and dark. `python tools/sprites/audit.py` runs the pixel rules. Neither writes to the shipped strips.
 - Typecheck, build and unit tests pass on the `frontend` branch as of this update.
-- The onboarding page still renders the old CSS/SVG mascot. It switches to the rabbit once the sprite player exists.
+- The debug panel (settings, Developer panel) is the quickest way to see every state on a real page.
+- Known simplification: `thinking.exit` is `aha` on every exit, so a barge-in during thinking shows the bulb for two thirds of a second before listening.
