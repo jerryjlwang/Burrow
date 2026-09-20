@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { ConversationTurn, PageSummary, StruggleSignals, Rect, ActionResult } from "@shared/types";
+import type { SketchItem } from "@shared/sketch";
 import type { AgentDecision } from "@shared/actions";
 import { emptySignals } from "@shared/types";
 import type { VoiceState } from "../shared/messages";
@@ -43,11 +44,11 @@ export interface PlanView {
   routes: PlanRoute[];
 }
 
-/** A worked example the rabbit "draws out" line by line on its chalkboard. */
+/** A worked example the rabbit "draws out" on its chalkboard: text lines and freeform strokes. */
 export interface SketchBoard {
   id: string;
   title?: string;
-  lines: string[];
+  items: SketchItem[];
 }
 
 export interface DebugInfo {

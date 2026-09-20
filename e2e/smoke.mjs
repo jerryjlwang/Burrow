@@ -419,6 +419,20 @@ try {
     check("the board teaches with different numbers, never this problem's answer", !/x\s*=\s*5\b/.test(boardText), boardText);
     await wp.screenshot({ path: resolve(shots, "18-sketch-board.png") });
 
+    // Freeform strokes: a diagram request draws actual chalk shapes (SVG), not just text lines.
+    await wp.locator(".pip-input").fill("can you draw a right triangle?");
+    await wp.locator(".pip-send").click();
+    let shapes = 0;
+    let labels = "";
+    for (const t0 = Date.now(); Date.now() - t0 < 12000; ) {
+      shapes = await wp.locator(".pip-board-canvas path, .pip-board-canvas circle, .pip-board-canvas rect").count();
+      labels = (await wp.locator(".pip-board-canvas").count()) ? ((await wp.locator(".pip-board-canvas").first().textContent()) ?? "") : "";
+      if (shapes >= 3 && /a/.test(labels) && /c/.test(labels)) break;
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    check("'draw a right triangle' renders chalk strokes with labels on the board", shapes >= 3 && /a/.test(labels) && /b/.test(labels) && /c/.test(labels), `${shapes} shapes, labels: ${labels}`);
+    await wp.screenshot({ path: resolve(shots, "18b-sketch-strokes.png") });
+
     // The working page's graded feedback became attempt evidence on the page's concept.
     const nodes = sw ? await sw.evaluate(async () => (await chrome.storage.local.get("pip.graph"))["pip.graph"]?.nodes ?? []) : [];
     const practiced = nodes.filter((n) => n.state.attempts > 0).map((n) => `${n.id}:${n.state.correct}/${n.state.attempts}`);

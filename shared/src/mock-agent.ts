@@ -253,8 +253,12 @@ export function decideMock(input: AgentInput): AgentDecision {
   if (/^(go|take me|head) back$/.test(u) || /^back$/.test(u)) return d({ action: "go_back", say: "Going back.", taskType: "navigation" });
 
   // ---- Clicking / navigating ----
-  // ---- Sketch: draw a worked example on the chalkboard ----
+  // ---- Sketch: draw a worked example or a diagram on the chalkboard ----
   if (/\b(draw|sketch|write (it|this) out|draw (it|this) out|show me how to (solve|do))\b/i.test(u)) {
+    if (/\b(triangle|diagram|number line|shape)\b/.test(u)) {
+      const spec = "A right triangle:\nline 20 80 80 80\nline 20 80 20 30\nline 20 30 80 80\nlabel 12 58 a\nlabel 48 92 b\nlabel 54 50 c\nThe square corner is between a and b.";
+      return d({ action: "sketch", text: spec, say: "Here—labeled the sides for you.", done: true, taskType: "learning", reason: "drawn diagram" });
+    }
     const problem = detectProblem(page);
     if (problem.kind === "linear-equation") {
       // Analogous numbers on purpose: the board teaches the moves, never this problem's answer.

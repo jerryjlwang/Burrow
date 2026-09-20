@@ -219,3 +219,17 @@ describe("region reading (observe with a target)", () => {
     expect(decideMock(input("click the check answer button")).action).toBe("click");
   });
 });
+
+describe("sketch diagrams", () => {
+  it("draws strokes for a diagram request and text steps for an equation", () => {
+    const tri = decideMock(input("can you draw a right triangle?"));
+    expect(tri.action).toBe("sketch");
+    expect(tri.text).toMatch(/^A right triangle:/);
+    expect(tri.text).toMatch(/line 20 80 80 80/);
+    expect(validateDecision(tri).ok).toBe(true);
+    const eq = decideMock(input("can you draw it out for me?"));
+    expect(eq.action).toBe("sketch");
+    expect(eq.text).toMatch(/2x \+ 4 = 10/);
+    expect(eq.text).not.toMatch(/\bline \d/);
+  });
+});
