@@ -427,7 +427,9 @@ try {
     check("the board teaches with different numbers, never this problem's answer", !/x\s*=\s*5\b/.test(boardText), boardText);
     await wp.screenshot({ path: resolve(shots, "18-sketch-board.png") });
     await wp.locator(".pip-board button[aria-label='Close the board']").click({ timeout: 5000 }).catch(() => null);
-    check("the chalkboard closes when its ✕ is clicked", (await wp.locator(".pip-board").count()) === 0);
+    // The framed board sinks for a third of a second before it unmounts.
+    const boardGone = await wp.locator(".pip-board").first().waitFor({ state: "detached", timeout: 2500 }).then(() => true).catch(async () => (await wp.locator(".pip-board").count()) === 0);
+    check("the chalkboard closes when its ✕ is clicked", boardGone);
 
     // Freeform strokes: a diagram request draws actual shapes (SVG) with HTML labels, not just text.
     const strokeState = async () => ({
