@@ -124,6 +124,10 @@ function Popup() {
             <input className="px-check" type="checkbox" checked={settings.videoCompanion === "on"} onChange={(e) => void update({ videoCompanion: e.target.checked ? "on" : "off" })} />
             <span>Watch videos along with me</span>
           </label>
+          <label className="px-toggle" title="For hover menus, canvases and drag tools that ignore ordinary page events. While he uses it, Chrome shows a started debugging this browser bar.">
+            <input className="px-check" type="checkbox" checked={settings.trustedInput} onChange={(e) => void update({ trustedInput: e.target.checked })} />
+            <span>Let him use the real mouse and keyboard when a page needs it</span>
+          </label>
           <label className="px-toggle">
             <input className="px-check" type="checkbox" checked={settings.ttsEnabled} onChange={(e) => void update({ ttsEnabled: e.target.checked })} />
             <span>Speak replies out loud</span>

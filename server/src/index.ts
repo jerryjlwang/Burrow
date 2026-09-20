@@ -70,7 +70,7 @@ const server = http.createServer(async (req, res) => {
   }
   try {
     if (req.method === "GET" && url.pathname === "/health") {
-      json(res, 200, { ok: true, version: VERSION, llm: agent.providerName, deepgram: !!cfg.deepgramApiKey, transcripts: video.transcriptsEnabled, demoMode: cfg.demoMode, ink: ink.providerName, tts: { model: cfg.ttsModel, speed: cfg.ttsSpeed, expressivity: cfg.ttsExpressivity }, stt: cfg.sttModel });
+      json(res, 200, { ok: true, version: VERSION, llm: agent.providerName, deepgram: !!cfg.deepgramApiKey, demoMode: cfg.demoMode, ink: ink.providerName, transcripts: video.transcriptsEnabled, tts: { model: cfg.ttsModel, speed: cfg.ttsSpeed, expressivity: cfg.ttsExpressivity }, stt: cfg.sttModel });
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/agent/decide") {

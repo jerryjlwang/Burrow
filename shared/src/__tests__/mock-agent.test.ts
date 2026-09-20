@@ -48,6 +48,12 @@ describe("mock agent: the visible surface", () => {
     expect(drag).toMatchObject({ action: "drag", x: 100, y: 400, toX: 380, toY: 400 });
     expect(validateDecision(drag).ok).toBe(true);
   });
+  it("asks for real input only when told 'for real'", () => {
+    expect(decideMock(input("hover over the dashboard")).trusted).toBeNull();
+    expect(decideMock(input("click at 300, 200 for real"))).toMatchObject({ action: "click", x: 300, y: 200, trusted: true });
+    expect(decideMock(input("press tab for real"))).toMatchObject({ action: "press_key", text: "tab", trusted: true });
+    expect(decideMock(input("drag the dashboard to sign in for real"))).toMatchObject({ action: "drag", elementId: 1, toElementId: 2, trusted: true });
+  });
   it("presses a named key rather than hunting for a button called that", () => {
     expect(decideMock(input("press escape"))).toMatchObject({ action: "press_key", text: "escape" });
     const arrow = decideMock(input("hit the arrow down"));

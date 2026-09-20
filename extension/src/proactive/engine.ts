@@ -527,7 +527,8 @@ export class ProactiveEngine {
     const now = Date.now();
     if (!s.settings.proactiveEnabled) return;
     if (j.status === "off" && j.nudge) {
-      const key = `${j.line ?? 0}:${j.issue.toLowerCase().slice(0, 60)}`;
+      // One nudge per wrong line inside the cooldown: the judge rewords the issue on every check.
+      const key = `line:${j.line ?? 0}`;
       if (j.confidence < INK_SPEAK_CONFIDENCE) {
         if (!this.offerActive && s.attention === 0) {
           store.setState({ attention: 1 });
@@ -547,7 +548,7 @@ export class ProactiveEngine {
       this.offerActive = true;
       this.activeOffer = { kind: "ink", key };
       store.setState({ attention: 2 });
-      this.deps.onOffer({ type: "hint", message: j.nudge, elementId: null, at: now, goal: `Help me with my work on the tablet: ${j.issue || j.nudge}` });
+      this.deps.onOffer({ type: "hint", message: j.nudge, elementId: null, at: now, goal: `Help me with my work on the tablet, line ${j.line ?? "?"}: ${j.nudge}` });
       if (s.settings.ttsEnabled) void this.deps.speak(j.nudge);
       return;
     }

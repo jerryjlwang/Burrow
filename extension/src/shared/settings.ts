@@ -16,6 +16,8 @@ export interface Settings {
    * follow silently, offer help, and pause the video for an idea that really matters; "off" never surfaces anything.
    */
   videoCompanion: "ask" | "on" | "off";
+  /** Lets the rabbit escalate to real mouse/keyboard input (chrome.debugger). Off by default: attaching shows Chrome's debugging bar. */
+  trustedInput: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -30,6 +32,7 @@ export const DEFAULT_SETTINGS: Settings = {
   voiceAutoResume: true,
   reducedMotion: "auto",
   videoCompanion: "ask",
+  trustedInput: false,
 };
 
 const KEY = "pip.settings";

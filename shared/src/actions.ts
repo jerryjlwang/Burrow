@@ -70,6 +70,8 @@ export interface AgentDecision {
   toElementId: number | null;
   toX: number | null;
   toY: number | null;
+  /** Pointer/key/type actions: true repeats with real mouse and keyboard input after page events did not take. */
+  trusted: boolean | null;
   pendingAction: PendingAction | null;
   taskType: TaskType | null;
   reason: string;
@@ -101,6 +103,7 @@ export const DECISION_DEFAULTS: Omit<AgentDecision, "action" | "reason"> = {
   toElementId: null,
   toX: null,
   toY: null,
+  trusted: null,
   pendingAction: null,
   taskType: null,
   done: false,

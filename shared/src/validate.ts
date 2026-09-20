@@ -77,6 +77,7 @@ export function validateDecision(raw: unknown): DecisionValidation {
       toElementId: optInt(raw.toElementId, "toElementId"),
       toX: optNum(raw.toX, "toX"),
       toY: optNum(raw.toY, "toY"),
+      trusted: raw.trusted === true ? true : null,
       pendingAction: parsePending(raw.pendingAction),
       taskType: taskType as AgentDecision["taskType"],
       reason: typeof raw.reason === "string" ? raw.reason : "",
@@ -95,7 +96,7 @@ export function validateDecision(raw: unknown): DecisionValidation {
     }
     // point_to/highlight may target a quote instead of an element; everything else needs the element.
     const elementSatisfied = d.elementId !== null && d.elementId >= 0;
-    if (ELEMENT_ACTIONS.has(d.action) && !elementSatisfied && !(ANCHOR_ACTIONS.has(d.action) && d.quote)) {
+    if (ELEMENT_ACTIONS.has(d.action) && !elementSatisfied && !(ANCHOR_ACTIONS.has(d.action) && (d.quote || d.x !== null))) {
       return { ok: false, error: `${d.action} requires a valid elementId` };
     }
     if (ELEMENT_ACTIONS.has(d.action) && d.elementId !== null && d.elementId < 0) return { ok: false, error: `${d.action} requires a valid elementId` };
