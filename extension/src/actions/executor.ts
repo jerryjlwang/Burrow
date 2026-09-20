@@ -1,6 +1,7 @@
 import type { AgentDecision } from "@shared/actions";
 import type { ActionResult, PageSummary } from "@shared/types";
 import type { StepPlan } from "@shared/plan";
+import type { VideoOp } from "@shared/video";
 import type { InputOp, PendingLoop } from "../shared/messages";
 import { parseKeyChord } from "@shared/keys";
 import { normalizeText } from "@shared/text";
@@ -25,6 +26,8 @@ export interface ExecutorDeps {
   openTab: (url: string, resume?: PendingLoop) => Promise<void>;
   switchTab: (tabId: number) => Promise<void>;
   goBack: () => Promise<void>;
+  /** Works the video being watched (play, pause, seek, speed) on the student's behalf. */
+  controlVideo: (op: VideoOp, arg: string | null) => ActionResult;
   /** Server-side vetted lookup (no user cookies); returns pre-formatted result lines. */
   lookup: (query: string, prefer?: string) => Promise<string>;
   /** Server-side learning plan for a topic the student wants to learn. */
@@ -566,6 +569,10 @@ export async function executeAction(decision: AgentDecision, deps: ExecutorDeps)
         // The current page stays put; the new tab gets its own content script and session.
         await deps.openTab(decision.url!);
         return { ok: true, message: "opened in a new tab" };
+      }
+
+      case "video": {
+        return deps.controlVideo(decision.value as VideoOp, decision.text);
       }
 
       case "show_plan": {

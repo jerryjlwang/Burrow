@@ -25,6 +25,7 @@ function setup(html: string) {
     navigate: vi.fn(async () => undefined),
     openTab: vi.fn(async () => undefined),
     switchTab: vi.fn(async () => undefined),
+    controlVideo: vi.fn(() => ({ ok: true, message: "video paused at 0:00" })),
     lookup: vi.fn(async () => ""),
     makePlan: vi.fn(async () => null),
     sketch: vi.fn(() => undefined),

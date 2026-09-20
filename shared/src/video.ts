@@ -21,6 +21,8 @@ const clean = (s: string) => s.replace(/\s+/g, " ").trim();
 export class TranscriptBuffer {
   private segs: TranscriptSegment[] = [];
   private keys = new Set<string>();
+  /** The last {@link stamped} result: it is asked for on every agent step and rarely changes. */
+  private stampedMemo: { key: string; text: string } | null = null;
 
   add(seg: TranscriptSegment): boolean {
     const text = clean(seg.text);
@@ -47,6 +49,40 @@ export class TranscriptBuffer {
 
   window(from: number, to: number): TranscriptSegment[] {
     return this.segs.filter((s) => s.end >= from && s.start <= to);
+  }
+
+  /**
+   * The whole video as "[m:ss] text" lines for the agent to search and cite times from. Over
+   * budget, the lines nearest `around` are kept: the rabbit's notes still cover the rest.
+   */
+  stamped(around: number, maxChars = 60_000): string {
+    const key = `${this.segs.length}|${around}|${maxChars}`;
+    if (this.stampedMemo?.key !== key) this.stampedMemo = { key, text: this.buildStamped(around, maxChars) };
+    return this.stampedMemo.text;
+  }
+
+  private buildStamped(around: number, maxChars: number): string {
+    const lines = stampedLines(this.segs);
+    if (!lines.length) return "";
+    if (lines.reduce((n, l) => n + l.text.length + 1, 0) <= maxChars) return lines.map((l) => l.text).join("\n");
+    let lo = lines.findIndex((l) => l.start > around);
+    lo = lo === -1 ? lines.length - 1 : Math.max(0, lo - 1);
+    let hi = lo;
+    let used = lines[lo].text.length;
+    for (;;) {
+      const before = lo > 0 ? lines[lo - 1] : null;
+      const after = hi < lines.length - 1 ? lines[hi + 1] : null;
+      // Grow toward whichever side is closer in time, so the window stays centred on `around`.
+      const next = before && (!after || around - before.start <= after.start - around) ? before : after;
+      if (!next || used + next.text.length + 1 > maxChars) break;
+      used += next.text.length + 1;
+      if (next === before) lo--;
+      else hi++;
+    }
+    const kept = lines.slice(lo, hi + 1).map((l) => l.text);
+    if (lo > 0) kept.unshift(`(earlier, up to ${fmtTime(lines[lo].start)}: not shown — see your notes)`);
+    if (hi < lines.length - 1) kept.push(`(later, from ${fmtTime(lines[hi + 1].start)}: not shown — see your notes)`);
+    return kept.join("\n");
   }
 
   /** Plain text of a span, trimmed from the FRONT when over budget — the latest words matter most. */
@@ -329,17 +365,38 @@ export function heuristicNotes(segments: TranscriptSegment[], at: number): Watch
   return notes;
 }
 
+function stampedLines(segments: TranscriptSegment[]): Array<{ start: number; text: string }> {
+  const lines: Array<{ start: number; text: string }> = [];
+  for (const seg of segments) {
+    const last = lines[lines.length - 1];
+    if (!last || seg.start - last.start >= 15) lines.push({ start: seg.start, text: `[${fmtTime(seg.start)}] ${clean(seg.text)}` });
+    else last.text += ` ${clean(seg.text)}`;
+  }
+  return lines;
+}
+
 /** "[m:ss] text" lines, one per ~15s, for a model to read and cite times from. */
 export function stampedTranscript(segments: TranscriptSegment[]): string {
-  const lines: string[] = [];
-  let lineStart = -Infinity;
-  for (const seg of segments) {
-    if (seg.start - lineStart >= 15) {
-      lines.push(`[${fmtTime(seg.start)}] ${clean(seg.text)}`);
-      lineStart = seg.start;
-    } else lines[lines.length - 1] += ` ${clean(seg.text)}`;
-  }
-  return lines.join("\n");
+  return stampedLines(segments).map((l) => l.text).join("\n");
+}
+
+export const VIDEO_OPS = ["play", "pause", "seek", "speed"] as const;
+export type VideoOp = (typeof VIDEO_OPS)[number];
+export const VIDEO_RATE_MIN = 0.25;
+export const VIDEO_RATE_MAX = 2;
+
+/**
+ * Where a `video` seek lands, in seconds: "6:40", "1:02:03" or "400" is a position, "+10" / "-30"
+ * is relative to `current`. null when the text is none of those.
+ */
+export function parseVideoTime(text: string, current: number): number | null {
+  const m = text.trim().match(/^([+-])?\s*(?:(\d+):)?(?:(\d{1,2}):)?(\d+(?:\.\d+)?)\s*s?$/);
+  if (!m) return null;
+  const [, sign, a, b, last] = m;
+  // "h:mm:ss" fills a and b; "m:ss" fills only a.
+  const seconds = (b !== undefined ? Number(a) * 3600 + Number(b) * 60 : a !== undefined ? Number(a) * 60 : 0) + Number(last);
+  if (!Number.isFinite(seconds)) return null;
+  return sign ? Math.max(0, current + (sign === "-" ? -seconds : seconds)) : seconds;
 }
 
 /** What the agent is told about the video when the student speaks. */
@@ -349,7 +406,9 @@ export interface VideoContext {
   paused: boolean;
   /** Transcript around the current time — what was just said. */
   heard: string;
-  /** The rabbit's running notes on what has been covered so far. */
+  /** The whole video, timestamped (see {@link TranscriptBuffer.stamped}), so any part of it can be found and cited. */
+  transcript: string;
+  /** The rabbit's notes on the whole video. */
   understanding: string;
   behaviour: string[];
   /** Whether a transcript exists at all; false means only the frame is available. */

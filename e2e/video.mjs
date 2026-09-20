@@ -210,6 +210,29 @@ try {
   await page.locator(".pip-input").press("Enter");
   const gone = await until(async () => (await boardState()) === null, 10_000);
   check("'erase the drawing' removes it", !!gone);
+
+  // ---- 7. Working the player: the whole transcript is searchable (ahead of the student too), and "pause" needs no model ----
+  const say = async (text) => {
+    await page.locator(".pip-input").fill(text);
+    await page.locator(".pip-input").press("Enter");
+  };
+  await say("skip to 0:05");
+  const jumped = await until(async () => { const v = await video(page); return v.t >= 4.5 && v.t < 12 ? v : null; }, 10_000);
+  check("'skip to 0:05' seeks the video there", !!jumped, JSON.stringify(await video(page)));
+  await say("skip to where he says divide both sides");
+  const found = await until(async () => { const v = await video(page); return v.t >= 19.5 && v.t < 30 ? v : null; }, 10_000);
+  check("a part of the video still ahead is found in the transcript and jumped to", !!found, JSON.stringify(await video(page)));
+  const landed = await until(async () => (await turns(sw)).find((t) => /that's at 0:20/i.test(t)), 6000);
+  check("and the rabbit says where it landed", !!landed, landed ?? (await turns(sw)).slice(-2).join(" / "));
+  await page.evaluate(() => document.getElementById("lesson").play());
+  await until(async () => !(await video(page)).paused, 4000);
+  const decidesBefore = serverLog.join("").split("\n").filter((l) => l.includes("decide")).length;
+  await say("pause");
+  const paused2 = await until(async () => ((await video(page)).paused ? true : null), 4000);
+  check("'pause' over a playing video pauses it", !!paused2);
+  check("without a model round trip", serverLog.join("").split("\n").filter((l) => l.includes("decide")).length === decidesBefore);
+  await say("play");
+  check("'play' resumes it", !!(await until(async () => (!(await video(page)).paused ? true : null), 8000)));
 } catch (e) {
   check("video e2e ran to completion", false, String(e).slice(0, 300));
 } finally {

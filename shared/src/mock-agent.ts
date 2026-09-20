@@ -167,6 +167,25 @@ export function decideMock(input: AgentInput): AgentDecision {
   }
   if (isStopCommand(u)) return d({ action: "finish", say: null, done: true });
 
+  // ---- Working the player: pause, play, jump, speed — and finding a part of the video by what is said in it ----
+  if (input.video && input.step === 0) {
+    const control = (value: string, text: string | null, say: string) => d({ action: "video", value, text, say, done: true, taskType: "navigation", reason: "player control asked for" });
+    const stamp = utterance.match(/\b(\d{1,3}:\d{2}(?::\d{2})?)\b/)?.[1];
+    if (/\b(skip|jump|go|take me) (ahead |back |forward )?to\b/.test(u) && stamp) return control("seek", stamp, `Jumping to ${stamp}.`);
+    const about = u.match(/\b(?:skip|jump|go|take me) to (?:where|the (?:part|bit)) (?:he|she|they|it)?\s*(?:talks? about|explains?|about|on|shows?|says?)?\s*(.+)$/)?.[1];
+    if (about) {
+      const words = about.split(" ").filter((w) => w.length > 3);
+      const line = input.video.transcript.split("\n").find((l) => words.length > 0 && words.every((w) => normalizeText(l).includes(w)));
+      const at = line?.match(/^\[([\d:]+)\]/)?.[1];
+      return at ? control("seek", at, `That's at ${at}. Jumping there.`) : d({ action: "speak", say: "I couldn't find that part in this video.", done: true, taskType: "learning" });
+    }
+    if (/\b(go|skip|jump) back\b|\brewind\b/.test(u)) return control("seek", "-10", "Back ten seconds.");
+    if (/\b(go|skip|jump) (forward|ahead)\b/.test(u)) return control("seek", "+10", "Ahead ten seconds.");
+    if (/\bslow(er| (it |this )?down)\b/.test(u)) return control("speed", "0.75", "Slowing it down.");
+    if (/\bnormal speed\b/.test(u)) return control("speed", "1", "Back to normal speed.");
+    if (/^(please |can you |could you )?(play|resume|unpause)\b|\bkeep (going|playing)\b/.test(u)) return control("play", null, "Playing.");
+  }
+
   // ---- Watching a video: answer from what was just said — never "let me look at the frame" ----
   if (input.video && input.step === 0 && /\b(video|he|she|just (said|say|did)|mean|explain|don t (get|understand)|didn t (get|understand)|say that again|what did)\b/.test(u)) {
     if (!input.video.hasTranscript) return d({ action: "speak", say: "I can see the picture, but I can't hear this one.", done: true, taskType: "learning", reason: "video without transcript" });

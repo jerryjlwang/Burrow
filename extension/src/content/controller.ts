@@ -5,7 +5,7 @@ import { slugify } from "@shared/graph";
 import { parsePlan, topicPlanKey } from "@shared/plan";
 import { describeSketch, eraseFromSketch, parseSketch } from "@shared/sketch";
 import { validateInkJudgement } from "@shared/ink";
-import { isVideoQuestion, pickRelated, videoQuery } from "@shared/related";
+import { isVideoQuestion, pickRelated, relatedQuery } from "@shared/related";
 import { planStepSuggestion } from "@shared/path";
 import type { PlanRoute } from "./store";
 import { classifyTask } from "../actions/policy";
@@ -93,6 +93,13 @@ export class CompanionController {
         },
         switchTab: async (tabId) => {
           await sendToBackground({ type: "nav.switch", tabId }, 3000);
+        },
+        controlVideo: (op, arg) => {
+          const result = this.video.control(op, arg);
+          // Asked to jump or play from down in the description: the point is to watch, so the player comes back.
+          const r = this.video.watcher.rect;
+          if (result.ok && op !== "pause" && r && !(r.bottom > 80 && r.top < window.innerHeight - 80)) this.video.watcher.element?.scrollIntoView({ behavior: "smooth", block: "center" });
+          return result;
         },
         lookup: async (query, prefer) => {
           const r = await sendToBackground({ type: "lookup", query, prefer }, 15_000);
@@ -447,6 +454,10 @@ export class CompanionController {
     }
 
     if (isStopCommand(text)) {
+      // "pause" is a stop command, answered here without the model. Over a playing video it means
+      // the video — unless the rabbit is the one making noise, and they didn't name it.
+      const quiet = !this.voice.speaking && !this.loop.running;
+      if (/^pause\b/i.test(text.trim()) && this.video.watcher.playing && (quiet || /\b(video|lesson|player)\b/i.test(text))) this.video.control("pause", null);
       this.voice.stopSpeaking();
       this.loop.cancel();
       this.overlay.clear();
@@ -502,7 +513,7 @@ export class CompanionController {
     if (this.recommendedVideoFor.has(href)) return;
     this.recommendedVideoFor.add(href);
     try {
-      const r = await sendToBackground({ type: "lookup", query: videoQuery(document.title), prefer: "video" }, 15_000);
+      const r = await sendToBackground({ type: "lookup", query: relatedQuery(question, document.title), prefer: "video" }, 15_000);
       const pick = pickRelated(r.results, href);
       if (!pick || this.disposed) return;
       const id = `video-reco-${Date.now()}`;

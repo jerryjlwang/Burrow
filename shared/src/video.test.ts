@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { EMPTY_BUSY, PlaybackTracker, TranscriptBuffer, WatchLog, decideSurface, emptiestRegion, heuristicNotes, parseWatchNote, stampedTranscript, type VideoSignals, type WatchNote } from "./video";
+import { EMPTY_BUSY, PlaybackTracker, TranscriptBuffer, WatchLog, decideSurface, emptiestRegion, heuristicNotes, parseVideoTime, parseWatchNote, stampedTranscript, type VideoSignals, type WatchNote } from "./video";
 
 const T0 = 1_700_000_000_000;
 
@@ -190,6 +190,44 @@ describe("stampedTranscript", () => {
   it("groups captions into timestamped lines a model can cite", () => {
     const segs = [0, 5, 10, 15, 20, 70].map((s) => ({ start: s, end: s + 5, text: `line ${s}` }));
     expect(stampedTranscript(segs)).toBe("[0:00] line 0 line 5 line 10\n[0:15] line 15 line 20\n[1:10] line 70");
+  });
+});
+
+describe("TranscriptBuffer.stamped", () => {
+  it("is the whole video when it fits, including what is still ahead", () => {
+    const buffer = new TranscriptBuffer();
+    lecture(buffer, 120);
+    const out = buffer.stamped(30);
+    expect(out.split("\n")[0]).toMatch(/^\[0:00\] /);
+    expect(out).toContain("[1:45]");
+    expect(out).not.toContain("not shown");
+  });
+
+  it("over budget, keeps the lines around the student's position and says what is missing", () => {
+    const buffer = new TranscriptBuffer();
+    lecture(buffer, 3600);
+    const out = buffer.stamped(1800, 4000);
+    expect(out.length).toBeLessThan(4200);
+    expect(out).toContain("[30:00]");
+    expect(out).not.toContain("[0:00]");
+    expect(out.split("\n")[0]).toMatch(/^\(earlier, up to \d+:\d\d: not shown/);
+    expect(out.split("\n").at(-1)).toMatch(/^\(later, from \d+:\d\d: not shown/);
+  });
+});
+
+describe("parseVideoTime", () => {
+  it("reads positions and offsets from where the student is", () => {
+    expect(parseVideoTime("6:40", 100)).toBe(400);
+    expect(parseVideoTime("1:02:03", 0)).toBe(3723);
+    expect(parseVideoTime("62:03", 0)).toBe(3723);
+    expect(parseVideoTime("400", 0)).toBe(400);
+    expect(parseVideoTime("-15", 100)).toBe(85);
+    expect(parseVideoTime("+10s", 100)).toBe(110);
+    expect(parseVideoTime("-30", 10)).toBe(0);
+  });
+
+  it("rejects anything that is not a time", () => {
+    for (const bad of ["", "the sign flip", "6:", "chapter 3"]) expect(parseVideoTime(bad, 0)).toBeNull();
   });
 });
 

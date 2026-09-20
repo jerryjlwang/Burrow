@@ -199,7 +199,7 @@ describe("asking about plans", () => {
 });
 
 describe("watching a video", () => {
-  const video = { t: 22, duration: 48, paused: false, heard: "An equation is like a balance scale. Whatever you do to one side, you must do to the other side too.", understanding: "", behaviour: [], hasTranscript: true };
+  const video = { t: 22, duration: 48, paused: false, heard: "An equation is like a balance scale. Whatever you do to one side, you must do to the other side too.", transcript: "[0:00] Today we solve two-step equations.\n[0:15] An equation is like a balance scale.\n[0:30] Watch the sign when the three moves across.", understanding: "", behaviour: [], hasTranscript: true };
 
   it("answers from what was just said instead of asking to look at the frame", () => {
     const dec = decideMock(input("what did he just mean", { video }));
@@ -207,6 +207,20 @@ describe("watching a video", () => {
     expect(dec.action).toBe("speak");
     expect(dec.say).toContain("Whatever you do to one side");
     expect(dec.say).not.toMatch(/analy|look|frame|screenshot/i);
+  });
+
+  it("works the player: play, relative and absolute seeks, speed", () => {
+    for (const [said, value, text] of [["play", "play", null], ["go back a bit", "seek", "-10"], ["skip to 0:30", "seek", "0:30"], ["can you slow it down", "speed", "0.75"]] as const) {
+      const dec = decideMock(input(said, { video }));
+      expect(validateDecision(dec).ok).toBe(true);
+      expect([dec.action, dec.value, dec.text]).toEqual(["video", value, text]);
+    }
+  });
+
+  it("finds a part of the video in the whole transcript, including what is still ahead", () => {
+    const dec = decideMock(input("skip to where he talks about the sign", { video }));
+    expect([dec.action, dec.value, dec.text]).toEqual(["video", "seek", "0:30"]);
+    expect(decideMock(input("skip to the part about logarithms", { video })).action).toBe("speak");
   });
 
   it("is honest when the video has no transcript, and stays out of the way of page requests", () => {

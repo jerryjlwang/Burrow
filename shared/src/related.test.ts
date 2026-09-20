@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isVideoQuestion, pickRelated, videoQuery } from "./related";
+import { isVideoQuestion, pickRelated, relatedQuery, videoQuery } from "./related";
 
 describe("isVideoQuestion", () => {
   it("catches question marks and question-word openers, spoken or typed", () => {
@@ -17,6 +17,17 @@ describe("videoQuery", () => {
     expect(videoQuery("Photosynthesis for kids - YouTube")).toBe("Photosynthesis for kids");
     expect(videoQuery("Solving equations | Khan Academy")).toBe("Solving equations");
     expect(videoQuery(`${"long ".repeat(30)}- YouTube`).length).toBeLessThanOrEqual(80);
+  });
+});
+
+describe("relatedQuery", () => {
+  it("searches for what was asked, anchored by the video's topic", () => {
+    expect(relatedQuery("Why does the sign flip?", "(3) Solving two-step equations - YouTube")).toBe("sign flip Solving two-step equations");
+    expect(relatedQuery("Why does the sign flip?", "Algebra Basics: Solving 2-Step Equations - Math Antics - YouTube")).toBe("sign flip Solving 2-Step Equations");
+  });
+
+  it("falls back to the topic when the question only points at the video", () => {
+    expect(relatedQuery("wait, what did he just do?", "Solving two-step equations - YouTube")).toBe("Solving two-step equations");
   });
 });
 
