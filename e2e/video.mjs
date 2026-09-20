@@ -141,15 +141,15 @@ try {
   await page.evaluate(() => document.getElementById("lesson").pause());
   await page.locator(".pip-input").fill("can you draw a right triangle?");
   await page.locator(".pip-input").press("Enter");
-  await page.locator(".pip-board").waitFor({ timeout: 12_000 }).catch(() => null);
+  await page.locator(".pip-sketch").waitFor({ timeout: 12_000 }).catch(() => null);
   await new Promise((r) => setTimeout(r, 6500)); // staged reveal (650ms per item) + draw-in
   const drawn = await page.evaluate(() => {
     const root = document.getElementById("pip-companion-host").shadowRoot;
-    const board = root.querySelector(".pip-board");
+    const board = root.querySelector(".pip-sketch");
     const v = document.getElementById("lesson").getBoundingClientRect();
     if (!board) return null;
     const b = board.getBoundingClientRect();
-    const strokes = [...root.querySelectorAll(".pip-board-canvas path, .pip-board-canvas circle, .pip-board-canvas rect")];
+    const strokes = [...root.querySelectorAll(".pip-sketch-canvas path, .pip-sketch-canvas circle, .pip-sketch-canvas rect")];
     return {
       placement: board.getAttribute("data-placement"),
       inside: b.left >= v.left - 1 && b.top >= v.top - 1 && b.right <= v.right + 1 && b.bottom <= v.bottom + 1,
@@ -157,7 +157,7 @@ try {
       strokes: strokes.length,
       dashed: strokes.filter((el) => getComputedStyle(el).strokeDasharray !== "none").length,
       longest: Math.round(Math.max(0, ...strokes.map((el) => el.getTotalLength?.() ?? 0))),
-      labels: [...root.querySelectorAll(".pip-board-label")].map((l) => l.textContent).join(" "),
+      labels: [...root.querySelectorAll(".pip-sketch-label")].map((l) => l.textContent).join(" "),
     };
   });
   check("the drawing lands inside the video picture, not in the corner", !!drawn && drawn.placement === "video" && drawn.inside, JSON.stringify(drawn));
@@ -167,10 +167,10 @@ try {
   // ---- 6. The drawing is the student's: it survives the video resuming, moves when dragged, and goes only when asked ----
   const boardState = () => page.evaluate(() => {
     const root = document.getElementById("pip-companion-host").shadowRoot;
-    const board = root.querySelector(".pip-board");
+    const board = root.querySelector(".pip-sketch");
     if (!board) return null;
     const b = board.getBoundingClientRect();
-    return { x: Math.round(b.left), y: Math.round(b.top), strokes: root.querySelectorAll(".pip-board-canvas path, .pip-board-canvas circle, .pip-board-canvas rect").length, labels: root.querySelectorAll(".pip-board-label").length, hot: root.querySelector(".pip-board-box")?.getAttribute("data-hot") };
+    return { x: Math.round(b.left), y: Math.round(b.top), strokes: root.querySelectorAll(".pip-sketch-canvas path, .pip-sketch-canvas circle, .pip-sketch-canvas rect").length, labels: root.querySelectorAll(".pip-sketch-label").length, hot: root.querySelector(".pip-sketch-box")?.getAttribute("data-hot") };
   });
   await page.evaluate(() => document.getElementById("lesson").play());
   await new Promise((r) => setTimeout(r, 3000));
@@ -179,7 +179,7 @@ try {
 
   // Click-through: a click in the middle of the drawing reaches the video underneath (native controls toggle play).
   const before = await boardState();
-  const mid = await page.evaluate(() => { const b = document.getElementById("pip-companion-host").shadowRoot.querySelector(".pip-board").getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; });
+  const mid = await page.evaluate(() => { const b = document.getElementById("pip-companion-host").shadowRoot.querySelector(".pip-sketch").getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; });
   await page.mouse.click(mid.x, mid.y);
   const toggled = await until(async () => (await video(page)).paused, 3000);
   check("the inside of the drawing is click-through: the video underneath still pauses", !!toggled);
@@ -189,7 +189,7 @@ try {
   const partial = await until(async () => { const b = await boardState(); return b && b.labels === 0 ? b : null; }, 10_000);
   check("'get rid of the labels' erases just the labels and leaves the rest where it was", !!partial && partial.strokes === before.strokes && partial.x === before.x && partial.y === before.y, JSON.stringify({ before, partial }));
 
-  const grip = await page.locator(".pip-board-grip").boundingBox();
+  const grip = await page.locator(".pip-sketch-grip").boundingBox();
   await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
   const hovered = await until(async () => (await boardState())?.hot === "true", 2000);
   await page.mouse.down();

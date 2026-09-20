@@ -29,11 +29,29 @@
       /* Search: a painted plank on two posts, planted in the grass. */
       .search { position: absolute; left: 0; right: 0; bottom: 39px; display: flex; flex-direction: column; align-items: center; pointer-events: none; }
       .search .board { pointer-events: auto; position: relative; width: min(630px, calc(100% - 48px)); height: 72px; border: 15px solid transparent; border-image: url("scene/sign.png") 5 fill / 15px repeat; image-rendering: pixelated; box-shadow: var(--shadow); cursor: text; }
-      .search .board:focus-within { box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.25), 0 0 0 3px var(--gold); }
-      .search input { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; margin: 0; padding: 0 9px; background: transparent; color: transparent; caret-color: transparent; font-size: 20px; outline: none; }
+      /* Focus lifts the plank onto a gold ring; an empty Enter shakes it; a real Enter stamps it. */
+      .search .board:focus-within { box-shadow: 6px 6px 0 rgba(59, 42, 35, 0.25), 0 0 0 3px var(--gold); transform: translateY(-3px); }
+      .search .board.shake { animation: shake 240ms steps(4, end); }
+      .search .board.stamp { animation: stamp 160ms steps(2, end); }
+      @keyframes shake { 0% { transform: translate(-6px, -3px); } 50% { transform: translate(6px, -3px); } 100% { transform: translate(0, -3px); } }
+      @keyframes stamp { 0% { transform: translateY(3px); } 100% { transform: translateY(-3px); } }
+      /* The carrot is the enter key: it bobs when hovered, nods when there is something to ask, and is plucked on Enter. */
+      .search .carrot { position: absolute; right: 9px; top: 50%; width: 21px; height: 36px; margin-top: -18px; padding: 0; border: 0; background: url("scene/carrot.png") no-repeat; background-size: 21px 36px; image-rendering: pixelated; cursor: pointer; opacity: 0.55; transform-origin: 50% 90%; }
+      .search .carrot:hover, .search .carrot:focus-visible { animation: bob 360ms steps(2, end) infinite; outline: none; }
+      .search .carrot.ready { opacity: 1; animation: nod 900ms steps(2, end) infinite; }
+      .search .carrot.ready:hover, .search .carrot.ready:focus-visible { animation: bob 360ms steps(2, end) infinite; }
+      .search .carrot.plucked { animation: pluck 260ms steps(3, end) forwards; }
+      @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+      @keyframes nod { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+      @keyframes pluck { 0% { transform: translateY(0); } 40% { transform: translateY(-15px) rotate(-12deg); } 100% { transform: translateY(-42px) rotate(-24deg); opacity: 0; } }
+      .search .dirt { position: absolute; right: 12px; top: 50%; width: 15px; height: 9px; margin-top: 12px; pointer-events: none; opacity: 0; background: radial-gradient(circle, var(--ink) 1.5px, transparent 1.5px) 0 0 / 5px 5px; image-rendering: pixelated; }
+      .search .dirt.puff { animation: puff 300ms steps(3, end) forwards; }
+      @keyframes puff { 0% { opacity: 1; transform: translateY(0) scaleX(1); } 100% { opacity: 0; transform: translateY(-12px) scaleX(1.6); } }
+      @media (prefers-reduced-motion: reduce) { .search .board, .search .carrot, .search .dirt { animation: none !important; } }
+      .search input { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; margin: 0; padding: 0 39px 0 9px; background: transparent; color: transparent; caret-color: transparent; font-size: 20px; outline: none; }
       .search input::placeholder { color: transparent; }
       .search input::selection { background: rgba(47, 143, 131, 0.35); }
-      .mirror { position: absolute; inset: 0; display: flex; align-items: center; padding: 0 9px; font-size: 20px; line-height: 1; white-space: pre; overflow: hidden; color: var(--ink); }
+      .mirror { position: absolute; inset: 0; display: flex; align-items: center; padding: 0 39px 0 9px; font-size: 20px; line-height: 1; white-space: pre; overflow: hidden; color: var(--ink); }
       .mirror.tail { direction: rtl; }
       .mirror .inner { direction: ltr; unicode-bidi: isolate; display: inline-block; }
       .mirror .ph { color: var(--muted); }
@@ -41,6 +59,8 @@
       @keyframes pop { 0% { transform: translateY(-6px); } 50% { transform: translateY(-3px); } 100% { transform: translateY(0); } }
       .caret { display: none; width: 3px; height: 21px; background: var(--ink); margin-left: 2px; vertical-align: -3px; }
       .board:focus-within .caret { display: inline-block; animation: blink 1s steps(1, end) infinite; }
+      .board.demo-type .caret, .board.demo-delete .caret, .board.demo-gap .caret { display: inline-block; background: var(--muted); }
+      .board.demo-hold .caret { display: inline-block; background: var(--muted); animation: blink 1s steps(1, end) infinite; }
       @keyframes blink { 50% { opacity: 0; } }
       .legs { display: flex; justify-content: space-between; width: min(630px, calc(100% - 48px)); padding: 0 96px; margin-top: -3px; }
       .leg { width: 18px; height: 93px; background: url("scene/post.png") repeat-y; background-size: 18px 18px; image-rendering: pixelated; }

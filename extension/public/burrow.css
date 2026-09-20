@@ -38,16 +38,18 @@ body {
   margin: 0;
   font-family: var(--font);
   font-size: 17px;
-  line-height: 1.3;
+  line-height: 24px;
   color: var(--ink);
   /* Cream paper with a faint 3px dot grid, like graph paper for pixels. */
   background-color: var(--cream);
   background-image: radial-gradient(rgba(59, 42, 35, 0.07) 1.5px, transparent 1.5px);
   background-size: 24px 24px;
 }
-h1, h2, h3 { font-weight: 400; margin: 0; line-height: 1.15; }
-h1 { font-size: 32px; }
-h2 { font-size: 24px; }
+/* Whole-pixel line heights so every line of text lands on the grid. */
+h1, h2, h3 { font-weight: 400; margin: 0; }
+h1 { font-size: 32px; line-height: 36px; }
+h2 { font-size: 24px; line-height: 27px; }
+h3 { line-height: 24px; }
 p { margin: 0 0 12px; }
 a { color: var(--teal-deep); }
 button, input { font: inherit; color: inherit; }
@@ -104,6 +106,15 @@ button, input { font: inherit; color: inherit; }
 /* Flat pixel toggle. */
 .px-toggle { display: flex; align-items: center; gap: 9px; cursor: pointer; }
 .px-toggle input { accent-color: var(--teal); width: 18px; height: 18px; margin: 0; }
+/* Pixel checkbox, the same one the on-page panel uses: a 21px ink square, teal with a paper dot when on.
+   Put the class on the input inside a .px-toggle. */
+.px-toggle .px-check {
+  appearance: none; -webkit-appearance: none; width: 21px; height: 21px; margin: 0; flex-shrink: 0; cursor: pointer;
+  border: 3px solid var(--ink); background: var(--cream); display: grid; place-items: center;
+}
+.px-toggle .px-check::after { content: ""; width: 9px; height: 9px; background: var(--paper); opacity: 0; }
+.px-toggle .px-check:checked { background: var(--teal); }
+.px-toggle .px-check:checked::after { opacity: 1; }
 /* Progress steps: gold bars. */
 .px-steps { display: flex; gap: 6px; }
 .px-steps span { height: 9px; flex: 1; background: var(--paper); border: 3px solid var(--ink); }

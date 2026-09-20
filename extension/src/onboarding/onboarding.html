@@ -6,25 +6,27 @@
     <title>Meet the White Rabbit</title>
     <link rel="stylesheet" href="burrow.css" />
     <style>
-      body { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
-      #root { width: 100%; max-width: 560px; }
-      .card { padding: 6px 9px 9px; border: 15px solid transparent; border-image: url("ui/bubble.png") 5 fill / 15px repeat; image-rendering: pixelated; box-shadow: var(--shadow); }
-      h1 { margin: 0 0 9px; font-size: 30px; }
-      p { color: var(--muted); line-height: 1.4; margin: 0 0 12px; }
-      .steps { display: flex; gap: 6px; margin-bottom: 18px; }
-      .steps span { height: 9px; flex: 1; background: var(--paper); border: 3px solid var(--ink); }
+      /* The card hangs from a fixed top offset, never the vertical centre, so its edges stay on whole
+         pixels whatever its height. Widths: card 560, frame 15, padding 9, inner 512. */
+      body { padding: 48px 24px 60px; }
+      #root { width: 100%; max-width: 560px; margin: 0 auto; }
+      .card { padding: 6px 9px 9px; }
+      h1 { margin: 0 0 9px; font-size: 30px; line-height: 36px; }
+      p { color: var(--muted); margin: 0 0 12px; }
+      /* Three bars, 168px each with 4px gaps: 512px, the card's full inner width. */
+      .steps { display: flex; gap: 4px; margin: 0 0 18px; }
+      .steps span { width: 168px; height: 12px; flex: none; background: var(--paper); border: 3px solid var(--ink); }
       .steps span.on { background: var(--gold); }
-      .row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 18px; align-items: center; }
-      .btn { display: inline-grid; place-items: center; border: 12px solid transparent; border-image: url("ui/button.png") 4 fill / 12px repeat; image-rendering: pixelated; background: none; color: var(--ink); cursor: pointer; padding: 0 9px; min-height: 45px; font-size: 18px; line-height: 1; box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.2); }
-      .btn:active { transform: translate(3px, 3px); box-shadow: none; }
-      .btn:disabled { opacity: 0.5; cursor: default; }
-      .btn.primary { border-image-source: url("ui/button_primary.png"); color: var(--paper); }
       .char { display: grid; place-items: center; margin: 3px 0 12px; }
+      .row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 18px; align-items: center; }
       .ok { color: var(--teal-deep); }
       .err { color: var(--red); }
-      ul { color: var(--muted); line-height: 1.5; padding-left: 21px; margin: 0 0 12px; }
-      .privacy { background: var(--paper); border: 3px solid var(--ink); padding: 12px 15px; font-size: 17px; }
+      ul { color: var(--muted); padding-left: 21px; margin: 0 0 12px; }
+      li { margin: 0 0 3px; }
+      .privacy { background: var(--paper); border: 3px solid var(--ink); padding: 12px 15px; }
       .privacy p { color: var(--ink); }
+      .privacy p:last-child { margin-bottom: 0; }
+      .server { margin-top: 12px; }
       code { font-family: var(--font-plain); font-size: 17px; background: var(--paper); border: 3px solid var(--ink); padding: 0 6px; }
     </style>
   </head>

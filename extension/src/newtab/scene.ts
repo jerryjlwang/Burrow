@@ -507,24 +507,26 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
     sctx.restore();
   };
 
-  /** Repeat a tile across the width, mirroring every other copy when asked, starting at a whole offset. */
+  /**
+   * Repeat a tile across the width, mirroring every other copy when asked. Copy k sits at offset + k * w
+   * and the odd copies are the mirrored ones, whatever the offset, so a parallax slide of one pixel moves
+   * the skyline by one pixel. (Wrapping the start at w flipped every copy's mirror when the offset went
+   * negative: the far hills grew a different skyline as the pointer crossed the middle.)
+   */
   const tileAcross = (name: string, y: number, offset: number, mirrorAlternate: boolean): void => {
     const p = piece(name);
     if (!p || !lay) return;
-    const start = ((offset % p.w) + p.w) % p.w - p.w;
-    let i = 0;
-    for (let x = start - p.w; x < lay.sw + p.w; x += p.w, i++) draw(name, x, y, 0, mirrorAlternate && i % 2 === 1);
+    for (let k = Math.floor(-offset / p.w) - 1; offset + k * p.w < lay.sw; k++) draw(name, offset + k * p.w, y, 0, mirrorAlternate && (((k % 2) + 2) % 2) === 1);
   };
 
-  /** Height of a tiled, alternately mirrored hill profile at scene column x, with the same offset as tileAcross. */
+  /** Height of a tiled, alternately mirrored hill profile at scene column x, with the same copies as tileAcross. */
   const hillHeight = (name: "hills_far" | "hills_near", x: number, offset: number): number => {
     const prof = man!.profiles[name];
     const w = prof.length;
-    const start = ((offset % w) + w) % w - w - w;
-    const rel = x - start;
-    const i = Math.floor(rel / w);
-    const col = ((rel % w) + w) % w;
-    return prof[i % 2 === 1 ? w - 1 - col : col];
+    const rel = x - offset;
+    const k = Math.floor(rel / w);
+    const col = rel - k * w;
+    return prof[(((k % 2) + 2) % 2) === 1 ? w - 1 - col : col];
   };
 
   // Bayer patterns for the boot: a color in the cells already shown at a step, or an eraser mask.
@@ -898,8 +900,9 @@ export function startScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scene
       draw("oak", ox, oy);
       hit("oak", 0, ox, oy, 47, 40);
       const swingFast = pressed?.hit?.kind === "swing";
-      draw("swing", ox + 6, oy + 36, live ? Math.floor(t / (swingFast ? 250 : 900)) % 2 : 0);
-      hit("swing", 0, ox + 6, oy + 36, 11, 17);
+      // The swing hangs from the branch on the left; its cell is 13 wide so the swung frame keeps both ropes.
+      draw("swing", ox + 3, oy + 36, live ? Math.floor(t / (swingFast ? 250 : 900)) % 2 : 0);
+      hit("swing", 0, ox + 3, oy + 36, 13, 17);
       const cf = cheshireFrame(now);
       if (cf >= 0) draw("cheshire", ox + 22, oy + 4, cf);
     }

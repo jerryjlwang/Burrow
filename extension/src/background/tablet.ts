@@ -26,6 +26,8 @@ interface Deps {
 
 interface Watch {
   windowId: number;
+  /** The board tab: where the rabbit stands while watching, so verdicts and nudges land beside the ink. */
+  boardTabId: number | null;
   contextTabId: number | null;
   contextWindowId: number | null;
   timer: ReturnType<typeof setInterval> | null;
@@ -104,9 +106,21 @@ async function pickDisplay(): Promise<chrome.system.display.DisplayUnitInfo | nu
   }
 }
 
-function freshWatch(windowId: number, contextTabId: number | null, contextWindowId: number | null): Watch {
+const JUMP_KEY = "burrow.jump";
+
+/** The rabbit's jump record (docs/frontend/HANDOFF.md): pages watch it and dive or pop out. */
+async function writeJump(to: "board" | "kid", from: "board" | "kid", stage: "requested" | "gone"): Promise<void> {
+  try {
+    await chrome.storage.local.set({ [JUMP_KEY]: { id: `j-${Date.now().toString(36)}`, to, from, stage, at: Date.now() } });
+  } catch (e) {
+    logger.warn("jump record failed", { error: String(e) });
+  }
+}
+
+function freshWatch(windowId: number, boardTabId: number | null, contextTabId: number | null, contextWindowId: number | null): Watch {
   return {
     windowId,
+    boardTabId,
     contextTabId,
     contextWindowId,
     timer: null,
@@ -171,10 +185,12 @@ export async function openTablet(contextTab?: chrome.tabs.Tab | null, opts: { sk
       /* leave it as created */
     }
   }
-  watch = freshWatch(win.id, ctx?.id ?? null, ctx?.windowId ?? null);
+  watch = freshWatch(win.id, win.tabs?.[0]?.id ?? null, ctx?.id ?? null, ctx?.windowId ?? null);
   logger.info("board opened", { window: win.id, display: display?.name ?? "same screen", touch: display?.hasTouchSupport ?? false, contextTab: ctx?.id ?? null });
   startLoop();
   await persist();
+  // The rabbit leaves the kid's page and pops out on the board once the page says he is gone.
+  await writeJump("board", "kid", "requested");
   return tabletStatus();
 }
 
@@ -182,6 +198,15 @@ export async function stopTablet(closeWindow: boolean): Promise<TabletState> {
   const w = watch;
   watch = null;
   if (w?.timer) clearInterval(w.timer);
+  let boardAlive = false;
+  if (w && !closeWindow) {
+    try {
+      await chrome.windows.get(w.windowId);
+      boardAlive = true;
+    } catch {
+      boardAlive = false;
+    }
+  }
   if (w && closeWindow) {
     try {
       await chrome.windows.remove(w.windowId);
@@ -189,6 +214,8 @@ export async function stopTablet(closeWindow: boolean): Promise<TabletState> {
       /* already closed */
     }
   }
+  // Back to the kid's page: a living board dives first; a closed one cannot, so he is simply gone.
+  if (w) await writeJump("kid", "board", boardAlive ? "requested" : "gone");
   try {
     await chrome.storage.session.remove(STATE_KEY);
   } catch {
@@ -219,7 +246,8 @@ async function resume(): Promise<void> {
     const saved = raw?.[STATE_KEY] as { windowId: number; contextTabId: number | null; contextWindowId: number | null } | undefined;
     if (!saved || watch) return;
     await chrome.windows.get(saved.windowId);
-    watch = freshWatch(saved.windowId, saved.contextTabId, saved.contextWindowId);
+    const [boardTab] = await chrome.tabs.query({ windowId: saved.windowId, active: true });
+    watch = freshWatch(saved.windowId, boardTab?.id ?? null, saved.contextTabId, saved.contextWindowId);
     startLoop();
     logger.info("watch resumed", { window: saved.windowId });
   } catch {
@@ -348,7 +376,8 @@ async function judge(w: Watch, frame: string, reason: TriggerReason, now: number
     w.lastVerdict = out.judgement;
     if (out.judgement.lines.length) w.previousLines = out.judgement.lines;
     logger.info("verdict", { reason, status: out.judgement.status, line: out.judgement.line, confidence: out.judgement.confidence, provider: out.provider, ms: out.latencyMs });
-    await deps.sendToTab(w.contextTabId, { type: "ink.judgement", judgement: out.judgement, reason });
+    // He stands on the board while watching, so the verdict goes there; the kid's page is the fallback.
+    await deps.sendToTab(w.boardTabId ?? w.contextTabId, { type: "ink.judgement", judgement: out.judgement, reason });
   } catch (e) {
     w.error = `judge: ${String(e).slice(0, 100)}`;
     logger.warn("judge failed", { error: String(e) });

@@ -79,7 +79,15 @@ const server = http.createServer(async (req, res) => {
         json(res, 400, { error: "invalid input" });
         return;
       }
-      json(res, 200, await agent.decide({ ...input, demoMode: cfg.demoMode }));
+      if (url.searchParams.get("stream") !== "1") {
+        json(res, 200, await agent.decide({ ...input, demoMode: cfg.demoMode }));
+        return;
+      }
+      // One JSON object per line: an optional {"say"} the moment the spoken sentence is ready,
+      // then the {"result"}. A client that ignores the first line behaves exactly as before.
+      res.writeHead(200, { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-cache", "x-accel-buffering": "no" });
+      const out = await agent.decide({ ...input, demoMode: cfg.demoMode }, (say) => res.write(`${JSON.stringify({ say })}\n`));
+      res.end(`${JSON.stringify({ result: out })}\n`);
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/agent/intervene") {

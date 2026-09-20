@@ -104,15 +104,18 @@ export class VideoWatcher {
         this.tracker.seek(this.lastT, video.currentTime, Date.now());
         this.lastT = video.currentTime;
         this.events.onBehaviour();
+        announceVideo("seek", "them", video);
       }),
       on("pause", () => {
         if (this.inAdvert || video.ended) return;
         this.tracker.pause(video.currentTime, Date.now());
         this.events.onBehaviour();
+        announceVideo("pause", "them", video);
       }),
       on("play", () => {
         this.tracker.play(video.playbackRate);
         this.events.onBehaviour();
+        announceVideo("play", "them", video);
       }),
       on("ratechange", () => {
         this.tracker.rateChange(video.playbackRate);
@@ -157,10 +160,12 @@ export class VideoWatcher {
 
   pause(): void {
     this.video?.pause();
+    announceVideo("pause", "us", this.video);
   }
 
   play(): void {
     void this.video?.play().catch(() => undefined);
+    announceVideo("play", "us", this.video);
   }
 
   /**
@@ -220,4 +225,15 @@ export class VideoWatcher {
     while (!track.cues?.length && Date.now() - started < timeoutMs) await new Promise((r) => setTimeout(r, 200));
     return [...(track.cues ?? [])].map((c) => ({ start: c.startTime, end: c.endTime, text: (c as VTTCue).text ?? "" })).filter((s) => s.text.trim());
   }
+}
+
+/**
+ * "burrow:video" tells the page the video being watched paused, played or seeked, and who did it: "us"
+ * when the companion did (pause to talk, play to resume) and "them" for the student's own control. The
+ * rabbit's set pieces listen (extension/src/components/actfx); a companion pause also fires the DOM
+ * event, so a "them" right after an "us" of the same kind is the same moment.
+ */
+function announceVideo(kind: "pause" | "play" | "seek", by: "us" | "them", video: HTMLVideoElement | null): void {
+  const r = video?.getBoundingClientRect();
+  window.dispatchEvent(new CustomEvent("burrow:video", { detail: { kind, by, rect: r ? { x: r.x, y: r.y, width: r.width, height: r.height } : null } }));
 }

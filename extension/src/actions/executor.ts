@@ -213,6 +213,39 @@ function findScrollableRoot(): Element | null {
   return best;
 }
 
+/**
+ * "burrow:act" tells the page what is about to happen: the action, its target's rect or point, its url
+ * and text. The rabbit's set pieces listen (extension/src/components/actfx). A listener may set
+ * detail.hold to a promise and the action waits for it, at most ACT_HOLD_MS, so his tap and the click
+ * land together. Nothing listening, nothing waits; nothing here changes what an action does.
+ */
+export interface ActDetail {
+  action: AgentDecision["action"];
+  elementId: number | null;
+  rect: { x: number; y: number; width: number; height: number } | null;
+  point: Point | null;
+  url: string | null;
+  text: string | null;
+  direction: AgentDecision["direction"];
+  hold?: Promise<unknown>;
+}
+const ACT_HOLD_MS = 900;
+async function announceAction(decision: AgentDecision, registry: ElementRegistry): Promise<void> {
+  const el = decision.elementId != null ? registry.get(decision.elementId) : null;
+  const r = el?.getBoundingClientRect();
+  const detail: ActDetail = {
+    action: decision.action,
+    elementId: decision.elementId ?? null,
+    rect: r ? { x: r.x, y: r.y, width: r.width, height: r.height } : null,
+    point: decision.x != null && decision.y != null ? { x: decision.x, y: decision.y } : null,
+    url: decision.url ?? null,
+    text: decision.text ?? null,
+    direction: decision.direction ?? null,
+  };
+  window.dispatchEvent(new CustomEvent<ActDetail>("burrow:act", { detail }));
+  if (detail.hold) await Promise.race([detail.hold.catch(() => undefined), sleep(ACT_HOLD_MS)]);
+}
+
 export async function executeAction(decision: AgentDecision, deps: ExecutorDeps): Promise<ActionResult> {
   const { registry, overlay } = deps;
   const reduced = prefersReducedMotion();
@@ -288,6 +321,7 @@ export async function executeAction(decision: AgentDecision, deps: ExecutorDeps)
   };
   const markPoint = (p: Point, durationMs = 1600) => overlay.highlight(registry.idFor(document.body), { durationMs, kind: "acting", locator: () => ({ x: p.x - 14, y: p.y - 14, width: 28, height: 28 }) });
 
+  await announceAction(decision, registry);
   try {
     switch (decision.action) {
       case "observe":

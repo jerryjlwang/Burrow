@@ -834,6 +834,8 @@ def oak():
     crown = oval(OAK_HW, "b", "v")
     w = len(crown[0])
     g = grid(w, 62)
+    # The swing's branch, laid first so the crown covers its inner end and it comes out from under the leaves.
+    stamp(g, [".ooooooooooooo.", "oPppppppppppppo", ".ooooooooooooo."], 2, 33)
     stamp(g, rows_of(crown), 0, 0)
     for x, y in OAK_DARK:
         if g[y][x] == "b":
@@ -841,56 +843,51 @@ def oak():
     for x, y in OAK_LIGHT:
         if g[y][x] == "b":
             g[y][x] = "h"
-    # Trunk under the crown, roots at the foot, a branch out to the right for the cat.
+    # Trunk under the crown and roots at the foot.
     cx = w // 2
     for y in range(34, 61):
         stamp(g, ["oPppppo"], cx - 3, y)
     stamp(g, ["oPPppppPPo"], cx - 5, 60)
     stamp(g, ["oPPppppPPo"], cx - 5, 61)
-    stamp(g, [".oooooooo", "oPpppppppo", ".oooooooo"], w - 10, 22)
-    for y in (22, 23, 24):
-        for x in range(w - 10, w):
-            if g[y][x] == ".":
-                pass
     return rows_of(g)
 
 
 SWING = [[
-    ".x.......x.",
-    ".x.......x.",
-    ".x.......x.",
-    ".x.......x.",
-    ".x.......x.",
-    ".x.......x.",
-    ".x.......x.",
-    ".x.......x.",
-    ".x.......x.",
-    ".x.......x.",
-    ".x.......x.",
-    ".x.......x.",
-    ".x.......x.",
-    ".x.......x.",
-    "ooooooooooo",
-    "oWWWWWWWWWo",
-    "ooooooooooo",
+    ".x.......x...",
+    ".x.......x...",
+    ".x.......x...",
+    ".x.......x...",
+    ".x.......x...",
+    ".x.......x...",
+    ".x.......x...",
+    ".x.......x...",
+    ".x.......x...",
+    ".x.......x...",
+    ".x.......x...",
+    ".x.......x...",
+    ".x.......x...",
+    ".x.......x...",
+    "ooooooooooo..",
+    "oWWWWWWWWWo..",
+    "ooooooooooo..",
 ], [
-    ".x.......x.",
-    ".x.......x.",
-    ".x.......x.",
-    ".x.......x.",
-    ".x.......x.",
-    "..x.......x",
-    "..x.......x",
-    "..x.......x",
-    "..x.......x",
-    "..x.......x",
-    "...x.......",
-    "...x.......",
-    "...x.......",
-    "...x.......",
-    ".ooooooooooo"[:11],
-    ".oWWWWWWWWWo"[:11],
-    ".ooooooooooo"[:11],
+    ".x.......x...",
+    ".x.......x...",
+    ".x.......x...",
+    ".x.......x...",
+    ".x.......x...",
+    "..x.......x..",
+    "..x.......x..",
+    "..x.......x..",
+    "..x.......x..",
+    "..x.......x..",
+    "...x.......x.",
+    "...x.......x.",
+    "...x.......x.",
+    "...x.......x.",
+    "..ooooooooooo",
+    "..oWWWWWWWWWo",
+    "..ooooooooooo",
 ]]
 CHESHIRE = [[
     # Just the smile, hanging in the leaves.
@@ -1744,6 +1741,8 @@ def export(out=OUT):
     man["sign"] = {"file": "sign.png", "size": [len(SIGN[0]), len(SIGN)], "slice": 5, "note": "Painted plank, 9-slice for border-image."}
     save(os.path.join(out, "post.png"), image(POST_TILE))
     man["post"] = {"file": "post.png", "size": [len(POST_TILE[0]), len(POST_TILE)], "note": "Repeats vertically under a sign."}
+    save(os.path.join(out, "carrot.png"), image(CARROT))
+    man["carrot"] = {"file": "carrot.png", "size": [len(CARROT[0]), len(CARROT)], "note": "The enter key on the search plank. Draw at a whole-number scale."}
     man["icons"] = {}
     for name, (art, hot) in ICONS.items():
         im = image(art)

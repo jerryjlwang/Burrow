@@ -3,6 +3,7 @@ import { DECISION_DEFAULTS, type AgentDecision } from "@shared/actions";
 import type { AgentInput, AgentOutput, InterventionInput, InterventionOutput } from "@shared/types";
 import { detectProblem, hintFor } from "@shared/hints";
 import { finalAnswersFor, leakedAnswer } from "@shared/ladder";
+import { speakableEarly } from "@shared/early-say";
 import type { AgentProvider } from "../agent/provider";
 import { MockProvider } from "../agent/mock";
 import { OpenAIProvider } from "../agent/openai";
@@ -31,11 +32,37 @@ export class AgentService {
     return this.primary.name;
   }
 
-  async decide(input: AgentInput): Promise<AgentOutput> {
+  /**
+   * `onEarlySay` fires at most once, the moment a talk-only decision's spoken sentence has
+   * streamed in and passed the leak filter — seconds before the full decision returns. Whatever
+   * happens afterwards (a retry, a leak in the panel text, a failure), the returned decision
+   * carries that same sentence, so the client never says one thing and shows another.
+   */
+  async decide(input: AgentInput, onEarlySay?: (say: string) => void): Promise<AgentOutput> {
+    let early: string | null = null;
+    const onPartial = onEarlySay
+      ? (jsonSoFar: string) => {
+          if (early !== null) return;
+          const say = speakableEarly(jsonSoFar);
+          if (!say || leakedAnswer(say, this.answersFor(input), { utterance: input.utterance }).leaked) return;
+          early = say;
+          onEarlySay(say);
+        }
+      : undefined;
+    const out = await this.decideInner(input, onPartial);
+    return early === null || out.decision.say === early ? out : { ...out, decision: { ...out.decision, say: early } };
+  }
+
+  private answersFor(input: AgentInput): string[] {
+    const local = finalAnswersFor(detectProblem(input.page));
+    return local.length ? local : this.steps?.answersFor(input.plan?.key) ?? [];
+  }
+
+  private async decideInner(input: AgentInput, onPartial?: (jsonSoFar: string) => void): Promise<AgentOutput> {
     const started = Date.now();
     if (this.primary !== this.fallback) {
       try {
-        let raw = await this.primary.decide(input);
+        let raw = await this.primary.decide(input, onPartial);
         let v = validateDecision(raw);
         if (!v.ok) {
           // One corrective retry: models occasionally omit an elementId or misuse a field.

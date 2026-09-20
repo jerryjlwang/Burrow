@@ -16,6 +16,18 @@ const STATES: { label: string; state: CharacterState; level?: number }[] = [
   { label: "pointing", state: "pointing" },
 ];
 
+/** Synthetic "burrow:act" and "burrow:video" events, shaped as the executor and the video watcher send them. */
+function actOut(action: string, target: string | null, extra: { url?: string; text?: string; direction?: "up" | "down" } = {}): void {
+  const r = target ? document.querySelector(target)?.getBoundingClientRect() ?? null : null;
+  const rect = r ? { x: r.x, y: r.y, width: r.width, height: r.height } : null;
+  window.dispatchEvent(new CustomEvent("burrow:act", { detail: { action, elementId: null, rect, point: null, url: extra.url ?? null, text: extra.text ?? null, direction: extra.direction ?? null } }));
+}
+function videoOut(kind: "pause" | "play" | "seek", by: "us" | "them" = "us"): void {
+  const r = document.querySelector("video")?.getBoundingClientRect();
+  const rect = r ? { x: r.x, y: r.y, width: r.width, height: r.height } : { x: Math.round(window.innerWidth * 0.2), y: Math.round(window.innerHeight * 0.15), width: Math.round(window.innerWidth * 0.5), height: Math.round(window.innerHeight * 0.4) };
+  window.dispatchEvent(new CustomEvent("burrow:video", { detail: { kind, by, rect } }));
+}
+
 /** Buttons that drive the pet without voice or a server. Only the pet ref reaches the sprite player. */
 function PetControls({ pet }: { pet?: RefObject<PetController | null> }) {
   const attention = useStore((s) => s.attention);
@@ -57,6 +69,20 @@ function PetControls({ pet }: { pet?: RefObject<PetController | null> }) {
         <button type="button" className={reduced ? "on" : ""} onClick={() => store.setState({ reducedMotion: !reduced })}>reduced motion</button>
       </div>
       <div className="pip-debug-pet">
+        <button type="button" onClick={() => actOut("open_tab", null, { url: "https://example.com" })}>act: open tab</button>
+        <button type="button" onClick={() => actOut("switch_tab", null)}>act: switch tab</button>
+        <button type="button" onClick={() => actOut("navigate", null, { url: "https://example.com" })}>act: navigate</button>
+        <button type="button" onClick={() => actOut("go_back", null)}>act: go back</button>
+        <button type="button" onClick={() => actOut("click", "main button, main a, button, a, h1")}>act: click</button>
+        <button type="button" onClick={() => actOut("type", "input:not([type=hidden]), textarea", { text: "castles" })}>act: type</button>
+        <button type="button" onClick={() => actOut("press_enter", "input:not([type=hidden]), textarea")}>act: enter</button>
+        <button type="button" onClick={() => actOut("scroll", null, { direction: "down" })}>act: scroll</button>
+        <button type="button" onClick={() => actOut("drag", "main button, button, h1")}>act: drag</button>
+        <button type="button" onClick={() => videoOut("pause")}>video: pause</button>
+        <button type="button" onClick={() => videoOut("play")}>video: play</button>
+        <button type="button" onClick={() => videoOut("seek", "them")}>video: seek</button>
+      </div>
+      <div className="pip-debug-pet">
         <button type="button" onClick={hop}>hop across</button>
         <button type="button" onClick={() => void pet?.current?.jumpOut()}>jump out</button>
         <button type="button" onClick={jumpIn}>jump in (1.5 s)</button>
@@ -80,6 +106,19 @@ function PetControls({ pet }: { pet?: RefObject<PetController | null> }) {
           show bubble
         </button>
         <button type="button" onClick={() => store.setState({ bubble: null })}>hide bubble</button>
+        <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("burrow:teach", { detail: { heard: "So a moat is a ditch with water?", concept: "moats" } }))}>teach card</button>
+        <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("burrow:forget", { detail: { concept: "moats" } }))}>forget</button>
+        <button
+          type="button"
+          onClick={() =>
+            store.setState({
+              board: { id: `debug-${Date.now()}`, title: "Solve 3x + 5 = 20", items: ["3x + 5 = 20", "3x = 15", "x = 5"].map((text) => ({ kind: "text" as const, text })), anchor: null },
+              planView: null,
+            })
+          }
+        >
+          chalkboard
+        </button>
       </div>
       <div className="pip-debug-pet">
         <button type="button" onClick={() => void grant("use_voice")}>grant voice</button>
