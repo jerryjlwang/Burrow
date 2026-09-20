@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Video lesson with chapters: Solving two-step equations · Riverside Learning</title>
+  <link rel="stylesheet" href="demo.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="top-inner">
+      <a class="logo" href="index.html"><span aria-hidden="true"></span>Riverside Learning</a>
+      <nav class="main" aria-label="Main">
+        <a href="index.html">Dashboard</a>
+        <a href="modules.html">Modules</a>
+        <a href="assignment.html">Assignments</a>
+        <a href="grades.html">Grades</a>
+      </nav>
+      <a class="btn" href="signin.html">Sign in</a>
+    </div>
+  </header>
+  <main>
+    <h1>Solving two-step equations</h1>
+    <p class="sub">Math 7 · Unit 3 · Video lesson · Mr. Chen</p>
+
+    <div class="card">
+      <video id="lesson" controls preload="auto" width="640" height="360" style="max-width:100%;background:#000">
+        <source src="media/lesson.webm" type="video/webm" />
+        <track kind="captions" srclang="en" label="English" src="media/lesson.vtt" />
+      </video>
+    </div>
+
+    <!-- Laid out like a video site: everything about the video sits a full screen below the player,
+         so reading it means scrolling the player out of view. -->
+    <div style="height: 900px" aria-hidden="true"></div>
+
+    <section class="card" id="about">
+      <h2>About this video</h2>
+      <p id="description">Mr. Chen solves 3x + 5 = 20 two ways, then shows the mistake almost everyone makes the first time: moving a number across the equals sign without changing what it does. Bring a pencil.</p>
+      <h3>Chapters</h3>
+      <ol id="chapters">
+        <li><a href="#t=0" data-t="0">0:00 What a two-step equation is</a></li>
+        <li><a href="#t=8" data-t="8">0:08 Undoing the addition first</a></li>
+        <li><a href="#t=16" data-t="16">0:16 Dividing both sides</a></li>
+        <li><a href="#t=24" data-t="24">0:24 The sign mistake, and how to catch it</a></li>
+        <li><a href="#t=32" data-t="32">0:32 Checking your answer by substituting</a></li>
+      </ol>
+    </section>
+  </main>
+  <script>
+    // A chapter link seeks the lesson, like a timestamp in a video description.
+    document.getElementById("chapters").addEventListener("click", function (e) {
+      var a = e.target.closest("a[data-t]");
+      if (!a) return;
+      e.preventDefault();
+      document.getElementById("lesson").currentTime = Number(a.dataset.t);
+    });
+  </script>
+</body>
+</html>

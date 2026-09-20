@@ -1,6 +1,7 @@
 import { store } from "../content/store";
 import { sendToBackground, type ContentBroadcast, type VoiceState } from "../shared/messages";
 import { log } from "../shared/logger";
+import { isStopCommand } from "@shared/text";
 
 const logger = log("voice");
 
@@ -9,8 +10,8 @@ export interface VoiceCallbacks {
   onInterimTranscript?: (text: string) => void;
   /** Speech recognition thinks the turn has probably ended (it is not sure yet). */
   onProbableEndOfTurn?: (text: string) => void;
-  /** It was wrong: the student kept talking. */
-  onTurnResumed?: () => void;
+  /** Words being played on the page right now (a video's narration), so the mic hearing them isn't taken for the student. */
+  ambientSpeech?: () => string | null;
   onSpeechStart?: () => void;
 }
 
@@ -149,6 +150,22 @@ export class VoiceController {
    * short tail after it ends). An empty start-of-turn during playback is treated as echo too —
    * real interruption asserts itself with words within a beat.
    */
+  /**
+   * The microphone also hears whatever the page is playing. A transcript made of the words a video
+   * is saying right now is the video, not the student. Deliberately conservative: three or more
+   * words, nearly all of them in what was just said, and never a stop command — a student talking
+   * over a video must always get through.
+   */
+  private isAmbient(text: string): boolean {
+    const heard = this.callbacks.ambientSpeech?.();
+    if (!heard || isStopCommand(text)) return false;
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+    const tokens = norm(text).split(" ").filter(Boolean);
+    if (tokens.length < 3) return false;
+    const said = new Set(norm(heard).split(" "));
+    return tokens.filter((w) => said.has(w)).length / tokens.length >= 0.85;
+  }
+
   private isLikelyEcho(text: string): boolean {
     const playing = store.getState().voice.ttsPlaying || Date.now() - this.lastTtsEndedAt < 800;
     if (!playing) return false;
@@ -211,7 +228,7 @@ export class VoiceController {
         // picked up through the speakers — otherwise it barge-ins on itself, the echo becomes a
         // "user" turn, and it loops saying the same thing forever. Genuinely different speech
         // ("stop", a redirect) passes through and still interrupts.
-        if (this.isLikelyEcho(text)) return true;
+        if (this.isLikelyEcho(text) || this.isAmbient(text)) return true;
         if (msg.event === "StartOfTurn" || (!msg.final && text && store.getState().interimTranscript === "")) this.callbacks.onSpeechStart?.();
         if (msg.final) {
           // The upstream sometimes re-sends the same final (session churn); each repeat would
@@ -226,7 +243,6 @@ export class VoiceController {
           store.setState({ interimTranscript: text });
           this.callbacks.onInterimTranscript?.(text);
           if (msg.event === "EagerEndOfTurn" && text) this.callbacks.onProbableEndOfTurn?.(text);
-          else if (msg.event === "TurnResumed") this.callbacks.onTurnResumed?.();
         }
         return true;
       }
