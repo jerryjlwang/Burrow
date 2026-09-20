@@ -26,6 +26,28 @@ const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matc
 const rain = params.has("rain") ? params.get("rain") !== "0" : forcedHour === null && Math.random() < 1 / 6;
 const GRAPH_KEY = "burrow.graph";
 const SOUND_KEY = "burrow.newtab.sound";
+const HOUR_KEY = "burrow.newtab.hour";
+/**
+ * The light. By default the meadow follows the real clock; for a demo (or because you like one of
+ * them) the sky sign pins an hour, which is kept in storage so every new tab opens on it. `?hour=`
+ * still wins over both. The scene asks for the hour every frame, so a change dissolves the light in.
+ */
+const SKIES: { label: string; hour: number | null }[] = [
+  { label: "Now", hour: null },
+  { label: "Dawn", hour: 6.6 },
+  { label: "Noon", hour: 13 },
+  { label: "Sunset", hour: 19.4 },
+  { label: "Night", hour: 23 },
+];
+const skyWanted = (): number => {
+  try {
+    const i = Number(localStorage.getItem(HOUR_KEY));
+    return Number.isInteger(i) && i >= 0 && i < SKIES.length ? i : 0;
+  } catch {
+    return 0;
+  }
+};
+let pinnedHour: number | null = SKIES[skyWanted()].hour;
 const ambience = createAmbience();
 // Whatever the scene does, the rabbit is asked in before three seconds.
 window.setTimeout(enter, ENTER_DEADLINE_MS);
@@ -155,8 +177,10 @@ function Scene({ bootRef, sceneRef, onHover, onLayout }: { bootRef: React.Mutabl
     if (!c) return;
     const handle = startScene(c, {
       hour: () => {
+        if (forcedHour !== null) return forcedHour + 0.5;
+        if (pinnedHour !== null) return pinnedHour;
         const d = new Date();
-        return forcedHour !== null ? forcedHour + 0.5 : d.getHours() + d.getMinutes() / 60;
+        return d.getHours() + d.getMinutes() / 60;
       },
       reducedMotion,
       rain: rain && !reducedMotion,
@@ -463,12 +487,18 @@ function ConceptSign({ hover }: { hover: HoverSign | null }) {
 }
 
 /** Two quiet controls in the corner: the site signposts and the sound. */
-function Hud({ sound, onSound, hidden, sitesOpen, onSites }: { sound: boolean; onSound: () => void; hidden: boolean; sitesOpen: boolean; onSites: () => void }) {
+function Hud({ sound, onSound, hidden, sitesOpen, onSites, sky, onSky }: { sound: boolean; onSound: () => void; hidden: boolean; sitesOpen: boolean; onSites: () => void; sky: number; onSky: () => void }) {
+  const s = SKIES[sky];
   return (
     <nav className={`hud${hidden ? " hidden" : ""}`} aria-label="Meadow">
       <div className="hud-sign">
         <button type="button" className="board sites" onClick={onSites} aria-pressed={sitesOpen} aria-label={sitesOpen ? "Hide your sites" : "Show your sites"}>
           Sites
+        </button>
+      </div>
+      <div className="hud-sign">
+        <button type="button" className="board sky" data-pinned={s.hour === null ? "0" : "1"} onClick={onSky} aria-label={`Light: ${s.label}. Click for the next one.`} title={s.hour === null ? "The light follows the clock" : `The light stays at ${s.label}`}>
+          {s.label}
         </button>
       </div>
       <div className="hud-sign">
@@ -515,6 +545,19 @@ function NewTab() {
   // The welcome hint has done its job ten seconds after the boot, or at the first click or key.
   const [hintGone, setHintGone] = useState(false);
   const [sound, setSound] = useState(soundWanted);
+  const [sky, setSky] = useState(skyWanted);
+  const nextSky = () => {
+    setSky((i) => {
+      const n = (i + 1) % SKIES.length;
+      pinnedHour = SKIES[n].hour;
+      try {
+        localStorage.setItem(HOUR_KEY, String(n));
+      } catch {
+        // A blocked store only costs the choice on the next tab.
+      }
+      return n;
+    });
+  };
   const boot = useBoot();
   const bootRef = useRef<Boot>(boot);
   bootRef.current = boot;
@@ -610,7 +653,7 @@ function NewTab() {
           {hintTyped > name.length ? hintText.slice(0, hintTyped - name.length) : ""}
         </p>
         <ConceptSign hover={boot.done ? signHover ?? hover : null} />
-        <Hud sound={sound} onSound={toggleSound} hidden={!boot.done} sitesOpen={sitesOpen} onSites={() => setSitesOpen((v) => !v)} />
+        <Hud sound={sound} onSound={toggleSound} hidden={!boot.done} sitesOpen={sitesOpen} onSites={() => setSitesOpen((v) => !v)} sky={sky} onSky={nextSky} />
         <BootLine boot={boot} />
       </main>
     </>

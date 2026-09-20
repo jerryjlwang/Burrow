@@ -88,4 +88,4 @@ Status: heads-up, 2026-09-20. Two backend-lane files gained one announcement eac
 
 Status: open, found 2026-09-20 by the front end.
 
-`e2e/smoke.mjs`'s check "the loop resumes on the tab it opened, with the conversation carried over (cross-tab handoff)" fails: no session in `chrome.storage.session` carries the resumed turn. It passed before `origin/frontend` brought in the answer-instead-of-look-up, the listener fix and the board role work, and it fails on that merge alone, before any front end change on top of it. The front end has not touched `agent/loop.ts` session handling or `content/session.ts`. Everything else in the suite passes (55 of 56).
+`e2e/smoke.mjs`'s check "the loop resumes on the tab it opened, with the conversation carried over (cross-tab handoff)" is intermittent: it failed on two runs in a row and passed on the next, with no change to that code in between. It waits up to 25 s for a session in `chrome.storage.session` to carry the resumed turn, so it looks like a race rather than a break. The front end has not touched `agent/loop.ts` session handling or `content/session.ts`. Worth a look since it is a demo beat.
