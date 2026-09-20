@@ -6,18 +6,21 @@ import { loadConfig } from "./config";
 import { AgentService } from "./api/agent";
 import { ExtractService } from "./api/extract";
 import { lookUp } from "./api/lookup";
+import { InkService } from "./api/ink";
 import { attachSttSession } from "./voice/stt";
 import { attachTtsSession } from "./voice/tts";
 import { serveStatic } from "./util/static";
 import { log } from "./util/logger";
 import type { AgentInput, InterventionInput } from "@shared/types";
 import type { ExtractionInput } from "@shared/concepts";
+import type { InkJudgeInput } from "@shared/ink";
 
 const logger = log("server");
 const here = dirname(fileURLToPath(import.meta.url));
 const cfg = loadConfig();
 const agent = new AgentService(cfg);
 const extract = new ExtractService(cfg);
+const ink = new InkService(cfg);
 const demoRoot = resolve(here, "../../demo-pages");
 const VERSION = "0.1.0";
 
@@ -61,7 +64,7 @@ const server = http.createServer(async (req, res) => {
   }
   try {
     if (req.method === "GET" && url.pathname === "/health") {
-      json(res, 200, { ok: true, version: VERSION, llm: agent.providerName, deepgram: !!cfg.deepgramApiKey, demoMode: cfg.demoMode, tts: { model: cfg.ttsModel, speed: cfg.ttsSpeed, expressivity: cfg.ttsExpressivity }, stt: cfg.sttModel });
+      json(res, 200, { ok: true, version: VERSION, llm: agent.providerName, deepgram: !!cfg.deepgramApiKey, demoMode: cfg.demoMode, ink: ink.providerName, tts: { model: cfg.ttsModel, speed: cfg.ttsSpeed, expressivity: cfg.ttsExpressivity }, stt: cfg.sttModel });
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/agent/decide") {
@@ -80,6 +83,15 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       json(res, 200, await agent.intervene({ ...input, demoMode: cfg.demoMode }));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/ink/judge") {
+      const input = (await readJson(req, 6_000_000)) as InkJudgeInput;
+      if (!input || typeof input.frame !== "string" || !input.frame.startsWith("data:image/")) {
+        json(res, 400, { error: "invalid input" });
+        return;
+      }
+      json(res, 200, await ink.judge({ ...input, previousLines: Array.isArray(input.previousLines) ? input.previousLines : [], seq: Number(input.seq) || 0 }));
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/lookup") {
@@ -128,6 +140,6 @@ server.on("upgrade", (req, socket, head) => {
 
 server.listen(cfg.port, () => {
   logger.info(`Pip server listening on http://localhost:${cfg.port}`);
-  logger.info(`agent provider: ${agent.providerName}${cfg.demoMode ? " (demo mode)" : ""} · deepgram: ${cfg.deepgramApiKey ? "configured" : "NOT configured (voice disabled)"} · tts: ${cfg.ttsModel} speed=${cfg.ttsSpeed} expressivity=${cfg.ttsExpressivity} · stt: ${cfg.sttModel}`);
+  logger.info(`agent provider: ${agent.providerName}${cfg.demoMode ? " (demo mode)" : ""} · deepgram: ${cfg.deepgramApiKey ? "configured" : "NOT configured (voice disabled)"} · tts: ${cfg.ttsModel} speed=${cfg.ttsSpeed} expressivity=${cfg.ttsExpressivity} · stt: ${cfg.sttModel} · tablet judge: ${ink.providerName}`);
   logger.info(`demo pages: http://localhost:${cfg.port}/demo/`);
 });

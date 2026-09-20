@@ -17,6 +17,9 @@ export interface Config {
   ttsExpressivity: number;
   sttModel: string;
   demoMode: boolean;
+  /** Gemini key for the tablet judge; without it the judge runs its scripted mock. */
+  geminiApiKey: string;
+  inkModel: string;
 }
 
 function num(v: string | undefined, fallback: number): number {
@@ -47,5 +50,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ttsExpressivity: num(env.DEEPGRAM_TTS_EXPRESSIVITY, 0),
     sttModel: env.DEEPGRAM_STT_MODEL || "flux-general-en",
     demoMode,
+    geminiApiKey: env.GEMINI_API_KEY || "",
+    inkModel: env.INK_MODEL || "gemini-3.8-flash",
   };
 }
