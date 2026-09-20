@@ -665,6 +665,11 @@ export class CompanionController {
   }
 
   private celebrate(say: string | null): void {
+    // A standing offer (a nudge's Yes and No) is moot once the work is right, and its bubble would hide the cheer.
+    if (this.pendingOffer) {
+      this.clearOffer();
+      this.engine.offerResolved("dismissed");
+    }
     store.setState({ characterState: "celebrating" });
     if (say) this.reply(say);
     if (this.celebrateTimer) window.clearTimeout(this.celebrateTimer);
