@@ -72,6 +72,9 @@ function Popup() {
         <button className="btn" onClick={() => void chrome.tabs.create({ url: `${settings.serverUrl}/demo/` })}>
           Demo
         </button>
+        <button className="btn" onClick={() => void chrome.tabs.create({ url: chrome.runtime.getURL("parent.html") })}>
+          Parent view
+        </button>
       </div>
     </>
   );

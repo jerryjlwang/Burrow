@@ -30,9 +30,12 @@ Updated: 2026-09-19
 
 - Handoff, front end side: `extension/src/components/handoff.ts` follows `docs/frontend/HANDOFF.md`. A newly granted skill makes the rabbit celebrate and say what he can do now. A jump request makes the visible tab he is leaving say goodbye, dive, and write the `gone` record with a summary and the graph he carries; the page he is going to opens a hole, waits for `gone` (12 s at most), pops him out, writes `arrived`, and shows the summary. The "I'm late" vignette runs after a long quiet spell: watch check, panic, then a hole trip to a new spot. Debug buttons: grant voice, revoke voice, call to parent, send to kid. The parent view itself is being built in `extension/src/parent`.
 
+- Parent view: `extension/src/parent` (`parent.html`, `index.tsx`, `data.ts`). Header band with the last visit and count, one room per concept with a whole-pixel mastery bar and a faded "forgotten" tag under 0.3, shaky spots with the belief, the evidence and a dinner-table question, five grant cards that write `burrow.grants`, and the "Call the rabbit here" and "Send him back" buttons that write `burrow.jump`. Reads `burrow.graph` and falls back to a sample. The rabbit lives on the page at 4x. Opened from the popup's "Parent view" button. Two-tab rehearsal (grant, call over, send back) passes 8 of 8; `tools/pet/check.mjs` passes 61 of 61.
+- Sound: `extension/src/components/sounds.ts` plays tiny WebAudio square-wave cues on aha, hole, dive, celebrate, land, panic and wave, unlocked by the first click, off when "Speak replies out loud" is off.
+
 ## In progress
 
-- Parent view page (`extension/src/parent`), built by a subagent against `HANDOFF.md` and `KID_UI.md`.
+- Nothing.
 
 ## Blocked
 
@@ -40,9 +43,9 @@ Updated: 2026-09-19
 
 ## Next three tasks
 
-1. Decide the direction for the extension's own pages (new tab, onboarding, parent view), see the proposal to Micah.
-2. Wire the "I'm late" vignette (panic, then a hole trip) as a rare idle event, and peeking from the edge.
-3. Parent UI, then wire `jumpOut` and `jumpIn` to the real handoff.
+1. Rehearse the four demo beats end to end with the real server and a Deepgram key on two laptops once the backend relay exists.
+2. The teach loop in the kid UI: "Did I get that right?" cards, once the backend persona teaches instead of tutors.
+3. If time: the burrow diorama on the new tab page.
 
 ## Notes
 

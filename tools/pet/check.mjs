@@ -418,6 +418,29 @@ try {
   await wait(800);
   await pp.screenshot({ path: resolve(out, "popup.png") });
   await pp.close();
+
+  // Parent view: sample rooms render, a grant toggle lands in chrome.storage.local, the rabbit is mounted.
+  // The profile persists between runs, so clear the three handoff keys first and hide the debug panel.
+  await context.serviceWorkers()[0].evaluate(() => chrome.storage.local.remove(["burrow.grants", "burrow.jump", "burrow.graph"]));
+  await context.serviceWorkers()[0].evaluate(() => chrome.storage.local.set({ "pip.settings": { debugMode: false, onboarded: true, proactiveEnabled: false, voiceAutoResume: false } }));
+  const pr = await context.newPage();
+  await pr.setViewportSize({ width: 1280, height: 800 });
+  await pr.goto(`chrome-extension://${extId}/parent.html`);
+  await pr.locator(".pet-canvas").waitFor({ timeout: 8000 }).catch(() => null);
+  await pr.locator(".room").first().waitFor({ timeout: 8000 }).catch(() => null);
+  await wait(800);
+  check("parent view has the rabbit", (await pr.locator(".pet-canvas").count()) > 0);
+  const roomCount = await pr.locator(".room").count();
+  check("parent view renders the sample rooms", roomCount > 0, `${roomCount} rooms`);
+  await pr.locator('input[name="read_pages"]').click();
+  await wait(500);
+  const grants = await context.serviceWorkers()[0].evaluate(() => chrome.storage.local.get("burrow.grants"));
+  check("toggling a grant writes burrow.grants", grants?.["burrow.grants"]?.read_pages?.granted === true, JSON.stringify(grants));
+  await pr.evaluate(() => window.scrollTo(0, 0));
+  await wait(200);
+  await pr.screenshot({ path: resolve(out, "parent.png") });
+  await pr.screenshot({ path: resolve(out, "parent-full.png"), fullPage: true });
+  await pr.close();
 } catch (e) {
   check("run completed without exceptions", false, String(e?.stack ?? e));
 } finally {
