@@ -298,30 +298,33 @@ export function decideMock(input: AgentInput): AgentDecision {
   }
 
   // ---- The visible surface: hover, double/right click, drag, keys (must outrank plain click handling) ----
-  const pointer = /^(?:please |pip |ok |okay |can you |could you )*(hover (?:over|on)|double[- ]click(?: on)?|right[- ]click(?: on)?)\s+(?:the\s+)?(.+)$/.exec(u);
+  // "… for real" asks for real mouse/keyboard input, the way the model escalates with `trusted`.
+  const trusted = /\bfor real$/.test(u) ? true : null;
+  const su = u.replace(/\s*\bfor real$/, "");
+  const pointer = /^(?:please |pip |ok |okay |can you |could you )*(hover (?:over|on)|double[- ]click(?: on)?|right[- ]click(?: on)?)\s+(?:the\s+)?(.+)$/.exec(su);
   if (pointer) {
     const el = resolveTarget(input, pointer[2], "any");
     const action = pointer[1].startsWith("hover") ? "hover" : pointer[1].startsWith("double") ? "double_click" : "right_click";
-    if (el) return d({ action, elementId: el.id, say: "Yep.", done: true, taskType: "navigation", reason: `${action} by name` });
+    if (el) return d({ action, elementId: el.id, trusted, say: "Yep.", done: true, taskType: "navigation", reason: `${action} by name` });
   }
-  const at = /^(?:please |pip |can you |could you )*(double[- ]click|right[- ]click|click|hover)(?: (?:at|on|over))? (\d+) (\d+)$/.exec(u);
+  const at = /^(?:please |pip |can you |could you )*(double[- ]click|right[- ]click|click|hover)(?: (?:at|on|over))? (\d+) (\d+)$/.exec(su);
   if (at) {
     const action = at[1] === "click" ? "click" : at[1] === "hover" ? "hover" : at[1].startsWith("double") ? "double_click" : "right_click";
-    return d({ action, x: Number(at[2]), y: Number(at[3]), say: "Right there.", done: true, taskType: "navigation", reason: `${action} at a point` });
+    return d({ action, x: Number(at[2]), y: Number(at[3]), trusted, say: "Right there.", done: true, taskType: "navigation", reason: `${action} at a point` });
   }
-  const dragPoints = /\bdrag from (\d+) (\d+) to (\d+) (\d+)$/.exec(u);
+  const dragPoints = /\bdrag from (\d+) (\d+) to (\d+) (\d+)$/.exec(su);
   if (dragPoints) {
     const [x, y, toX, toY] = dragPoints.slice(1).map(Number);
-    return d({ action: "drag", x, y, toX, toY, say: "Moving it.", done: true, taskType: "administrative", reason: "drag between points" });
+    return d({ action: "drag", x, y, toX, toY, trusted, say: "Moving it.", done: true, taskType: "administrative", reason: "drag between points" });
   }
-  const dragging = /\bdrag\s+(?:the\s+)?(.+?)\s+(?:to|onto|into|over to)\s+(?:the\s+)?(.+)$/.exec(u);
+  const dragging = /\bdrag\s+(?:the\s+)?(.+?)\s+(?:to|onto|into|over to)\s+(?:the\s+)?(.+)$/.exec(su);
   if (dragging) {
     const from = resolveTarget(input, dragging[1], "any");
     const to = resolveTarget(input, dragging[2], "any");
-    if (from && to && from.id !== to.id) return d({ action: "drag", elementId: from.id, toElementId: to.id, say: "Moving it.", done: true, taskType: "administrative", reason: "drag by name" });
+    if (from && to && from.id !== to.id) return d({ action: "drag", elementId: from.id, toElementId: to.id, trusted, say: "Moving it.", done: true, taskType: "administrative", reason: "drag by name" });
   }
-  const key = /\b(?:press|hit)\s+(?:the\s+)?(escape|esc|tab|space|backspace|delete|(?:arrow )?(?:up|down|left|right)|page ?(?:up|down)|home|end)\b/.exec(u);
-  if (key) return d({ action: "press_key", text: key[1].replace(/^arrow |\s/g, ""), say: "Done.", done: true, taskType: "navigation", reason: "key by name" });
+  const key = /\b(?:press|hit)\s+(?:the\s+)?(escape|esc|tab|space|backspace|delete|(?:arrow )?(?:up|down|left|right)|page ?(?:up|down)|home|end)\b/.exec(su);
+  if (key) return d({ action: "press_key", text: key[1].replace(/^arrow |\s/g, ""), trusted, say: "Done.", done: true, taskType: "navigation", reason: "key by name" });
 
   // ---- New tab / window (must outrank plain click/open handling) ----
   const newTab = /\b(?:open|show|take me to)\b(.*)\bin a new (?:tab|window)\b|\bnew (?:tab|window)\b.*\b(?:for|with|of)\b(.*)/i.exec(utterance);

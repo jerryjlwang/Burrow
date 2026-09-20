@@ -29,6 +29,19 @@ describe("validateDecision", () => {
     const r = validateDecision({ action: "click", elementId: -1, x: 5, y: 5, reason: "x" });
     expect(r.ok && r.decision.elementId).toBeNull();
   });
+  it("carries trusted only as an explicit true", () => {
+    const yes = validateDecision({ action: "click", x: 5, y: 5, trusted: true, reason: "retry" });
+    expect(yes.ok && yes.decision.trusted).toBe(true);
+    for (const trusted of [false, null, undefined, "true", 1]) {
+      const r = validateDecision({ action: "click", x: 5, y: 5, trusted, reason: "x" });
+      expect(r.ok && r.decision.trusted, String(trusted)).toBeNull();
+    }
+  });
+  it("lets point_to and highlight indicate a bare spot", () => {
+    expect(validateDecision({ action: "point_to", x: 55, y: 392, say: "this red handle", reason: "x" }).ok).toBe(true);
+    expect(validateDecision({ action: "highlight", x: 55, y: 392, reason: "x" }).ok).toBe(true);
+    expect(validateDecision({ action: "point_to", reason: "nothing to point at" }).ok).toBe(false);
+  });
   it("requires both ends of a drag", () => {
     expect(validateDecision({ action: "drag", elementId: 2, reason: "x" }).ok).toBe(false);
     expect(validateDecision({ action: "drag", toX: 9, toY: 9, reason: "x" }).ok).toBe(false);

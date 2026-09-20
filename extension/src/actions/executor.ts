@@ -8,7 +8,7 @@ import { ElementRegistry } from "../page-understanding/registry";
 import { isSensitiveField, HOST_ID } from "../page-understanding/extract";
 import { OverlayController } from "./overlay";
 import { lineLocator, quoteLocator, type RectLocator } from "./locate";
-import { deepActiveElement, describeElement, elementAtPoint, isOwnUi, syntheticContextMenu, syntheticDoubleClick, syntheticDrag, syntheticHover, syntheticKey, syntheticWheel, type Point } from "./surface";
+import { deepActiveElement, describeElement, elementAtPoint, isOwnUi, noteOwnKey, syntheticContextMenu, syntheticDoubleClick, syntheticDrag, syntheticHover, syntheticKey, syntheticWheel, type Point } from "./surface";
 import { log } from "../shared/logger";
 
 const logger = log("action");
@@ -33,8 +33,10 @@ export interface ExecutorDeps {
   showPlan: () => boolean;
   /** Overlay a drawing on the screen (newline-separated text lines and draw commands). `add` extends the current one; elementId/quote wrap it to a page region. */
   sketch: (spec: string, opts?: { add?: boolean; elementId?: number | null; quote?: string | null }) => void;
-  /** Trusted mouse/keyboard input via the background; `ok: false` means fall back to DOM events. */
+  /** Real mouse/keyboard input via the background's debugger session. An escalation, never the first resort. */
   input: (ops: InputOp[]) => Promise<{ ok: boolean; error?: string }>;
+  /** Whether the student has switched real input on; off by default, because attaching shows Chrome's debugging bar. */
+  trustedInputEnabled: () => boolean;
   /** Called right before an action that may unload the page. */
   beforeMaybeNavigate?: () => Promise<void> | void;
 }
@@ -110,7 +112,8 @@ export function dispatchClickSequence(el: Element, at?: Point): void {
   }
   pointer("pointerup");
   mouse("mouseup");
-  if (typeof (el as HTMLElement).click === "function") (el as HTMLElement).click();
+  // el.click() reports the click at (0,0); a canvas or map reads where it landed, so an aimed click is dispatched with its point.
+  if (!at && typeof (el as HTMLElement).click === "function") (el as HTMLElement).click();
   else mouse("click");
 }
 
@@ -208,8 +211,6 @@ function findScrollableRoot(): Element | null {
   return best;
 }
 
-const UNTRUSTED_NOTE = " (sent as untrusted events — this page may ignore them)";
-
 export async function executeAction(decision: AgentDecision, deps: ExecutorDeps): Promise<ActionResult> {
   const { registry, overlay } = deps;
   const reduced = prefersReducedMotion();
@@ -273,6 +274,16 @@ export async function executeAction(decision: AgentDecision, deps: ExecutorDeps)
       elementFound: true,
     };
   };
+  // Page events come first: they need no debugger session and reach almost every widget. Real
+  // input is an escalation the model asks for with `trusted`, and only if the student allows it.
+  const realInputOn = deps.trustedInputEnabled();
+  const sendReal = async (ops: InputOp[]): Promise<boolean> => realInputOn && (await deps.input(ops)).ok;
+  const inputNote = (real: boolean, changed: boolean): string => {
+    if (real) return " (real input)";
+    if (decision.trusted && !realInputOn) return "; real mouse and keyboard input is switched off in my settings, so I used page events";
+    if (changed) return "";
+    return realInputOn ? "; if that did not take, repeat it with trusted:true to use the real mouse and keyboard" : "; if that did not take, this page needs real input, which is switched off in my settings";
+  };
   const markPoint = (p: Point, durationMs = 1600) => overlay.highlight(registry.idFor(document.body), { durationMs, kind: "acting", locator: () => ({ x: p.x - 14, y: p.y - 14, width: 28, height: 28 }) });
 
   try {
@@ -305,8 +316,14 @@ export async function executeAction(decision: AgentDecision, deps: ExecutorDeps)
           locator = quoteLocator(root, decision.quote, HOST_ID) ?? (el ? undefined : quoteLocator(document.body, decision.quote, HOST_ID) ?? undefined);
           if (!locator && !el) return { ok: false, message: `I couldn't find "${decision.quote.slice(0, 60)}" on the page`, elementFound: false };
         }
+        if (!el && !locator && decision.x != null && decision.y != null) {
+          // A spot the page has no name for: a place on a graph, a handle, a region of an image.
+          // Held in page coordinates so the marker stays on the spot if the page scrolls.
+          const page = { x: decision.x + window.scrollX, y: decision.y + window.scrollY };
+          locator = () => ({ x: page.x - window.scrollX - 18, y: page.y - window.scrollY - 18, width: 36, height: 36 });
+        }
         if (!el && locator) {
-          // Quote-only targeting: anchor the overlay to the body; the locator supplies the rect.
+          // Quote- or point-only targeting: anchor the overlay to the body; the locator supplies the rect.
           el = document.body;
         }
         if (!el) return { ok: false, message: "That element isn't on the page anymore—let me look again.", elementFound: false };
@@ -341,10 +358,11 @@ export async function executeAction(decision: AgentDecision, deps: ExecutorDeps)
         if (decision.x != null && decision.y != null) {
           // Wheel over an exact spot: scrolls that inner pane, or zooms that map/graph.
           const point = { x: decision.x, y: decision.y };
-          const sent = await deps.input([{ kind: "wheel", ...point, deltaY: delta }]);
-          const moved = sent.ok || syntheticWheel(point, delta);
+          const real = decision.trusted === true && (await sendReal([{ kind: "wheel", ...point, deltaY: delta }]));
+          const moved = real || syntheticWheel(point, delta);
           await sleep(reduced ? 50 : 350);
-          return { ok: moved, message: moved ? `wheeled ${decision.direction} over ${describeElement(elementAtPoint(point))}` : "nothing there scrolls", changed: moved };
+          // A map or graph zooms on the wheel event itself and has nothing to scroll: only real input reaches it.
+          return { ok: moved, message: moved ? `wheeled ${decision.direction} over ${describeElement(elementAtPoint(point))}${inputNote(real, true)}` : `nothing there scrolls${inputNote(false, false)}`, changed: moved };
         }
         const target = findScrollableRoot();
         const before = target ? target.scrollTop : window.scrollY;
@@ -381,8 +399,8 @@ export async function executeAction(decision: AgentDecision, deps: ExecutorDeps)
         const urlBefore = location.href;
         if (!hover) await deps.beforeMaybeNavigate?.();
         const op: InputOp = hover ? { kind: "move", ...point } : { kind: "click", ...point, button: decision.action === "right_click" ? "right" : "left", count: decision.action === "double_click" ? 2 : 1 };
-        const sent = await deps.input([op]);
-        if (!sent.ok && el) {
+        let real = decision.trusted === true && (await sendReal([op]));
+        if (!real && el) {
           if (hover) syntheticHover(el, point);
           else if (decision.action === "right_click") syntheticContextMenu(el, point);
           else {
@@ -393,11 +411,15 @@ export async function executeAction(decision: AgentDecision, deps: ExecutorDeps)
             }
           }
         }
-        const change = await deps.waitForChange(hover ? 700 : 1400);
+        let change = await deps.waitForChange(hover ? 700 : 1400);
+        // CSS :hover never reacts to events, and hovering twice is harmless, so a hover that
+        // nothing answered gets the real mouse without being asked. Clicks never do: a second
+        // click on something that did react would undo it.
+        if (hover && !real && !change.changed && (real = await sendReal([op]))) change = await deps.waitForChange(700);
         const urlChanged = change.urlChanged || location.href !== urlBefore;
         const verb = { click: "clicked", double_click: "double-clicked", right_click: "right-clicked", hover: "hovering over" }[decision.action];
         const outcome = urlChanged ? "page navigated" : change.changed ? "page updated" : "no visible change";
-        return { ok: true, message: `${verb} ${describeElement(el)} at (${Math.round(point.x)}, ${Math.round(point.y)}); ${outcome}${sent.ok ? "" : UNTRUSTED_NOTE}`, changed: change.changed || urlChanged, urlChanged, elementFound: true };
+        return { ok: true, message: `${verb} ${describeElement(el)} at (${Math.round(point.x)}, ${Math.round(point.y)}); ${outcome}${inputNote(real, change.changed || urlChanged)}`, changed: change.changed || urlChanged, urlChanged, elementFound: true };
       }
 
       case "drag": {
@@ -410,10 +432,10 @@ export async function executeAction(decision: AgentDecision, deps: ExecutorDeps)
         markPoint(from.point, 2200);
         markPoint(to, 2200);
         await sleep(reduced ? 30 : 200);
-        const sent = await deps.input([{ kind: "drag", ...from.point, toX: to.x, toY: to.y }]);
-        if (!sent.ok) syntheticDrag(from.point, to);
+        const real = decision.trusted === true && (await sendReal([{ kind: "drag", ...from.point, toX: to.x, toY: to.y }]));
+        if (!real) syntheticDrag(from.point, to);
         const change = await deps.waitForChange(1200);
-        return { ok: true, message: `dragged ${describeElement(from.el)} to (${Math.round(to.x)}, ${Math.round(to.y)}); ${change.changed ? "page updated" : "no visible change"}${sent.ok ? "" : UNTRUSTED_NOTE}`, changed: change.changed, elementFound: true };
+        return { ok: true, message: `dragged ${describeElement(from.el)} to (${Math.round(to.x)}, ${Math.round(to.y)}); ${change.changed ? "page updated" : "no visible change"}${inputNote(real, change.changed)}`, changed: change.changed, elementFound: true };
       }
 
       case "press_key": {
@@ -424,10 +446,11 @@ export async function executeAction(decision: AgentDecision, deps: ExecutorDeps)
           (r.el as HTMLElement).focus?.();
         }
         if (chord.key === "Enter") await deps.beforeMaybeNavigate?.();
-        const sent = await deps.input([{ kind: "key", chord }]);
-        if (!sent.ok) syntheticKey(deepActiveElement() ?? document.body, chord);
+        noteOwnKey();
+        const real = decision.trusted === true && (await sendReal([{ kind: "key", chord }]));
+        if (!real) syntheticKey(deepActiveElement() ?? document.body, chord);
         const { changed, urlChanged } = await deps.waitForChange(chord.key === "Enter" ? 2500 : 800);
-        return { ok: true, message: `pressed ${decision.text}; ${urlChanged ? "page navigated" : changed ? "page updated" : "no visible change"}${sent.ok ? "" : UNTRUSTED_NOTE}`, changed, urlChanged, elementFound: true };
+        return { ok: true, message: `pressed ${decision.text}; ${urlChanged ? "page navigated" : changed ? "page updated" : "no visible change"}${inputNote(real, changed || urlChanged)}`, changed, urlChanged, elementFound: true };
       }
 
       case "type": {
@@ -436,13 +459,14 @@ export async function executeAction(decision: AgentDecision, deps: ExecutorDeps)
           const active = deepActiveElement();
           if (!active) return { ok: false, message: "Nothing is focused to type into. Click the spot first.", elementFound: false };
           if (isSensitiveField(active)) return { ok: false, message: "That field is private (password/payment/code)—please type it yourself.", elementFound: true };
-          const sent = await deps.input([{ kind: "text", text: decision.text ?? "" }]);
-          if (!sent.ok) {
-            if (!isEditable(active)) return { ok: false, message: "I can't type into that here.", elementFound: true };
+          const real = decision.trusted === true && (await sendReal([{ kind: "text", text: decision.text ?? "" }]));
+          if (!real) {
+            // Page events can only fill a real text field; a canvas tool or custom editor takes keystrokes, which only real input delivers.
+            if (!isEditable(active)) return { ok: false, message: `The focused ${describeElement(active)} isn't a text field, so page events can't type into it${inputNote(false, false)}`, elementFound: true };
             typeInto(active, decision.text ?? "", { clear: false });
           }
           await deps.waitForChange(300);
-          return { ok: true, message: `typed into the focused ${describeElement(active)}${sent.ok ? "" : UNTRUSTED_NOTE}`, changed: true, elementFound: true };
+          return { ok: true, message: `typed into the focused ${describeElement(active)}${inputNote(real, true)}`, changed: true, elementFound: true };
         }
         const r = getEl();
         if ("error" in r) return r.error;

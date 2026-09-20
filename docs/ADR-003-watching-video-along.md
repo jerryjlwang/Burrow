@@ -1,4 +1,4 @@
-# ADR-002: Watching a video along with the student
+# ADR-003: Watching a video along with the student
 
 Date: 2026-09-20. Status: accepted.
 

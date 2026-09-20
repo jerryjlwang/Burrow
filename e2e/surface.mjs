@@ -1,9 +1,10 @@
 /**
  * End-to-end check of the visible-surface actions against demo-pages/surface.html, in a real
- * Chromium with the built extension. The page logs event.isTrusted, so these assertions prove
- * the input arrived through the debugger session (real input) rather than as dispatched events:
- * a CSS :hover menu, native drag-and-drop, a pointer-driven slider, a canvas click by
- * coordinates, double/right click and a key press.
+ * Chromium with the built extension. The page logs event.isTrusted, so the suite can tell the
+ * two input paths apart and proves both halves of the design:
+ *   1. by default everything runs on page events and no debugger session is ever opened;
+ *   2. with real input switched on, the rabbit escalates only where page events cannot work
+ *      (a CSS :hover menu) or where it is explicitly asked to.
  * Usage: npm run build && node e2e/surface.mjs
  */
 import { chromium } from "playwright";
@@ -88,39 +89,93 @@ try {
   };
   const idle = () => page.waitForFunction(() => !document.getElementById("pip-companion-host").shadowRoot.querySelector(".pip-send")?.disabled, null, { timeout: 15000 }).catch(() => null);
 
-  await ask("hover over the tools menu");
-  const opened = await page.waitForFunction(() => getComputedStyle(document.querySelector("#menu .items")).display === "block", null, { timeout: 12000 }).then(() => true).catch(() => false);
-  check("hover opens a CSS :hover menu (impossible with dispatched events)", opened);
-  await idle();
+  // getTargets().attached is no use here: the test harness itself is attached to every tab. An
+  // extension may hold only one debugger session per tab, so a second attach is refused exactly
+  // when the rabbit is already holding one.
+  const rabbitHoldsDebugger = () =>
+    sw.evaluate(async () => {
+      const tab = (await chrome.tabs.query({})).find((t) => t.url?.includes("surface.html"));
+      try {
+        await chrome.debugger.attach({ tabId: tab.id }, "1.3");
+        await chrome.debugger.detach({ tabId: tab.id });
+        return false;
+      } catch (e) {
+        return /already attached/i.test(String(e)) ? true : `probe failed: ${e}`;
+      }
+    });
+  const menuOpen = (timeout) => page.waitForFunction(() => getComputedStyle(document.querySelector("#menu .items")).display === "block", null, { timeout }).then(() => true).catch(() => false);
 
+  // ---- Default: page events only. Real input is off, so no debugger session may ever open. ----
   await ask("double-click the word card");
   const dbl = await logged("dblclick");
-  check("double_click arrives as a trusted dblclick", !!dbl?.trusted, JSON.stringify(dbl));
+  check("double_click works with page events", dbl?.trusted === false, JSON.stringify(dbl));
   await idle();
 
   await ask("right-click the word card");
   const ctx = await logged("contextmenu");
-  check("right_click arrives as a trusted contextmenu", !!ctx?.trusted, JSON.stringify(ctx));
+  check("right_click works with page events", ctx?.trusted === false, JSON.stringify(ctx));
   await idle();
 
   await ask("drag the blue chip to the answer box");
   const drop = await logged("drop");
-  check("drag completes a native HTML5 drag-and-drop with its data", drop?.data === "chip", JSON.stringify(drop));
+  check("drag completes an HTML5 drag-and-drop with page events, data intact", drop?.data === "chip" && drop.trusted === false, JSON.stringify(drop));
   await idle();
 
   await ask("drag from 56, 392 to 356, 392");
   const knob = await logged("knob-up");
-  check("drag by coordinates moves a pointer-driven slider", !!knob?.trusted && Math.abs(knob.left - 302) <= 3, JSON.stringify(knob));
+  check("drag by coordinates moves a pointer-driven slider with page events", knob?.trusted === false && Math.abs(knob.left - 302) <= 3, JSON.stringify(knob));
   await idle();
 
   await ask("click at 700, 150");
   const canvasClick = await logged("canvas-click");
-  check("click by coordinates lands on the canvas at that exact pixel", !!canvasClick?.trusted && Math.abs(canvasClick.x - 98) <= 1 && Math.abs(canvasClick.y - 108) <= 1, JSON.stringify(canvasClick));
+  check("click by coordinates lands on the canvas at that exact pixel with page events", canvasClick?.trusted === false && Math.abs(canvasClick.x - 98) <= 1 && Math.abs(canvasClick.y - 108) <= 1, JSON.stringify(canvasClick));
   await idle();
 
   await ask("press escape");
-  const key = await page.waitForFunction(() => window.__log.find((e) => e.name === "keydown" && e.key === "Escape") ?? null, null, { timeout: 12000 }).then((h) => h.jsonValue()).catch(() => null);
-  check("press_key arrives as a trusted keydown", !!key?.trusted, JSON.stringify(key));
+  const key = await logged("keydown");
+  check("press_key reaches page listeners with page events", key?.trusted === false && key.key === "Escape", JSON.stringify(key));
+  await idle();
+
+  await ask("hover over the tools menu");
+  check("a CSS :hover menu stays shut under page events (the known limit)", !(await menuOpen(3000)));
+  await idle();
+  const heldWhileOff = await rabbitHoldsDebugger();
+  check("no debugger session was opened while real input is off", heldWhileOff === false, String(heldWhileOff));
+
+  // ---- Opt-in: the student switches real input on; the rabbit escalates only where needed. ----
+  await sw.evaluate(async () => {
+    const current = (await chrome.storage.local.get("pip.settings"))["pip.settings"] ?? {};
+    await chrome.storage.local.set({ "pip.settings": { ...current, trustedInput: true } });
+  });
+  await page.evaluate(() => (window.__log.length = 0));
+  await new Promise((r) => setTimeout(r, 400));
+
+  await ask("hover over the tools menu");
+  check("with real input on, an unanswered hover escalates by itself and opens the CSS :hover menu", await menuOpen(12000));
+  await idle();
+
+  const heldAfterEscalation = await rabbitHoldsDebugger();
+  check("the probe does see the session once the rabbit has escalated", heldAfterEscalation === true, String(heldAfterEscalation));
+
+  await ask("click at 700, 150");
+  const plainClick = await logged("canvas-click");
+  check("a click that works stays on page events even with real input on", plainClick?.trusted === false, JSON.stringify(plainClick));
+  await idle();
+  await page.evaluate(() => (window.__log.length = 0));
+
+  await ask("click at 700, 150 for real");
+  const realClick = await logged("canvas-click");
+  check("an explicit escalation arrives as a trusted click at the same pixel", realClick?.trusted === true && Math.abs(realClick.x - 98) <= 1 && Math.abs(realClick.y - 108) <= 1, JSON.stringify(realClick));
+  await idle();
+
+  await ask("drag the blue chip to the answer box for real");
+  const realDrop = await logged("drop");
+  check("an escalated drag completes a native drag-and-drop", realDrop?.trusted === true && realDrop.data === "chip", JSON.stringify(realDrop));
+  await idle();
+
+  await ask("press escape for real");
+  const realKey = await logged("keydown");
+  check("an escalated key press arrives as a trusted keydown", realKey?.trusted === true && realKey.key === "Escape", JSON.stringify(realKey));
   if (results.includes(false)) console.log("conversation:", await page.evaluate(() => [...document.getElementById("pip-companion-host").shadowRoot.querySelectorAll(".pip-msg")].map((m) => m.textContent)));
 
   // The screenshot the model aims by must be exactly the viewport's CSS size, whatever the
