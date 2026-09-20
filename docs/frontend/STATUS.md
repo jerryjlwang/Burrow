@@ -21,19 +21,22 @@ Updated: 2026-09-19
 
 - Task 6, on-page pet: `extension/src/components/pet` holds the manifest loader, the `SpritePlayer` state machine (fps, loop, hold, reverse, enter and exit chains with a latest-wins queue, one-shots back to idle, weighted idle variants, blink timer, loudness-driven mouth, `head_dy`, drag override, manifest jump sequences) and the `SpritePet` canvas component (whole-number scale, body-box hit area, pointer-capture dragging, viewport clamping, `moveTo`, `jumpOut`, `jumpIn`). `Character.tsx` maps the store's states to manifest states. The dock, bubble and panel follow the rabbit and never overlap it. The debug panel has buttons to force every state, hop across, jump out and jump in without voice. Checked with a Playwright run of the built extension on a light and a dark page: 32 of 32 checks pass, no console warnings, screenshots viewed on both backgrounds. Nine unit tests cover the player. Onboarding now renders the rabbit at 2x.
 
+- Movement round, art: `hop` travel cycle with per frame `move` values and `land` for thrown landings; `wander_gap` and `wander_hops` in the manifest. `tools/pet/check.mjs` runs the on-page checks and saves screenshots to `tools/pet/shots`.
+- Pixel UI assets: `tools/sprites/ui_px.py` writes hand-placed 9-slice frames (bubble, tail, four button styles) to `extension/public/ui/`. Pixelify Sans (OFL) is in `extension/public/fonts/`. Design note in `docs/frontend/KID_UI.md`.
+
 ## In progress
 
-- Nothing.
+- Movement round, player: hops, throw physics with a bounce, rare wander, resize through the hole, hop or hole to pointed elements, debug buttons. Being built in `extension/src/components/pet` and wired in `CompanionRoot`.
 
 ## Blocked
 
-- Task 7 waits for Micah to sign off on the rabbit.
+- Nothing. Micah approved the movement overhaul and the UI restyle on 2026-09-19 and dropped the "never walks" rule; movement must stay occasional.
 
 ## Next three tasks
 
-1. Micah signs off on the rabbit.
-2. Task 7: kid UI (hold to talk, the teach loop).
-3. Task 7: parent UI (what the kid taught, shaky spots, permission cards), then wire `jumpOut` and `jumpIn` to the real handoff.
+1. Finish and verify the movement round on light and dark pages.
+2. Kid UI restyle with the pixel frames and font: bubble, hold to talk, panel.
+3. Parent UI, then wire `jumpOut` and `jumpIn` to the real handoff.
 
 ## Notes
 
