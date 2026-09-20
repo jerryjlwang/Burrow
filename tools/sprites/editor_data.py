@@ -32,8 +32,15 @@ def mv(dx, dy, clip=False):
 
 MAPS = {
     "idle": [N, N, B, B],
-    "listening": [N] * 3,
+    "to_listening": [N] * 3,
+    "listening": [N],
+    "from_listening": [N] * 4,
+    "to_thinking": [N] * 4,
     "thinking": [N] * 4,
+    "to_confused": [N] * 2,
+    "from_confused": [N] * 2,
+    "to_sleepy": [N] * 3,
+    "from_sleepy": [N] * 3,
     "aha": [N] * 4,
     "confused": [N] * 4,
     "celebrate": [mv(0, 0), mv(0, -2), mv(0, -3), mv(0, -2), mv(0, 0), B],

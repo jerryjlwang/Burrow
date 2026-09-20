@@ -65,6 +65,21 @@ EAR_FLOP = {
     14: [(3, 3, "o"), (4, 7, "w"), (8, 8, "o")],
     15: [(3, 3, "o"), (4, 7, "w"), (8, 8, "o")],
 }
+# Ear half way through folding over: the upright base, then a 45 degree lean outward with a blunt tip.
+EAR_HALF = {
+    5: [(9, 10, "o")],
+    6: [(8, 8, "o"), (9, 10, "w"), (11, 11, "o")],
+    7: [(7, 7, "o"), (8, 8, "w"), (9, 10, "p"), (11, 11, "w"), (12, 12, "o")],
+    8: [(6, 6, "o"), (7, 7, "w"), (8, 9, "p"), (10, 10, "w"), (11, 11, "o")],
+    9: [(5, 5, "o"), (6, 6, "w"), (7, 8, "p"), (9, 9, "w"), (10, 10, "o")],
+    10: [(4, 4, "o"), (5, 5, "w"), (6, 7, "p"), (8, 8, "w"), (9, 9, "o")],
+    11: [(3, 3, "o"), (4, 4, "w"), (5, 6, "p"), (7, 7, "w"), (8, 8, "o")],
+    12: [(3, 3, "o"), (4, 4, "w"), (5, 6, "p"), (7, 7, "w"), (8, 8, "o")],
+    13: [(3, 3, "o"), (4, 7, "w"), (8, 8, "o")],
+    14: [(3, 3, "o"), (4, 7, "w"), (8, 8, "o")],
+    15: [(3, 3, "o"), (4, 7, "w"), (8, 8, "o")],
+}
+EARS = {"up": EAR_UP, "flop": EAR_FLOP, "half": EAR_HALF}
 BODY = {
     16: [(0, 3, "o"), (4, 7, "w"), (8, 8, "o")],
     17: [(0, 7, "w"), (8, 8, "o")],
@@ -241,19 +256,24 @@ def clear_region(g, rows, a, b, ch="w"):
             g[r][CX + 1 + d] = ch
 
 
-def rabbit(ear_l="up", ear_r="up", eyes="open", mouth="smile", look=False, perk=False, twitch=False):
+def ear(g, side, kind="up", dy=0):
+    """One ear. dy moves an upright ear by whole pixels: -2 is the full perk, +1 a sag.
+    The base rows stay put so the ear always meets the head cleanly."""
+    paint(g, EARS[kind], side, dy=dy)
+    if kind == "up":
+        for r in range(15 + dy + 1, 15):
+            paint(g, {r: EAR_UP[14]}, side)
+        paint(g, {15: EAR_UP[15]}, side)
+
+
+def rabbit(ear_l="up", ear_r="up", eyes="open", mouth="smile", look=False, perk=False, twitch=False, ear_dy=0):
     g = blank()
+    if perk:
+        ear_dy = -2
     for side, kind in (("left", ear_l), ("right", ear_r)):
-        if kind == "up" and perk:
-            paint(g, EAR_UP, side, dy=-2)
-            paint(g, {14: EAR_UP[14], 15: EAR_UP[14]}, side)
-            paint(g, {15: EAR_UP[15]}, side)
-        elif kind == "up":
-            paint(g, EAR_UP, side)
-        else:
-            paint(g, EAR_FLOP, side)
+        ear(g, side, kind, ear_dy if kind == "up" else 0)
     if twitch:
-        for r in range(3, 8):
+        for r in range(3 + ear_dy, 8 + ear_dy):
             row = g[r][:]
             for c in range(CX + 1, W - 1):
                 g[r][c + 1] = row[c]
@@ -379,10 +399,21 @@ def build():
     a, b = rabbit(), rabbit(twitch=True)
     S["idle"] = dict(frames=[a, b, bob(a), bob(a)], fps=3, loop=True, head_dy=[0, 0, 1, 1],
                      overlays=["blink", "mouth"], variants=[])
-    S["listening"] = dict(frames=[a, rabbit(perk=True, eyes="wide"), rabbit(perk=True, eyes="wide")], fps=8, loop=False,
-                          head_dy=[0, 0, 0], hold=True, overlays=["blink"])
+    # Ears rise one pixel at a time, then the eyes widen a frame later. Leaving, the ears dip below rest once.
+    S["to_listening"] = dict(frames=[rabbit(ear_dy=-1), rabbit(ear_dy=-2), rabbit(ear_dy=-2, eyes="wide")], fps=12, loop=False)
+    S["listening"] = dict(frames=[rabbit(ear_dy=-2, eyes="wide")], fps=8, loop=False, head_dy=[0], hold=True,
+                          overlays=["blink"], enter="to_listening", exit="from_listening")
+    S["from_listening"] = dict(frames=[rabbit(ear_dy=-2), rabbit(ear_dy=-1), rabbit(ear_dy=1), a], fps=12, loop=False)
+    # The bubble grows out of the trail: small circle, big circle, empty bubble, then the watch.
+    tk = rabbit(look=True, mouth="flat")
+    t1 = [row[:] for row in tk]
+    stamp(t1, TRAIL[1][0], *TRAIL[1][1])
+    t2 = [row[:] for row in t1]
+    stamp(t2, TRAIL[0][0], *TRAIL[0][1])
+    S["to_thinking"] = dict(frames=[t1, t2, thought([row[:] for row in tk]), thought([row[:] for row in tk], clock(0))],
+                            fps=8, loop=False)
     S["thinking"] = dict(frames=[thought(rabbit(look=True, mouth="flat"), clock(i)) for i in range(4)], fps=3, loop=True,
-                         exit="aha")
+                         enter="to_thinking", exit="aha")
     S["aha"] = dict(frames=[thought(rabbit(look=True, mouth="flat"), bulb(False)),
                             thought(rabbit(mouth="flat"), bulb(True)),
                             thought(rabbit(eyes="wide", mouth="open"), bulb(True, sparks=True)),
@@ -392,7 +423,9 @@ def build():
         g = rabbit(ear_l="flop", mouth="flat", eyes="wide" if i % 2 else "open")
         glyph(g, "?", 40 + OFF, 8 + (0, -1, 0, 1)[i])
         cf.append(g)
-    S["confused"] = dict(frames=cf, fps=4, loop=True)
+    S["to_confused"] = dict(frames=[rabbit(ear_l="half", mouth="flat"), cf[0]], fps=8, loop=False)
+    S["confused"] = dict(frames=cf, fps=4, loop=True, enter="to_confused", exit="from_confused")
+    S["from_confused"] = dict(frames=[rabbit(ear_l="half", mouth="flat"), a], fps=8, loop=False)
     ce = []
     for i, dy in enumerate((0, -2, -3, -2, 0, 0)):
         g = rabbit(eyes="happy", mouth="open")
@@ -413,7 +446,13 @@ def build():
             if k < (1, 2, 3, 3)[i]:
                 glyph(g, "z", zx + OFF, zy)
         sl.append(g)
-    S["sleepy"] = dict(frames=sl, fps=2, loop=True)
+    # Falling asleep: ears sag, fold half way as the eyes droop, then flop as they close.
+    S["to_sleepy"] = dict(frames=[rabbit(ear_dy=1, eyes="half"), rabbit(ear_l="half", ear_r="half", eyes="half", mouth="flat"),
+                                  sl[0]], fps=6, loop=False)
+    S["sleepy"] = dict(frames=sl, fps=2, loop=True, enter="to_sleepy", exit="from_sleepy")
+    # Waking: ears half up with heavy eyes, a stretch above rest with eyes open, then settle.
+    S["from_sleepy"] = dict(frames=[rabbit(ear_l="half", ear_r="half", eyes="half", mouth="flat"), rabbit(ear_dy=-1), a],
+                            fps=8, loop=False)
     S["dragged"] = dict(frames=[moved(rabbit(eyes="wide", mouth="wide"), dx, -2) for dx in (-1, 1)], fps=4, loop=True)
 
     S["hole_only"] = dict(frames=[hole(1), hole(2), hole(3)], fps=10, loop=False)
@@ -438,6 +477,13 @@ NOTES = {
     "listening": "Ears stretch up, eyes widen. Hold the last frame while the kid talks.",
     "thinking": "He glances at his watch while a pocket watch ticks in a thought bubble. Loop while the model works.",
     "aha": "The watch turns into a light bulb and the bubble pops. Play once when the answer is ready, then idle.",
+    "to_listening": "Ears rise a pixel at a time, then the eyes widen. Enter transition for listening.",
+    "from_listening": "Ears come down, dip below rest once, and settle. Exit transition for listening.",
+    "to_thinking": "The thought trail appears, then the empty bubble. Enter transition for thinking.",
+    "to_confused": "The left ear folds half way. Enter transition for confused.",
+    "from_confused": "The left ear comes back up. Exit transition for confused.",
+    "to_sleepy": "Ears sag, fold half way, then flop as the eyes close. Enter transition for sleepy.",
+    "from_sleepy": "Ears half up with heavy eyes, a stretch above rest, then settle. Exit transition for sleepy.",
     "confused": "One ear flops over and a question mark bobs.",
     "celebrate": "A hop with happy eyes and sparkles, landing with a squash. Play once.",
     "wave": "He waves with his ear. Use for greetings.",
@@ -494,8 +540,39 @@ def same_pixels(path, im):
     return old.size == im.size and old.tobytes() == im.tobytes()
 
 
+def verify(S):
+    """Check the state graph joins cleanly. Returns a list of problems; empty means clean."""
+    problems = []
+    idle0 = S["idle"]["frames"][0]
+    for name, st in S.items():
+        for key in ("enter", "exit"):
+            ref = st.get(key)
+            if ref and ref not in S:
+                problems.append(f"{name}.{key} points at missing state {ref}")
+        if st.get("enter") in S and S[st["enter"]]["frames"][-1] != st["frames"][0]:
+            problems.append(f"{st['enter']} does not end on {name} frame 0")
+        if st.get("exit") in S and S[st["exit"]]["frames"][-1] != idle0:
+            problems.append(f"{st['exit']} does not end on idle frame 0")
+        for v in st.get("variants", []):
+            if v["state"] not in S:
+                problems.append(f"{name} variant {v['state']} is missing")
+            elif S[v["state"]]["frames"][-1] != idle0:
+                problems.append(f"variant {v['state']} does not end on idle frame 0")
+    enters = {st.get("enter") for st in S.values()}
+    for name, st in S.items():
+        if st["loop"] or st.get("hold") or name.startswith("overlay") or name.startswith("hole") or name == "dive":
+            continue
+        if name in enters:
+            continue
+        if st["frames"][-1] != idle0:
+            problems.append(f"{name} plays once but does not end on idle frame 0")
+    return problems
+
+
 if __name__ == "__main__":
     S = build()
     m = export(S)
+    for problem in verify(S):
+        print("warning:", problem)
     print("frames:", sum(v["frames"] for v in m["states"].values()))
     print("\n".join("".join(r) for r in rabbit()))

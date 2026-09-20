@@ -13,9 +13,12 @@ Updated: 2026-09-19
 - Task 1, thinking eyes: the glance no longer shifts the eye blocks. Both eye shapes stay in place and only the shine moves down and right (`LOOK_SHINE` in `rabbit_px.py`). Checked at 8x on light and dark with `tools/sprites/contact_sheet.py`.
 - Task 2, thought bubble: the cell is now 64 x 58 for every state (the rabbit did not move; 8 transparent columns were added on each side and verified pixel for pixel). `thinking` shows a hand-placed cream bubble with a brown outline, two trailing circles and a pocket watch whose hand ticks. New state `aha` plays once when the answer is ready: unlit bulb, lit bulb, sparks, then idle frame 0. Sprite editor refreshed for the new cell with `tools/sprites/editor_data.py`. Checked at 8x, 10x and 12x on light and dark.
 
+- Task 3, transitions: hand-placed `to_listening` (ears rise a pixel at a time, eyes widen a frame later), `from_listening` (ears dip below rest once, then settle), `to_thinking` (trail, then bubble, then watch), `to_confused` and `from_confused` (left ear folds half way through a new 45 degree ear), `to_sleepy` (sag, half fold with heavy eyes, flop) and `from_sleepy` (half up, stretch above rest, settle). The manifest carries `enter` and `exit` per state, and the generator's `verify()` checks every transition ends on the frame it hands off to. Contract in `docs/frontend/CHARACTER_MANIFEST.md`. Checked at 6x, 12x and 14x on light and dark.
+
 ## In progress
 
-- Task 3, transition frames and a state graph in the manifest.
+- Task 4, anticipation, settle and secondary motion, plus idle variety. `celebrate` and `wave` still end off idle frame 0; the verifier warns about them and Task 4 adds their settle frames.
+- Task 6, the on-page player, is being built in parallel in `extension/src/components/pet`.
 
 ## Blocked
 
@@ -23,9 +26,9 @@ Updated: 2026-09-19
 
 ## Next three tasks
 
-1. Task 3: transition frames between states and a state graph in the character manifest.
-2. Task 4: anticipation, settle and secondary motion, plus random idle variety.
-3. Task 5: pixel alignment audit of every frame.
+1. Task 4: anticipation, settle and secondary motion, plus random idle variety.
+2. Task 5: pixel alignment audit of every frame.
+3. Task 6: integrate and check the on-page player on light and dark pages.
 
 ## Notes
 
