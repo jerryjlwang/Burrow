@@ -61,7 +61,8 @@ describe("validateInkJudgement", () => {
 
   it("keeps the boxes of fine work only when asked to locate a part", () => {
     const raw = { lines: ["3x = 15"], status: "ok", box: [398, 248, 425, 312], mark: [398, 287, 424, 312] };
-    expect(validateInkJudgement(raw).ok && validateInkJudgement(raw).judgement.mark).toBeNull();
+    const plain = validateInkJudgement(raw);
+    expect(plain.ok && plain.judgement.mark).toBeNull();
     const located = validateInkJudgement(raw, { keepMark: true });
     expect(located.ok && located.judgement.mark?.x).toBeCloseTo(0.287);
     expect(judgeInkMock({ ...input(0), locate: "the 25" }).mark).not.toBeNull();
