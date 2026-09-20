@@ -25,7 +25,8 @@ import { playCue } from "./sounds";
  * straight onto CSS pixels. A stage the coach claims calls `done` once its picture is in place.
  */
 const MARK_PAD = 10;
-const MARK_TTL_MS = 20_000;
+/** The ring stays while the kid thinks; a later verdict clears it the moment the line is right. */
+const MARK_TTL_MS = 120_000;
 /** Must match pip-inkmark-out in styles.css. */
 const MARK_OUT_MS = 300;
 const RING_DRAW_MS = 680;

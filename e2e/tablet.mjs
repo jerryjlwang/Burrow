@@ -216,9 +216,9 @@ try {
   const said = v?.nudge ?? "";
   const offer = await until(async () => {
     const b = await bubble(board);
-    return b && b.actions >= 2 && (!said || b.text === said) ? b : null;
+    return b && (!said || b.text === said) ? b : null;
   }, 10000);
-  check("the judge's nudge is up as a bubble with Yes and No beside him", !!offer, offer ? `"${offer.text}"` : `judge said "${said}", bubble: ${JSON.stringify(await bubble(board))}`);
+  check("the judge's nudge is up as a plain bubble beside him, no buttons", !!offer && offer.actions === 0, offer ? `"${offer.text}" [${offer.actions} buttons]` : `judge said "${said}", bubble: ${JSON.stringify(await bubble(board))}`);
   check("the nudge names the step, never the fix", !!offer && !LEAK.test(offer.text), offer?.text ?? "");
   check("the nudge carries the rung: a question first", !live || (!!offer && /\?\s*$/.test(offer.text)), offer?.text ?? "");
   await board.screenshot({ path: resolve(shots, "20-tablet-ring.png") });

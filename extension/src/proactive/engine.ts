@@ -28,6 +28,8 @@ const logger = log("proactive");
 const INK_SPEAK_CONFIDENCE = 0.6;
 /** The same tablet issue is not nudged twice inside this window. */
 const INK_COOLDOWN_MS = 25_000;
+/** How long after a nudge the kid's next words on the board count as a reply to it. */
+const INK_FOLLOW_UP_MS = 90_000;
 /** Said the instant a slip is spotted, before he even sets off: the kid should stop and look up. */
 const INK_INTERJECTIONS = ["Hold on.", "Wait, wait.", "Hang on a second.", "Oh, hold on."];
 let lastInterjection = "";
@@ -89,6 +91,8 @@ export interface EngineDeps {
   isBusy: () => boolean;
   speak: (text: string) => Promise<void>;
   onOffer: (offer: PendingOffer) => void;
+  /** A tablet nudge or note: a plain line beside him, no buttons; the kid answers by thinking, talking or writing. */
+  onNudge: (text: string) => void;
   onCelebrate: (say: string | null) => void;
   /** The problem plan arrived or the student's working reached a new step of it. */
   onPlanProgress?: () => void;
@@ -127,10 +131,15 @@ export class ProactiveEngine {
   private inkKey: string | null = null;
   private inkCooldownUntil = 0;
   private inkOff = false;
-  private inkSolved: string | null = null;
+  /** The solved work has been cheered; reset by a wrong line or a blank board. */
+  private inkCheered = false;
   /** The stall note already on the board for this snapshot of the work, and whether the coach is mid-hop. */
   private inkNoteKey: string | null = null;
   private inkStaging = false;
+  /** The wrong line (as written) he has already circled; it is not circled again until it changes. */
+  private inkMarkedLine: string | null = null;
+  /** What the kid's next words on the board are about, while a nudge or note is fresh. */
+  private inkFollowUp: { goal: string; until: number } | null = null;
   /** What the on-screen offer is, so its outcome lands in the learner profile. */
   private activeOffer: { kind: string; key?: string } | null = null;
   /** Concepts answered wrong in this page-session (id → misses): what a finished quiz needs reconciled. */
@@ -583,12 +592,27 @@ export class ProactiveEngine {
     return stageInk(detail);
   }
 
+  /**
+   * The goal for the next thing the kid says or types on the board, while a tablet nudge or note is
+   * fresh: the lines, the private diagnosis and the Socratic rule. Taken once, then gone.
+   */
+  inkFollowUpGoal(): string | null {
+    const f = this.inkFollowUp;
+    this.inkFollowUp = null;
+    return f && Date.now() < f.until ? f.goal : null;
+  }
+
   private async handleInk(j: InkJudgement, meta: InkMeta): Promise<void> {
     const s = store.getState();
     const now = Date.now();
     if (!s.settings.proactiveEnabled) return;
     // A hop and a circle are in progress; the next verdict follows soon enough.
     if (this.inkStaging) return;
+    const say = (text: string, goal: string) => {
+      this.inkFollowUp = { goal, until: Date.now() + INK_FOLLOW_UP_MS };
+      this.deps.onNudge(text);
+      if (s.settings.ttsEnabled) void this.deps.speak(text);
+    };
     if (meta.reason === "stall" && j.note.length && j.nudge) {
       // A stall note: once per snapshot of the work, and never over the kid's own conversation.
       const key = `note:${j.lines.join("|")}`;
@@ -596,22 +620,20 @@ export class ProactiveEngine {
       this.inkNoteKey = key;
       if (this.offerActive) this.offerResolved("dismissed");
       logger.info("ink note", { line: j.line, note: j.note, rung: meta.rung });
-      // The offer slot is his from here, so nothing ambient slips in while he hops to the empty space.
-      this.offerActive = true;
-      this.activeOffer = { kind: "ink-note", key };
       this.inkStaging = true;
       try {
         await this.stage({ phase: "note", judgement: j, rung: meta.rung });
       } finally {
         this.inkStaging = false;
       }
-      this.deps.onOffer({ type: "hint", message: j.nudge, elementId: null, at: now, goal: inkGoal(j, meta, "note") });
-      if (s.settings.ttsEnabled) void this.deps.speak(j.nudge);
+      say(j.nudge, inkGoal(j, meta, "note"));
       return;
     }
     if (j.status === "off" && j.nudge) {
-      // One nudge per wrong line inside the cooldown: the judge rewords the issue on every check.
+      this.inkCheered = false;
       const key = `line:${j.line ?? 0}`;
+      // The wrong line as written: the same slip is circled once and left alone while the kid thinks.
+      const lineText = (j.line != null && j.lines[j.line - 1]) || key;
       if (j.confidence < INK_SPEAK_CONFIDENCE) {
         if (!this.offerActive && s.attention === 0) {
           store.setState({ attention: 1 });
@@ -621,17 +643,24 @@ export class ProactiveEngine {
         return;
       }
       if (this.deps.isBusy()) return;
+      if (lineText === this.inkMarkedLine) {
+        // Already circled, and the line has not changed: ordinary checks stay quiet. Only a stall may
+        // add words (the next rung), and even then he stays put; the ring is still there.
+        if (meta.reason !== "stall" || now < this.inkCooldownUntil) return;
+        this.inkCooldownUntil = now + INK_COOLDOWN_MS;
+        logger.info("ink nudge again", { line: j.line, rung: meta.rung });
+        say(j.nudge, inkGoal(j, meta, "nudge"));
+        return;
+      }
       if (key === this.inkKey && now < this.inkCooldownUntil) return;
       // A live "off track" beats whatever ambient offer is up; that one counts as dismissed.
       if (this.offerActive) this.offerResolved("dismissed");
       this.inkKey = key;
+      this.inkMarkedLine = lineText;
       this.inkCooldownUntil = now + INK_COOLDOWN_MS;
       this.inkOff = true;
       logger.info("ink nudge", { line: j.line, issue: j.issue, confidence: j.confidence, rung: meta.rung });
-      // The offer slot is his from here, so nothing ambient slips in during the hop. He calls out
-      // at once so the pen stops, goes to the line and circles the part, and the nudge follows the ring.
-      this.offerActive = true;
-      this.activeOffer = { kind: "ink", key };
+      // He calls out at once so the pen stops, goes to the line and circles the part, and the nudge follows the ring.
       if (s.settings.ttsEnabled) void this.deps.speak(interjection());
       this.inkStaging = true;
       try {
@@ -640,25 +669,29 @@ export class ProactiveEngine {
         this.inkStaging = false;
       }
       store.setState({ attention: 2 });
-      this.deps.onOffer({ type: "hint", message: j.nudge, elementId: null, at: now, goal: inkGoal(j, meta, "nudge") });
-      if (s.settings.ttsEnabled) void this.deps.speak(j.nudge);
+      say(j.nudge, inkGoal(j, meta, "nudge"));
       return;
     }
-    if (j.status !== "ok") return;
+    if (j.status !== "ok") {
+      // Wrong or blank again: the next correct answer is a new one to cheer.
+      if (j.status === "unclear") this.inkCheered = false;
+      return;
+    }
     if (this.inkOff) {
-      // The line is fixed: the circle comes off.
+      // The line is fixed: the circle comes off, and the next slip is a new one.
       this.inkOff = false;
       this.inkKey = null;
+      this.inkMarkedLine = null;
       void this.stage({ phase: "clear", judgement: j, rung: meta.rung });
     }
     if (j.solved) {
-      const key = j.lines.join("|");
-      if (key !== this.inkSolved && !this.deps.isBusy()) {
-        this.inkSolved = key;
-        this.inkNoteKey = null;
-        void this.stage({ phase: "clear", judgement: j, rung: meta.rung });
-        this.deps.onCelebrate("Nice, that's it.");
-      }
+      // One cheer per solved piece of work, however the judge re-reads the lines on later checks.
+      if (this.inkCheered || this.deps.isBusy()) return;
+      this.inkCheered = true;
+      this.inkNoteKey = null;
+      this.inkFollowUp = null;
+      void this.stage({ phase: "clear", judgement: j, rung: meta.rung });
+      this.deps.onCelebrate("Nice, that's it.");
     }
   }
 

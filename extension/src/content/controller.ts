@@ -207,6 +207,11 @@ export class CompanionController {
       isBusy: () => this.loop.running || this.pendingConfirmation !== null || this.voice.speaking || this.video.watcher.playing,
       speak: (text) => this.voice.speak(text),
       onOffer: (offer) => this.showOffer(offer),
+      // A tablet nudge is a line, not a question with buttons: it stays up a while and goes on its own.
+      onNudge: (text) => {
+        this.session.addTurn({ role: "companion", text, at: Date.now(), kind: "status" });
+        this.showBubble({ id: `ink-${Date.now()}`, text, kind: "info", expiresAt: Date.now() + 14_000 });
+      },
       onPlanProgress: () => this.refreshPlanView(),
       onCelebrate: (say) => this.celebrate(say),
     });
@@ -501,7 +506,9 @@ export class CompanionController {
     this.overlay.clear();
     this.session.addTurn({ role: "user", text, at: Date.now() });
     void this.noteQuestion(text);
-    await this.loop.run(text, { source });
+    // On the board, words that follow a tablet nudge are about it: the lines and the private diagnosis ride along.
+    const inkGoal = this.engine.inkFollowUpGoal();
+    await this.loop.run(text, { source, goal: inkGoal ?? undefined });
     void this.maybeRecommendVideo(text);
   }
 
