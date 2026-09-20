@@ -6,6 +6,7 @@ import { besidePoint, type PetBox, type PetController } from "./pet";
 import { Panel } from "./Panel";
 import { Bubble } from "./Bubble";
 import { Overlay } from "./Overlay";
+import { Board } from "./Board";
 import { DebugPanel } from "./DebugPanel";
 import { escort, pageRole, readArrival, startHandoff, type Arrival } from "./handoff";
 import { armSounds, playCue, setSoundsEnabled } from "./sounds";
@@ -287,6 +288,7 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
   return (
     <div className={`pip-root${reduced ? " reduced" : ""}`} style={UI_VARS}>
       <Overlay />
+      <Board />
       {settings.debugMode && <DebugPanel pet={petRef} />}
       <div className={`pip-dock${below ? " below" : ""}`} style={dockStyle}>
         <div className="pip-dock-stack" style={stackStyle}>

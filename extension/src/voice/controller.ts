@@ -22,6 +22,13 @@ export class VoiceController {
   private lastTtsEndedAt = 0;
   /** Recent TTS texts, for discriminating the rabbit's own voice from the student's (echo gate). */
   private spokenRecently: { text: string; at: number }[] = [];
+  /** Speech queue: utterances chain; bumping the generation flushes everything not yet started. */
+  private speakChain: Promise<void> = Promise.resolve();
+  private queueGen = 0;
+  private pendingSpeaks = 0;
+  /** Dedupe for STT finals the upstream occasionally re-sends. */
+  private lastFinalNorm = "";
+  private lastFinalAt = 0;
   private voiceErrorShown = false;
   private levelDecay: number | null = null;
 
@@ -75,13 +82,31 @@ export class VoiceController {
   }
 
   /** Speaks text via Deepgram TTS (through the offscreen document). Resolves when playback ends or fails. */
+  /**
+   * Agent speech QUEUES: an in-flight sentence always finishes before the next begins, so an
+   * action mid-response (open_tab, a resumed loop on a new tab) never cuts the dialogue — audio
+   * lives in the offscreen document and plays on across tab switches. Only explicit interrupts
+   * (the student's voice, a click on the rabbit, Escape, typed input) flush the queue.
+   */
   speak(text: string): Promise<void> {
+    if (this.pendingSpeaks >= 4) return Promise.resolve(); // runaway chains drop, not lag
+    const gen = this.queueGen;
+    this.pendingSpeaks++;
+    const run = this.speakChain
+      .then(() => (gen === this.queueGen ? this.speakNow(text) : undefined))
+      .finally(() => {
+        this.pendingSpeaks--;
+      });
+    this.speakChain = run.catch(() => undefined);
+    return run;
+  }
+
+  private speakNow(text: string): Promise<void> {
     const s = store.getState();
     // No TTS without a configured voice backend or a reachable server: stay quiet, no error noise.
     if (!s.settings.ttsEnabled || !text.trim() || s.voice.deepgram === false || s.voice.serverOk === false) return Promise.resolve();
     const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    // The audio player interrupts any previous utterance itself when a new one starts, so only
-    // settle the previous promise locally (an explicit stop message could overtake the new speak).
+    // The queue guarantees the previous utterance settled; this is only a stale-state guard.
     if (this.currentSpeechId) this.finishSpeech(this.currentSpeechId, "interrupted");
     this.currentSpeechId = id;
     this.spokenRecently = [...this.spokenRecently.slice(-2), { text, at: Date.now() }];
@@ -98,6 +123,9 @@ export class VoiceController {
   }
 
   stopSpeaking(): void {
+    // Flush queued utterances first so nothing starts up right after the stop.
+    this.queueGen++;
+    this.speakChain = Promise.resolve();
     const id = this.currentSpeechId;
     if (!id) return;
     void sendToBackground({ type: "tts.stop" }, 3000).catch(() => undefined);
@@ -174,6 +202,12 @@ export class VoiceController {
         if (this.isLikelyEcho(text)) return true;
         if (msg.event === "StartOfTurn" || (!msg.final && text && store.getState().interimTranscript === "")) this.callbacks.onSpeechStart?.();
         if (msg.final) {
+          // The upstream sometimes re-sends the same final (session churn); each repeat would
+          // spawn a fresh agent turn that cancels the last one mid-speech. One is enough.
+          const normFinal = text.toLowerCase().replace(/\s+/g, " ").trim();
+          if (normFinal && normFinal === this.lastFinalNorm && Date.now() - this.lastFinalAt < 5000) return true;
+          this.lastFinalNorm = normFinal;
+          this.lastFinalAt = Date.now();
           store.setState({ interimTranscript: "", debug: { ...store.getState().debug, lastTranscript: text } });
           if (text) this.callbacks.onFinalTranscript(text);
         } else {
