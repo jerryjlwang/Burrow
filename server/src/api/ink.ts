@@ -41,10 +41,10 @@ RUNG (how much the nudge gives away; the request says which nudge this is on the
 - 2: name the exact part to look at and the kind of thing to check (a sign, an operation, a copied number), still not the correction. Like "Look at the sign in front of the 5 as it moves across."
 - 3: a tiny analogous example with different numbers, under 20 words, that shows the kind of move, never their numbers. Like "With y plus 2 equals 9 you take 2 away from both sides."
 STALL (only when the request says the reason is "stall": the pen has been still for a while):
-- If the work is unfinished, stuck or wrong, fill "note" with a small chalk note that helps them take the next step on their own: an analogous example with different numbers, a question, or a small diagram. Never the corrected line, never their answer.
-- Note lines: plain text lines (at most 4, each under 24 characters), and shape lines on a 100 by 100 board: "line x1 y1 x2 y2", "arrow x1 y1 x2 y2", "circle cx cy r", "rect x y w h", "label x y words". At most 6 shapes. An optional first line ending with ":" is the title.
+- A note is only for a diagnosed mistake: status "off" with a line. It must be about THAT slip and nothing else: the same single move the wrong line got wrong, mirrored with different numbers, or one pointed question about that line. If line 2 subtracted wrong, the note is one subtraction of the same shape in other numbers; a list of unrelated facts, a different operation, or a general topic reminder is worse than no note. Never the corrected line, never their answer.
+- Note lines: plain text lines (at most 3, each under 24 characters), and shape lines on a 100 by 100 board: "line x1 y1 x2 y2", "arrow x1 y1 x2 y2", "circle cx cy r", "rect x y w h", "label x y words". At most 6 shapes. An optional first line ending with ":" names the move ("Taking away:"), not the topic.
 - With a note, "nudge" is the one spoken sentence that goes with it, like "Here is a similar one."
-- If a note would not help (the work is solved, or unclear), leave "note" empty.
+- When status is "ok" or "unclear" (stuck but not wrong, unfinished, solved), leave "note" empty; the nudge alone is the help.
 LOCATE (only when the request says LOCATE): this is not a check. Find the part of the ink the request describes ("the 25 on line 2", "the plus sign in line 1", "line 3", "the final answer") and return its box in "mark" (and its whole line in "box"), tight around it. Read the lines as usual, set status "ok", leave issue, nudge and note empty. If it is not there, set mark and box to null.`;
 
 interface GeminiPart {
@@ -96,7 +96,7 @@ export class InkService {
         let reused = noteReusesNumbers(judgement.lines, judgement.note);
         if (reused.length) {
           logger.info("note reused the kid's numbers; asking again", { reused });
-          judgement = await this.callGemini(input, `Your last note reused the kid's own numbers (${reused.join(", ")}). Write the note again with different numbers, as an analogous example, a question or a diagram, or leave "note" empty.`);
+          judgement = await this.callGemini(input, `Your last note reused the kid's own numbers (${reused.join(", ")}). Write the note again with different numbers: the same move the wrong line got wrong, mirrored, or one question about that line, or leave "note" empty.`);
           reused = noteReusesNumbers(judgement.lines, judgement.note);
           if (reused.length) judgement = { ...judgement, note: [] };
         }
@@ -148,7 +148,10 @@ export class InkService {
     }
     const v = validateInkJudgement(raw, { keepMark: !!input.locate });
     if (!v.ok) throw new Error(`invalid judgement: ${v.error}`);
-    // A note is a stall's answer only; on an ordinary check the nudge alone is the help.
-    return input.reason === "stall" ? v.judgement : { ...v.judgement, note: [] };
+    // A note is a stall's answer to a diagnosed slip only; on an ordinary check, or a stall with
+    // nothing wrong to mirror, the nudge alone is the help.
+    const j = v.judgement;
+    const noteAllowed = input.reason === "stall" && j.status === "off" && j.line !== null;
+    return noteAllowed ? j : { ...j, note: [] };
   }
 }

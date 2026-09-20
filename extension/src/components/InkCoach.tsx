@@ -38,6 +38,8 @@ const MASK_EVERY_MS = 120;
 /** Quiet spells asked of the watcher: a hop plus the ring and the bubble typing; a hop plus the board rising and being written. */
 const QUIET_NUDGE_MS = 5000;
 const QUIET_NOTE_MS = 8000;
+/** A stroke this soon after the note board went up is a tap while looking, not writing; it stays. */
+const NOTE_PEN_GRACE_MS = 2500;
 
 /** Tells the watcher where the companion's UI is right now, and optionally to look away for a while. */
 function reportMask(quietMs?: number): void {
@@ -59,6 +61,37 @@ function bodySize(p: PetController | null, body: DOMRect | null): { width: numbe
   const b = p?.manifest.body;
   const s = p?.scale ?? 3;
   return b ? { width: Math.max(1, b[2] - b[0]) * s, height: Math.max(1, b[3] - b[1]) * s } : { width: 93, height: 159 };
+}
+
+/** A judge's empty area must be at least this much of the viewport each way to hold him and the board. */
+const SPACE_MIN_FRAC = 0.3;
+/** Room kept between the wrong line and the empty area, in CSS pixels. */
+const SPACE_CLEAR_PX = 24;
+/** How far in from the viewport edge he stands in a corner. */
+const CORNER_PAD = 16;
+
+/**
+ * Where he stands for a note. The judge's empty area is used only when it is big enough and does
+ * not touch the wrong line; the judge is loose about "empty" and a board over the kid's work is
+ * the one place it must not go. Otherwise the bottom corner farther from the wrong line: the kid's
+ * work sits in the middle of the page, and the corners stay clear.
+ */
+export function noteSpot(j: InkJudgement, size: { width: number; height: number }, vw: number, vh: number): { x: number; y: number } {
+  const line = j.box ?? j.mark;
+  const lineRect = line ? toRect(line) : null;
+  const space = j.space ? toRect(j.space) : null;
+  if (space && space.width >= vw * SPACE_MIN_FRAC && space.height >= vh * SPACE_MIN_FRAC) {
+    const clear =
+      !lineRect ||
+      lineRect.x + lineRect.width + SPACE_CLEAR_PX <= space.x ||
+      space.x + space.width + SPACE_CLEAR_PX <= lineRect.x ||
+      lineRect.y + lineRect.height + SPACE_CLEAR_PX <= space.y ||
+      space.y + space.height + SPACE_CLEAR_PX <= lineRect.y;
+    if (clear) return { x: space.x + space.width - size.width / 2 - CORNER_PAD, y: space.y + space.height - size.height / 2 };
+  }
+  const lineMid = lineRect ? lineRect.x + lineRect.width / 2 : vw / 2;
+  const right = lineMid <= vw / 2;
+  return { x: right ? vw - size.width / 2 - CORNER_PAD : size.width / 2 + CORNER_PAD, y: vh - size.height / 2 - CORNER_PAD };
 }
 
 /** The companion's own UI as fractions of the viewport, for the watcher's mask. */
@@ -182,11 +215,9 @@ export function InkCoach({ pet }: { pet: RefObject<PetController | null> }) {
         e.preventDefault();
         reportMask(QUIET_NOTE_MS);
         void (async () => {
-          const spot = j.space ? toRect(j.space) : j.box ? toRect(j.box) : null;
-          if (p && spot) {
-            // He stands in the lower right of the empty space; the chalkboard rises beside him, on the side with room.
-            const x = spot.x + spot.width - size.width / 2 - 24;
-            const y = spot.y + spot.height - size.height / 2;
+          if (p) {
+            // He stands clear of the ink; the chalkboard rises beside him, on the side with room.
+            const { x, y } = noteSpot(j, size, window.innerWidth, window.innerHeight);
             if (!center || Math.hypot(x - center.x, y - center.y) >= STAY_PX) await p.goTo(x, y);
           }
           const sk = parseSketch(j.note.join("\n"));
@@ -215,6 +246,21 @@ export function InkCoach({ pet }: { pet: RefObject<PetController | null> }) {
     window.addEventListener("burrow:ink", onStage);
     return () => window.removeEventListener("burrow:ink", onStage);
   }, [pet]);
+
+  // The note board leaves when the pen comes back: the first stroke on the page after the board has
+  // been up a moment takes it down, so it never sits over the work they are doing next.
+  const inkBoardAt = useStore((s) => (s.board?.id.startsWith("ink-") ? Number(s.board.id.slice(4)) : 0));
+  useEffect(() => {
+    if (pageRole() !== "board" || !inkBoardAt) return;
+    const host = document.getElementById(HOST_ID);
+    const onPen = (e: PointerEvent) => {
+      if (Date.now() - inkBoardAt < NOTE_PEN_GRACE_MS) return;
+      if (host && e.composedPath().includes(host)) return;
+      store.setState((s) => (s.board?.id.startsWith("ink-") ? { board: null } : {}));
+    };
+    document.addEventListener("pointerdown", onPen, true);
+    return () => document.removeEventListener("pointerdown", onPen, true);
+  }, [inkBoardAt]);
 
   // The ring goes on its own after a while; a fade first unless motion is reduced.
   useEffect(() => {

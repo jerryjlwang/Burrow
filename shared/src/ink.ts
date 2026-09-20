@@ -199,7 +199,7 @@ const MOCK_BOX: InkBox = { x: 0.248, y: 0.398, w: 0.064, h: 0.027 };
 const MOCK_MARK: InkBox = { x: 0.287, y: 0.398, w: 0.025, h: 0.026 };
 const MOCK_SPACE: InkBox = { x: 0.224, y: 0.465, w: 0.576, h: 0.452 };
 const MOCK_NUDGES = ["What happens to the 5 when it crosses the equals sign?", "Look at the sign in front of the 5 as it moves across.", "With y plus 2 equals 9 you take 2 away from both sides."];
-const MOCK_NOTE = ["A similar one:", "y + 2 = 9", "take 2 from both sides", "y = 7"];
+const MOCK_NOTE = ["Taking away:", "y + 2 = 9", "y = 9 - 2"];
 
 /**
  * Scripted verdicts for rehearsals without a key: the first line is fine, the second slips (the
