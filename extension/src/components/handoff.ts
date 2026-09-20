@@ -88,6 +88,10 @@ export const SKILLS: Record<string, string> = {
 
 /** If the other side never answers, the receiving hole closes on its own after this long. */
 const HANDOFF_TIMEOUT_MS = 12_000;
+/** The board: how long he is underground after the other screen says he is gone, before its hole opens. */
+const BOARD_TRAVEL_MS = 2_500;
+/** The board: how long his ears poke out of the hole before he pops out. */
+const BOARD_EARS_MS = 700;
 /** The notes he brought stay open beside him this long once typed. */
 const NOTES_MS = 9_000;
 /** The dirt holds a beat after the hole has closed before it lets go of the page. */
@@ -224,7 +228,7 @@ export function startHandoff(deps: Deps): () => void {
   const arrive = async (jump: Jump, alreadyGone: boolean) => {
     const pet = await petSoon();
     if (!pet) return;
-    const ready = alreadyGone
+    const goneGate = alreadyGone
       ? Promise.resolve()
       : new Promise<void>((resolve) => {
           const timer = setTimeout(resolve, HANDOFF_TIMEOUT_MS);
@@ -233,6 +237,19 @@ export function startHandoff(deps: Deps): () => void {
             resolve();
           });
         });
+    let ready = goneGate;
+    let popDelayMs = alreadyGone ? stateMs(pet, "hole_only") : 0;
+    if (role === "board") {
+      // Nothing shows on the board until he is all the way down on the other screen. Then he is
+      // underground for a few seconds, and only then does the hole open here, his ears poke out for
+      // a beat, and he pops out. A board that loaded late counts the seconds from when he went.
+      await goneGate;
+      const sinceGone = alreadyGone ? Math.max(0, Date.now() - jump.at) : 0;
+      await new Promise((r) => setTimeout(r, Math.max(0, BOARD_TRAVEL_MS - sinceGone)));
+      if (stopped) return;
+      ready = new Promise((r) => setTimeout(r, stateMs(pet, "hole_only") + BOARD_EARS_MS));
+      popDelayMs = 0;
+    }
     // While the other side digs, dirt flies out of the hole here; it stops the moment he is on his way up.
     const reduced = deps.reducedMotion();
     const hole = holeOf(pet);
@@ -246,7 +263,7 @@ export function startHandoff(deps: Deps): () => void {
       popping = true;
       window.clearTimeout(digTimer);
       stopDig?.();
-      window.setTimeout(() => whoosh("up"), alreadyGone ? holeOpenMs : 0);
+      window.setTimeout(() => whoosh("up"), popDelayMs);
     });
     await pet.jumpIn(ready);
     resumeEngine();

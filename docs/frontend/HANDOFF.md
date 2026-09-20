@@ -49,6 +49,6 @@ Sending him back is the same in reverse: the parent page leaves through the tunn
 
 A third role, `board`, is any page on `excalidraw.com`: the window the tablet watcher opens with Alt+Shift+D. The background writes the jump records for it, the pages react exactly as for kid and parent:
 
-- On open: `{ to: "board", from: "kid", stage: "requested" }`. The visible kid page dives and writes `gone`; the board page starts hidden and pops out on `gone` (12 s at most). A board opened by hand with no jump in flight pops him out after 400 ms.
+- On open: `{ to: "board", from: "kid", stage: "requested" }`. The visible kid page dives and writes `gone`. The board page starts hidden and shows nothing until `gone` lands (12 s at most); he is then underground for 2.5 s, and only then does the board's hole open, his ears poke out for 0.7 s, and he pops out. A board that loaded late counts the 2.5 s from `gone.at`. A board opened by hand with no jump in flight pops him out after 400 ms.
 - On stop: `{ to: "kid", from: "board", stage: "requested" }` when the board window is still open (it dives first), or `stage: "gone"` when it was closed (nothing left to dive).
 - While a jump to another role is `gone` or `arrived`, a page that loads keeps him in the hole and pauses its proactive engine; the engine resumes when he lands. Jump records carry `from` so the arrival line can differ ("I am back on the page." after the board).
