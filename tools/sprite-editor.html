@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Wonderland OS: rabbit pixel editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Besley:wght@500;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#e8eee9;--panel:#f7faf6;--line:#c2cfc6;--text:#1f2a2b;--soft:#4d5f5a;--accent:#2f8f83;--accent-ink:#fff;--warn:#a5442f;
+  --display:"Besley",Georgia,"Times New Roman",serif;--ui:"Work Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#10181a;--panel:#182226;--line:#2c3c40;--text:#ecf2ef;--soft:#a2b3ae;--accent:#5cc0b3;--accent-ink:#0c1d1b;--warn:#f08a6e;}}
+:root[data-theme="dark"]{--bg:#10181a;--panel:#182226;--line:#2c3c40;--text:#ecf2ef;--soft:#a2b3ae;--accent:#5cc0b3;--accent-ink:#0c1d1b;--warn:#f08a6e;}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--ui);font-size:15px;line-height:1.45}
+main{max-width:1240px;margin:0 auto;padding:22px 16px 56px}
+h1{font-family:var(--display);font-weight:700;font-size:1.7rem;margin:0 0 4px}
+.sub{color:var(--soft);margin:0 0 16px;max-width:75ch}
+.app{display:grid;grid-template-columns:200px minmax(0,1fr) 300px;gap:16px;align-items:start}
+.col{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px}
+h2{font-family:var(--display);font-weight:500;font-size:1rem;margin:14px 0 8px}
+h2:first-child{margin-top:0}
+button,select,.filebtn{font:500 .86rem var(--ui);color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:6px 9px;cursor:pointer}
+button:hover,.filebtn:hover{border-color:var(--soft)}
+button:focus-visible,select:focus-visible,.filebtn:focus-within{outline:3px solid var(--accent);outline-offset:1px}
+button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button:disabled{opacity:.45;cursor:default}
+.tools{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.tools button{text-align:left}
+kbd{font:500 .72rem var(--ui);opacity:.7;margin-left:4px}
+.sw{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.sw button{padding:0;height:24px;border-radius:3px}
+.sw button[aria-pressed="true"]{outline:3px solid var(--accent);outline-offset:1px}
+.cur{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:.84rem;color:var(--soft)}
+.cur i{display:block;width:26px;height:26px;border:1px solid var(--line);border-radius:3px}
+input[type=color]{width:34px;height:28px;padding:0;border:1px solid var(--line);border-radius:3px;background:none}
+.stagewrap{overflow:auto;max-width:100%;border-radius:6px;border:1px solid var(--line);background:var(--panel);padding:10px;display:flex;justify-content:center}
+#stage{image-rendering:pixelated;touch-action:none;cursor:crosshair;display:block}
+.bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px}
+.bar .sp{flex:1}
+.info{font-size:.82rem;color:var(--soft);min-height:1.3em;margin-top:8px}
+#note{color:var(--accent);font-weight:500}
+.states{display:flex;flex-wrap:wrap;gap:5px}
+.frames{display:flex;flex-wrap:wrap;gap:6px}
+.frames button{padding:3px;line-height:0;background:var(--bg)}
+.frames canvas{image-rendering:pixelated;width:48px;height:58px;display:block}
+label.opt{display:flex;gap:7px;align-items:flex-start;font-size:.84rem;color:var(--soft);margin:5px 0}
+.scope{width:100%;margin-top:4px}
+.hint{font-size:.78rem;color:var(--soft);margin:6px 0 0}
+.danger{color:var(--warn);border-color:var(--warn)}
+#prev{image-rendering:pixelated;border:1px solid var(--line);border-radius:4px;display:block;margin-top:4px}
+.filebtn{display:inline-block}.filebtn input{position:absolute;opacity:0;width:1px;height:1px}
+@media (max-width:1020px){.app{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Rabbit pixel editor</h1>
+  <p class="sub">All 55 frames of the White Rabbit, ready to fix. Works with a mouse, a finger, or a pen, and the eraser end of a Surface pen erases. Your edits save in this browser as you go.</p>
+  <div class="app">
+    <div class="col">
+      <h2>Tools</h2>
+      <div class="tools" id="tools">
+        <button data-tool="pencil" aria-pressed="true">Pencil<kbd>B</kbd></button>
+        <button data-tool="eraser" aria-pressed="false">Eraser<kbd>E</kbd></button>
+        <button data-tool="fill" aria-pressed="false">Fill<kbd>G</kbd></button>
+        <button data-tool="pick" aria-pressed="false">Pick<kbd>I</kbd></button>
+      </div>
+      <div class="tools" style="margin-top:6px">
+        <button id="undo">Undo<kbd>Z</kbd></button><button id="redo">Redo<kbd>Y</kbd></button>
+      </div>
+      <h2>Colors</h2>
+      <div class="sw" id="sw"></div>
+      <div class="cur"><i id="curSw"></i><span id="curName">Outline</span><span class="sp" style="flex:1"></span><input type="color" id="custom" aria-label="Custom color" value="#3b2a23"></div>
+      <h2>Helpers</h2>
+      <label class="opt"><input type="checkbox" id="mirror"> Mirror left and right <kbd>M</kbd></label>
+      <label class="opt"><input type="checkbox" id="onion"> Ghost of previous frame <kbd>O</kbd></label>
+      <label class="opt"><input type="checkbox" id="grid" checked> Pixel grid</label>
+      <button id="rim" style="margin-top:6px;width:100%">Rebuild the sticker rim</button>
+      <p class="hint">Changed the outline? This redraws the cream rim around the new shape, on whatever "Paint on" is set to.</p>
+      <h2>Paint on</h2>
+      <select id="scope" class="scope" aria-label="Which frames a stroke changes">
+        <option value="one">This frame only</option>
+        <option value="state">Every frame in this state</option>
+        <option value="all">Every frame in every state</option>
+      </select>
+      <p class="hint">Use the wider options to fix the base drawing once, like the head shape or the jacket. Strokes follow each frame's hop or breath so they land in the right place. Fill and the two overlay strips always stay on one frame.</p>
+    </div>
+
+    <div>
+      <div class="bar">
+        <span>Zoom</span><select id="zoom" aria-label="Zoom"><option>8</option><option selected>10</option><option>12</option><option>14</option></select>
+        <span>Backdrop</span><select id="back" aria-label="Backdrop"><option value="check">Checker</option><option value="#dfe6ee">Light page</option><option value="#181c26">Dark page</option><option value="#7fae8a">Green</option></select>
+        <span class="sp"></span>
+        <button id="prevF" aria-label="Previous frame">&#9664;<kbd>[</kbd></button><span id="fLabel">idle 1 of 4</span><button id="nextF" aria-label="Next frame">&#9654;<kbd>]</kbd></button>
+      </div>
+      <div class="stagewrap"><canvas id="stage" width="480" height="580"></canvas></div>
+      <div class="info"><span id="pos">Hover the canvas to see pixel positions.</span> <span id="note"></span></div>
+    </div>
+
+    <div class="col">
+      <h2>State</h2>
+      <div class="states" id="states"></div>
+      <h2>Frames</h2>
+      <div class="frames" id="frames"></div>
+      <div class="bar" style="margin-top:8px"><button id="copyF">Copy frame</button><button id="pasteF" disabled>Paste over this frame</button></div>
+      <h2>Preview</h2>
+      <canvas id="prev" width="144" height="174"></canvas>
+      <h2>Save your work</h2>
+      <div class="bar"><button id="saveStrip">Save this strip as PNG</button><button id="saveAll">Save everything as ZIP</button></div>
+      <div class="bar"><label class="filebtn">Load a PNG strip into this state<input type="file" id="load" accept="image/png"></label></div>
+      <p class="hint">Strips keep their original file names, so you can drop them straight over the ones in your repo. A loaded strip must have the same number of 48 by 58 frames.</p>
+      <div class="bar" style="margin-top:12px"><button id="resetS" class="danger">Reset this state</button><button id="resetAll" class="danger">Reset everything</button></div>
+    </div>
+  </div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+const W=48,H=58,KEY="wonderland-rabbit-v3-edits";
+const DATA={"states": {"idle": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAAA6CAYAAADm1VZ4AAAFZUlEQVR4nO2dT2gcVRzHvyse4iHHCsEKYrqHZP2zZK0eMgUxXlIohUAPHlK0IJKb98Ieeug5t+BFinvoISCWHnJRKXQQbM0SW5c9RKxoZLVeggpZcnketm86Mzu7mXnzfjPv1/l9IGR29jezn8m+7/x5+2YDCIIgCIIxajhQajhQVPXUmPi4tg2CGc/nXYEaDpS35AXTtZm5ms16akx8XNwGAEjrkbWeGrb+ajhQy4vzSh0fKnV8OJqeslfMWk+NiY+r25DWI2s9NWz94w3hpAaRtd41fw7b8KzvgCj8n8uzsObozj0c3blHVk+NiU/Z26BPw/y93WCev7cLb8nDpB1QlnpqXPG3EgChXKq2A7LpLwFISXgPpP/4L7z7NrxmC37XL/+CTDBCAiBUGgmAUGkkAEKlkQAIlUYCIFQaCYBQaXKPBQJG3YFxpn04kVRfJtz9BXOsBCCOHijGFW7+3ANcpr/1AIQ/quYId3+AX4DjFOlvFICkcRmm+Hu78JqtQocVc/c/yYczRftnvgi22Xg0RQ7K4u4PEAS44AFxLvlnCgBF49EU8UZw9wf4B9g1f+kGZQT3ALvobyUAjfoKGvUVsnpquPsL5uQOQKO+gt6vPwTTtuup4e4P8A9wmf52jgCvvEVaTw1nf+4BLttfrgGeATgHGCjXP3cAevvfJE7bqqeGu7+QD+MADG/dxvDWbQCjhpDUGB5vdvB4szM2P1wfXk+RcPcPuyRN26qnpmx/46EQMxcvJM73mq2gm2vtxiYAwP90fey5k9ZDDXd/HbqZixcmNgQd3hef+GvC9eH1FIkr/iRjgbxmazTd+xkA4DXOBM+5Dhd/7gF2xT9TAGozczU1HCiv2cL2l18AAOZebYzVhRtReF4Sg196AIBLa5fJv12Bu38auAR4EkX7G71Z+hM93Yg08cYUbEhMXDcaTdGNh7N/3D0pwMCTvWWoAbkSYNf8jTc2/AWx8YaUlktrlwGglD0nZ3/OAQbc8s+1wXrchen4bb/rjyRKOm3g7M85wIA7/rmPAJ12PZi3fm0fny+8Fjz+8Y+/AQBvvnQqmHel/9PYMmW+AVz9Ad4BBtzwz3VDTKddR79/gIWF00Yv3u8foNOuB6P4ij4Ec/UHotugA5k1wI+++gjr1/ZLuZnHFX+r3aB/vv8ernz97fgT//wVqQF+t/my1uDizz3ALvlb/xzgv48/nF7w6DfbL2kVzv5cAjyJMvxJvhXChH+//8SZ+2pNcMWfc4CB4v1zBaDfP4j8Bl7OtFx4evadzwpvRNz9bcLZHTD3zxyAeO9J5Bzuu2jt3aX7AIBz3bOR+bpeL9tpj3oC/K5P/kZw9w/DPcAu+JOeAsUbThpc2pO66F9UgAGa7lHX/J25BtA87RMuvmvRBi75mwR4daMHwI1/AVuEv3EAkg5DeQ5hwKjx7Gw1Io+p3gTxH5+uon/uO8Kubx9hYeF0Yl/u3aX7wWEsjK6/vn0Umb+z1cCsdxOrGz3Mejexs9Ug/6oO8a+2v3EAzl/1cf6qP7XmXPfsiYexSevxXn/DVC0V4j99PVXxd/KmeP/hA/gPH5StYYz4l0sWf+NrgPANI3nO4cLrWd3oYWfrg8hjqoFm4j++nir6Zw5AcFdVbCQlgLFurEno871Oe/RYj6gEoiMDKf744i/+EZ+U3mOEx3PnJSwavmCh7IIT/6eIf0bUcKCWF+eVOj5M/FlenFdqOIj8pKknkRV/8Z8C6f8HqM3M1dKk0NWv5xZ/+7jmb3wRHL8vk2oZKsS/XFzxz/WtEJNIuvgwWYYK8U+3DBUu+ee6CJ640gkiJstQIf7plqGCu78gCIIgCAJj/gdXOV3lUa0nMAAAAABJRU5ErkJggg==", "frames": 4, "fps": 3, "loop": true, "file": "rabbit_idle.png", "maps": [{"t": "n"}, {"t": "n"}, {"t": "b"}, {"t": "b"}]}, "listening": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJAAAAA6CAYAAABfwdAwAAAEbElEQVR4nO2dP4jTUBzHvxWHOtyoUFQQtUOt/7jzz2AE8VwURDi4wUGRAxE3d6GDw81uxcXBDjccCOLQRUW4nOCfK+ef0oMTFT2v/llEhRaXONSXJk2TJu+9X9LY3wcOkvT3Xj9pfsl7eflzAAOr3bSsdtOiiqcmSf+NOipJM1a7aRnjhj2dyeYyOuOpSbu/LZLGPdhqN61je3ZZ1p8flvXnR2c6wCtqPDVp93dJhZWJGk9F74856EeNGj8q/kpNmDgcmstLAADj4ETgYTFqfFy0Hj8DAGw6cYQknpok/TfIFuxNBgAwl5dgjBvw2wOixDPpQDqBnLQeP7OzmiKeGV60JBAzunACMUpwAjFKcAIxSnACMUpwAjFKjPy1MCD6gNqwDCAKkvTnIxDSP46VpL+WI1C/jA4aXU7DHsz+4SBpwsTtAmmF/cOjPYGc17rSCPtHQ6oP1O/CqCxJXFBl/y6q/pETSKe8IM6NwP5eVPwjJRCFvCCOjcD+/sj682k8gGJ+EsX8JFk8NUn6a0mgNG+AYn4S9Q8v7Gnd8dQk7a+cQEmvAJMseo5AOw6RxlPD/vJwH4hRQjmB6qsP+07riqeG/dWQHolu37sPAMieO+sr8u1mBQCw5doF13JnvLOeOGF/bz3k+D2c5nlQzTHteRJyUFnicRT21+tPci3MODjRma6/BQAYxd32Z8MO+xMj9oL1lUVrfWUxOJv/EZT5op64HhFmf73+Uo8UiyH1+bt3XMtzO4uueXtP6Mn85ru6a3566iLMmom4HnFmf33+0ivsfE1I74qEZXrqIgDE+uML2F+Pv9JKi0Oe7A1MZs3sSCT0cgX2V/dXPgJVSnl72YUbq7hd2GvPv/z8HQBwYOtme9lM442nTJJ7MPur+SvdUFYp5dForMlUAQBoNNZQKeUTuyGL/dX9tZ7Gfzl1EjMPHnk/+PnVFQN80vm12mD/6GgfB/p9+VJwwPuPur9SK+wfjaG5mPrr6ZVUv2hqVP2VjkCi/e22w9sjlXNOjx29Za9EXB1S9lf3j5xAvb3/RmMNhcK2zodP3LEL488BAMdrh13LRbwoWyl1TkXNmkm+Edhfrz/ps/G94mFIYk/2g/0H+w/dyxW6g2LGUGyEqIyav3QC9WtHVdpgoCNfLRdd81Qbgf290zL+ymdhs/MtFArbuu2wg4Xx53Y77ETEz863XMur5SLGjDmcvlrHmDGHarlIPkjH/mr+0gl05rqJM9fNwJjjtcMD22G/eox9+2XVQsH+wfWE9R+acSAn5utXMF+/SlpDmlHyl+4DiXtNALU22FnP6at1VMvnXfNUFyrZ31uPjH/kBMpkc5l+V4IBeMYh/BDtdaXUmRdXhAH3rQkUPz776/XXckOZKk5RZ4eN8hSY/bvE7j/o6QBxf63zL0w8iSz7k/qTvh8ok81lwmTxsL5fh/0HI92J7r0xm6oMFeyvB6WnMvzo1/mSKUMF+4crEwalTrRvpQH/sTBqGSrYP1wZhmEYhvlP+QuPU6pFSzQHqQAAAABJRU5ErkJggg==", "frames": 3, "fps": 8, "loop": false, "file": "rabbit_listening.png", "maps": [{"t": "n"}, {"t": "n"}, {"t": "n"}]}, "thinking": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAAA6CAYAAADm1VZ4AAAEyElEQVR4nO2dPYgbRxiGX5kUSnFlAiIOBB8qdEricImT4mQIuTQ2BIPBRQqbYDDBnXuDCheuUrg70qSIChcHBuPiGtsEvAQS5w7/RKgwJCE5I/80hx04cc24ELOalbR7u7MzO7s37wMHq72Z0bO392m+2Z1ZAYQQQog2YjQUYjQUtsrbhv5ucen/Vt4GxGgoOsudcLtWb9RMlrcN/emvjRgNxcrSohB7O0Ls7Yy3EyIza3nb0N8/f2O9x7TMflJZy9uG/v75yzbUOrlTIADY/eV3AMDbX35upbxt6O+WIvxl6rSx1gYAdJY7EKOhOJTRlXhI2QbNWUlyN9IDkINLqQadGqj+wVYAdbtWb9QYACSWuLShKkEwzz/YCgAA8hiYAlniIKcNVSDJXw1g9gAWOOhpg0u3NGTxZwAYxoe0ocxk9WcKRFJRhX/+JOL82QMYplZv1Ka74Cr98/jmbyQA5t2QSBqElOUGjMS0vzwJcjuv337QP0oWfys9gIy+qmLC3+WnJv3T+xsPgODBpukmC4X+binaX2sQLHMsE7LBg83wSknuxlJC/wm++2cOAJPykiJPAv1n8dk/UwDYkJcUcRLoH4+v/rwPQLyGAUC8xlgAtJuraDdXrZW3Df3d4srfSAC0m6vo//NHuG26vG3o7xaX/uZ6gA8+s1reNvR3iyt/jgGI12gHwOjmLYxu3gIA9J/cCfer2y+u9fDiWm+mrlpm84dLYTtFQv8xvvtrT4Won/omVkry7qWzsfXnlS8S+tMfsDUZ7pNP5+6vyjwV+rulSP/MM/7k3bz1Gz8DABpH2rkEhn/1AQBnTp8rZO45/aP47q91sNMHIUl7MFJaUtQfX0J/+ku0D1hddTN9IGk5c/ocADerjuhPfyBHAACTVTu6CxhcL7amP/1z9wC9bjPcd/bKE/zU+jB8/fDpSwDA0ffeCfedH/w5U8flJxD9/fbPtSCm121iMNjWaQIAMBhso9dtOluQQX/6G70M+uzrr3D+9t3ZX7x6HikD/GfybY1Bf7e48Dd+H+D/C98lF/j7X9NvaRT6u6Vo/9LMBXr92/eVfh4l/d2i65+rB5D52ySPez9TPXV74Ysfw4MoakBGf/pnDoDp0ftgsI1W6/D4l79Gy95bvg8AOL51LLJflpd1e93JMxxtnwT601/F6qMRp8XT4OKTKA76H3z/0j0bdHJTpFpPVZbQ3y1Z/bUDYF4elieHA8by8rHW8rWtk0D/2W0f/XNfBbq6votW6/Akj1O4t3w/zONUZPmr67uR/RtrbSx0ruPExT4WOtexsda2fpOG/n77awfAycsBTl4OEssc3zq2bx4X107no4911VJB/+R2fPEvzX0AleDxIwSPH7nW0Ib+bsnirz0GUFft5Mnh1HZOXOxjY+3byGtbE7XoP9uOj/6ZA0D9Bg51Vh6Ameu4cch8r9cdv5Yz+oDo1Fgbf3z60z/ik9J7BnVBQ15UUXXAYvMSHP0n0D8jYjQUK0uLQuztzP1ZWVoU8nty5U+a8lZk6U//BKx+P0Ct3qilicKyPp+e/uYpm7/2IHh6YbKtOragv1vK4p/rqRBxzBt86NSxBf3T1bFFmfxzDYJjG40R0aljC/qnq2OLqvsTQgghhFSYNzeVy0WmfcPaAAAAAElFTkSuQmCC", "frames": 4, "fps": 3, "loop": true, "file": "rabbit_thinking.png", "maps": [{"t": "n"}, {"t": "n"}, {"t": "n"}, {"t": "n"}]}, "confused": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAAA6CAYAAADm1VZ4AAAFZUlEQVR4nO2dP4gjVRzHvxGLtdhSYfEEcUmRjX+WrKfFzoG4NnsgwsEVFnfIgch29gdbWFxtt9hYmOKKBUEstlERbhD0vHDeGVIcqOhK/NMsKmzYZixyL3mTyUzevL+Tm+8HFiaTN28+7+X99r2XNzMBCCGEEG8ko2GSjIZJaA9d6B8Wm/6P28ikDMlomESdaLLdWFlr+HYwgf5hWWr/ZDRMtjfWk+TsJEnOTsbbS/SfiP5hWWr/WfllK4SJfxWGHHWu/yK8D4EA4PTr7wAAT7z2ilJ6UcCqdHdl/KvYZdep/hehHAAqUeaigmw1oBD+wv3ooA0AiDqRdhlY//oUBbBSAMiVsCidzULYakAh/GX33b0+AODooK1VBta/PosCeGEAiAziu3cWniza3LJWCFsNKJR/Y2WtMTl3L4ZKA5gH618flQAuDABZXoy7ZpHHYfHdO9YKYaMBhfQH0mUQDSnuxcpdPetfH9UANpoE25iEFGHagBbh2t81rP98VAO4MAAmmWxu5aZR6dpCUQX/2Q+iTOOpgr8Jof1VAnhhDyAymfee7ri2DCYNSD5+3ns+/OUPQGcSGdp/2et/EUpDoHmF9rV4YtqAgLD+pg1I5DG7j/Wvfu6i+ne2EFZUwDJjPxsNSAdb/sC0DD4Xklj/03yKAthJANju2nw3IBdds8/Gz/qf4r0HcDWp8VX5VZ5UqsD6z1IUwNrL2qqLGypEm1veu1f6T6mz/2NlD7AtDzxcAHk4PrOWaQ70z1Jn/1IB4EJe4ONDoH8+dfUv3QM8irSbO2g3d5ylJ8WErH8rAbDMDajd3EH/l+8n27bT+4D1r49xAIQuQN1h/Zthpwd49mWn6V1D/7CE9OccgNQa4wDoP/hy7rat9K6hf1hC+2uvBI8++xwAsPLWm7kif33YBQA89f6V1H45vZyPT+ifzccnVfHXDgCVE86K6+bjAvqr5+OCqvi7uRgu5waIZbnOhv5h8emv9XiOqBPh8NNPAABrz7WNBIY/je/XvHzpqpfrUeifpu7+RhfDiUIIVAsjpAW+Kl9Af/oLtAssP29ltiCqXL50FQC8Vr6A/vQHDAIAmN61o3sDQ9yLxxKBHrlHf/ob9wDd/eZk35UPHuDj1vOT1z/8/jcA4KWnn5zsuzb4MXNMyP9A9K+3v9ZCmCw/GBzrZAEAGAyO0d1versWXUD/MfS3/DXoH2+8jmtffJV9458/U2mA32ye1hr0D0sIf+vrAP+9+05xgp9/tX1Kq9A/LL79K3Mx3L/fvue1G7YN/cOi62/UA4jx23Qc90yp4+Tt1Vc/mhTC14SM/vQvHQCzs/fB4Bit1rnxm9+k097q3AYAXOidT+0X6cWx3f3xV2FxL3b+IdCf/jJOfyJpVlyFEP+J8qD/o+8f5DfCipguiuj/nFBI6B+Wsv7aATBvHGYyhgPG8uLXPMRrVx8C/bPbdfQ3/hboxuEpWq1z03GcxK3O7ck4Tkakv3F4mtp/dNDGanQTu3t9rEY3Uw80NfWkP/3noR0AF6/HuHg9LkxzoXd+4TguL5/ohRd11ZSgf3E+dfGvzDqATHz/HuL790JraEP/sJTx154DyHftmIzh5Hx29/o4Ong79drVhVr0z+ZTR//SASA/b12+Kg9A5nvcPMR4r7s/fi2u6APSl8a6qHz60z/lo+idQb6hwRRZVJ6wuPwKjv5T6F+SZDRMtjfWk+TsZO7f9sZ6koyGqT+V9E5k6U//Apz+PkBjZa2hEoVVfT49/e1TNX/tSfDsjcmujnEF/cNSFX+jp0LkMW/yoXOMK+ivdowrquRvNAnOzTRHROcYV9Bf7RhXLLs/IYQQQsgS8z+4szILKEUhHAAAAABJRU5ErkJggg==", "frames": 4, "fps": 4, "loop": true, "file": "rabbit_confused.png", "maps": [{"t": "n"}, {"t": "n"}, {"t": "n"}, {"t": "n"}]}, "celebrate": {"src": "data:image/png;base64,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", "frames": 6, "fps": 9, "loop": false, "file": "rabbit_celebrate.png", "maps": [{"t": "m", "dx": 0, "dy": 0, "clip": false}, {"t": "m", "dx": 0, "dy": -2, "clip": false}, {"t": "m", "dx": 0, "dy": -3, "clip": false}, {"t": "m", "dx": 0, "dy": -2, "clip": false}, {"t": "m", "dx": 0, "dy": 0, "clip": false}, {"t": "b"}]}, "wave": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAAA6CAYAAADm1VZ4AAAE1ElEQVR4nO2dv4scZRjHvysWl+JKi8Ok8bhi7/yx3BItbkJEbBIQIZDCwiABkfwNgS0sUl932Ii4RYoDIaS4RiSQQTDhljPx2EJQ0JPV2Bwq3HLNa7HM7Mzszuw7749539n5fmBhdvaZdz/zDM/O+86vBQghhBBlxHgkxHgkbMX7hm/+zL86L5uQCbaDeLq1stYyGe8bvvkz/w79xXgkdjbXhTg/FeL8dDJdUJll433DN3/m36F/VmaRVNl43/DNn/k34/+SCbmzR09w9uiJtXjf8M2f+VdHewxQF2R+JerWH64Tvua/EQWQHDgtimMRmMfn/C99AUTJD48OF8YGnS6LwDC+53+pCyCZ/Lw+44V3346nw6NDFoFB6pB/I4PgupJMPqkeH/K/1HuA1spaS4xHIuh0c2Nkds1EjTrkf6kLAJhuhHmfyQzMiB6+53/pCwCYf3itDid/lgWf82+kAOb15YpW0Ie+3yLq5M/8q2NlD+DDrk0H+rulSn/jBeB6UKML/d1Stb/SYdAyJzcWER4dItgOKu0T0n9K0/1LF4BJ+YgqNwL9Z2myf6kCsCEfUcVGoH8+TfVv9JlgQlgApNEYKYCg00XR6W7deNvQ3y0u/bULIOh0ER4dxlfymY63Df3d4tpfuwCSAxqZwU3ZeNvQ3y2u/TkGII1GuQDGDx5i/OBhYcyL3T5e7Pa127EB/eXbsYEv/sqXQqx8+EHh56n+2Ve7uburRe3Ygv5y7djCF387F8N1urh64dLMPB/6nDLQ3y1V+pe+7zI6m7f/zdcAgLXXtubGZUfoefKjX44BADdv3EI4CK0/GoP+aZrur7Sy2ZWIyFuZLJF0RFXJj6A//SOUVzj5rJfsishy88YtAKg0+RH0pz+gUQDA9K4d1RsYwkE4kXD0CBL60197D9DvbcTzPv78Z3zZfj1+/+MffwMA3nr1lXje7eFPM8u4/AWif7P9tW6I6fc2MByeqDQBABgOT9DvbTi7IYP+9Dd6GPTP99/D7W+/m/3gn79SMcDvJr/WGPR3iwt/4+cB/vv0k+KAX38z/ZVGob9bqvb35lqgf3/4zJtnxahAf7eo+mvtAaL+27Qfdyk/eM5yyenVd76IV6KqARn96V+6ALKj9+HwBO32xcmH36djH28/BQBcGVxOzY/io2X7vcmhsHAQWt8I9Kd/EquPRsyKy+DilygP+i+/v3fPBp2eFAm82Ahlob9byvorF8C8fphOHw6YyB/sbaXe29oI9J+dbqK/9lGge/tnaLcvTvtxCR5vP437cUmi+Hv7Z6n5B3tbWA3u49qdY6wG93Gwt2X9JA39m+2vXADX74a4fjcsjLkyuLywH5fXTvDGm6pqUtC/uJ2m+HtzHiBJ+PwZwufPXGsoQ3+3lPFXHgMkb1jQ6cMl27l25xgHex+l3tu6UIv+s+000b90AcT/+5S5kg/AzHHcPKL+Xr83eR9d0QekL421kXz60z/lI+k9g+yfH8uQFE0OWGwegqP/FPqXRIxHYmdzXYjz07mvnc11Icaj1Esm3oos/elfgNX/B2itrLVkqtDX59PT3zy++SsPgrM3Jttaxhb0d4sv/lpPhchj3uBDZRlb0F9uGVv45K81CM5tNEdEZRlb0F9uGVvU3Z8QQgghpMb8D0DwNMpsj0UhAAAAAElFTkSuQmCC", "frames": 4, "fps": 5, "loop": false, "file": "rabbit_wave.png", "maps": [{"t": "n"}, {"t": "n"}, {"t": "n"}, {"t": "n"}]}, "sleepy": {"src": "data:image/png;base64,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", "frames": 4, "fps": 2, "loop": true, "file": "rabbit_sleepy.png", "maps": [{"t": "n"}, {"t": "b"}, {"t": "b"}, {"t": "n"}]}, "dragged": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAAA6CAYAAABPjVypAAAD9klEQVR4nO2cP2gTURzHvycO6dBRIVhBlAwx/gmJ1cErinVpQYRCB6EtpSDSzalLIYNDZ7fgImKGDgVBHLKoFHoItjbU1pChUEUr8c9SVEjocg7xXe+Su/TuvXt/Iu8DhbuX37v7fe/b9969d5cAjNjNum036zaveFHI0nGUpbLdrNtmznS2jUTSiDNeFD2pw27W7atnz9j2/p5t7++1trv8R0SNF0VP6mhP4rBkosaLQgUdR1hFNJZX0Vhe5RYvClk6mA3QsKENkIw2QDLaAMloAySjDZCMNkAy2gDJMK0FAUDf9csdZd1mhX7xKiBLB7MB7ZBFql5HlI5YDbA21uM8nDRE6og8BpCl2DiStDbWYebMrk2dF6roiGRAnEkTZJigko7QBvBImiDSBNV0MN+GZlLDyKSGucWLQpYOJgMyqWFUP71ztuOOF4VMHXoiJhn2LujUJa7xopClQ7cAyTAZUN1+5bsdV7woZOqgmgk3n78AACRu3wpM4MfDEgDg+P1JT7k73n0cGaigg8qAbicys3lvwZOHAPyn97IufJjzi9IR61qQmc3jWt/JwM96Za1IpI7QY4CRSBpWxYKZzaO+U0V9p9o1fm5iGnMT011jyHHMbB5WxYKIV/xU0xFZMJnKLz176ilPns4A8Gm6/yD/Ne2Cx8emhF18N6rooBLtfjm1XUBYxsemAEDKxSeooINaOFlwon1wYVWsVgKS35CWrYOpBZQKKads8sE2HqfPOfvvv/4EAFw8ccwpm6l96KijQguQqYP6gUypkEKtthu1ukOttotSISX9gYxsHbHdhn67eQMzL193fvDruycG+BLXKbkgWkes84A/d6e7B3z8HOfpuCFShxKLcb/f3pPSDcUNjQ7qFkD6zYP+03/mGFTPvd1/5ZGTvOgBWbaOSAa03zXUartIpwdaH77xxq7k1gAAQ5VBTzmJJ3VLhdYtoFWxhJmgko7YX8witCccBpktIQjeOrgZQMPBZMhUyoSoRNFBZYBf/8fSdwKtpMvFjGeftwkq6GC6C1pYaiCdHjjoP12s5Nac/tMNiV9YanjKy8UM+s1FjMxW0W8uolzMCJukydRBZcDovIXReatrzFBl8ND+M+g45vkLNGlFRgUdSswD3Fhbm7C2NmWnwUxYHVRjgHutnKXvdB9nZLaKcvGOZ5/3Qp0KOiIZYCSSht8KIoCO++cgSD9bKrT2yUoi4F0S5nnxVdLB/ECGFXeC7oFKxC1oT+oI+sGK9h+ucP+FiY81yR7Swe37AUYiaYRxX/XvB/DWQTUIH/YmQVx1eKOCDuq3IoLwG3Ro6vBGFR3Ug3DgAQMSoKnDm/9Fh0aj0Wg0Ggr+AodIqSq6h8b3AAAAAElFTkSuQmCC", "frames": 2, "fps": 4, "loop": true, "file": "rabbit_dragged.png", "maps": [{"t": "m", "dx": -1, "dy": -2, "clip": false}, {"t": "m", "dx": 1, "dy": -2, "clip": false}]}, "hole_only": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJAAAAA6CAYAAABfwdAwAAAA+0lEQVR4nO3XzU3DMBQA4BT10BWYgDNS52CCTsIATMIEzIHEmQmyQm7uyZWxKIoTW3Hp952Sg5/fy3v5GwYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC6tNs6AZYL0xhqxNkdHhfPwb5GAv9BaTPWXPSl8hxPL69N4pbU1mSArjVji4v+lzTP0maka1vXFffKc/z6/qwSP48b95tTV/UBCtMYrjUjTGPoZYjyPEubka5tWVeaZ62ByeVx435z6npokhF3o9ld8+tmnTx9ojWvsPePt8vxrb/Cnp+OP85jbXPq6qqhW7rnj+j0ZhiGstoM0A3r4TceVjkDhuBzVXxGlQUAAAAASUVORK5CYII=", "frames": 3, "fps": 10, "loop": false, "file": "rabbit_hole_only.png", "maps": [{"t": "n"}, {"t": "n"}, {"t": "n"}]}, "hole_open": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJAAAAA6CAYAAABfwdAwAAAEzklEQVR4nO2cO4gUSRjH/ysX7LlsYKCwuILcOcg4PtdTg2tFXBMFFQQDQUUEETNjFyYw2Piy5ZILHGGDhYM7g01URFvB1/gcRlF0uZtzfASKrx1M2qCtnn4/6qvq3rn9flF3TXXNr6e+7uquxwAMwzA9jdVpW1anbenKrxv2l+cHagFWp20ZI4az3dc/1Kcyv27Yv0B/q9O2fl31s2V9fW9ZX9/b2zGRnTW/bti/QH+/TJJU1vzs3xv+C2inYTN7+SZmL9/Ull837C+PkgBi5i8cQAwJDiCGBAcQQ4IDiCHBAcSQ4ABiSHAAMSTIY2EA8OP2zYG0uN7NsPxFwv7yKAkgP2Kwrldh//QoDyDz3h3VReYK+2dD6hlITAlQIWveuwNjxIi95aqG/btQ/TMHkEp5QZ6VwP5BKP6ZAkiHvCCPSmD/aGT9+TWeIaEkgCqlUVRKo9ry64b95SEHUKU0isbMbWdbdX7dsD8NNXeg5b9oza8b9peHn4EYEuQAajy9GLqtKr9u2J+GdE9056/zAID+fXsiRd78VgMALDl12JPuzu8uJ0/YP1iOdqKWhgSWibi2A+uQko7V3I/C/mr9tYyFGes32tuNZwAAo7LC+Wyuw/6aEVfBy8fXrJePr8VH83fiIl+Uk9cCPfZX6y+1Llp0qU/9edaTPvRTxbPvXAm+yG8/b3j2D+w/ArNuIq912uyvzl/6hN2L9P0nkpYD+48AQK4/voD91fiTTlrc8mQnMJl105Yo6B8i2J/uT74D1aolJ+3wmaf4o7za2b//31sAwLqli520Y81HgWOKvILZn+ZPmlBWq5bQbLZkigAANJst1KqlwiZksT/dX+lr/KudO3DswqXgBx9ee/IA/6r8WmWwf3aU9wN9On40PsOLf1R/pVLYPxtzZjD1440TuTYDqpmv/qQ7kGh/u+3wskzHubcHt/zunEReD6TsT/fPHED+p/9ms4Vyedj+8Lo379WRWwCArfVNnnSRXxxbq9qvombd1F4J7K/WX8vCQoFfPA1FXMlRsH+yv9YAkqHbKWbMiUrIynzzlw6gsHaU0gYDtvz0RMWzr6sS2D+4LeNPfgsbn5pFuTzcbYddXB255bTDbkT+8alZT/r0RAWDxiR2nWxg0JjE9ERFeycd+9P8pQNo95iJ3WNmbJ6t9U2J7XBUOcaatbJqqWD/+HLS+s+ZfiA35sMHMB8+KFpDmvnkL/0MJOaaALQ22F3OrpMNTE8c9OzrGqhk/2A5Mv6ZA6ivf6gvbCQYQKAfIgrRXteq9r4YEQa8UxN0/Pjsr9ZfyYQyKm5R9wObzldg9u9C8ZdqwpL+JcJYv9GJaCctIb94Xcyj36RX/d2Vm+SzfHibJ22mdSXRX+znMpSh/P9pXJWgrOAQ0vof2ns6dZm6/UXlCqe4YBDcfXLbs79oIDqv8BdBJ75Pa0+0f2K2n7AKSDomT5JcwiqgCH+r07bEbymcZF3SnrP4vjQXBGlVRhT+26dgpnUl8pgiVjVE8e7zwtD0RQNfIo/R5R8WQEkuMv7uYzastP984dzf43ofomWPDRUpYE6xez9LkwXYP66bPJ59/I7+u6QsImAE4tzSnFNPDfTpJOsFUcQgKTXoo6BcDBxAPYyqVqDXZgww/yO+Af6BLvcNnrLqAAAAAElFTkSuQmCC", "frames": 3, "fps": 10, "loop": false, "file": "rabbit_hole_open.png", "maps": [{"t": "n"}, {"t": "n"}, {"t": "n"}]}, "dive": {"src": "data:image/png;base64,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", "frames": 7, "fps": 12, "loop": false, "file": "rabbit_dive.png", "maps": [{"t": "m", "dx": 0, "dy": 0, "clip": true}, {"t": "m", "dx": 0, "dy": 5, "clip": true}, {"t": "m", "dx": 0, "dy": 12, "clip": true}, {"t": "m", "dx": 0, "dy": 21, "clip": true}, {"t": "m", "dx": 0, "dy": 32, "clip": true}, {"t": "m", "dx": 0, "dy": 44, "clip": true}, {"t": "m", "dx": 0, "dy": 58, "clip": true}]}, "hole_wait": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAAA6CAYAAADm1VZ4AAABzklEQVR4nO3aPW7UQBgG4AmiIKGipEYICRr+lIZFygk4ASfhAJyEE3CCFFtFJNByApekQbHSDIXlhUzWu+u1Jzaa56ns1bfjd7z65B1rQgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIA5iXUVY13FXPW5yT+tKfPfHzpArKu4eL1YHR88eHwwZn1u8su/t1hX8d3zJzFeX8Z4fdkcb+jMvvW5jZV/qjm4/xPmT8NsC9W3fm755zaH0u5/rvz3hk2jcXV6Fq5Oz7LV57ZPnjnNobT7P2b+URoA/lcagKJpAIqmAXbUvn5b/jhf/f88PDkOi5dvwvJiGaZ+nch+NABF0wAUTQNQtMFbIbrMaa/JPuSf1l3l79UAXaEOT45vnH/88GnjOGl9OnauBaX86+vTsUvKv1MDtIN3Bfv3rUgIIXz/+W1t3aOH6+vTcdvrjfVDyN+Q/7atDRDrKrYXSIO1gdZ15CZpfTpue70xdvvJf5v8fw1aA/z6fRRePH2ffHo0Wn1u8m+uz20O+Xfq7q5HWNejqq9Xz97eOP/y9XMTLvMjWP5Gyfl7TTBdxGxbrOyqDdy6q0WY/I2S8w/+fzfk+6sQE20jkL8hPxTqD850TlbkJPAIAAAAAElFTkSuQmCC", "frames": 4, "fps": 4, "loop": true, "file": "rabbit_hole_wait.png", "maps": [{"t": "m", "dx": 0, "dy": 37, "clip": true}, {"t": "m", "dx": 0, "dy": 37, "clip": true}, {"t": "m", "dx": 0, "dy": 37, "clip": true}, {"t": "m", "dx": 0, "dy": 37, "clip": true}]}, "overlay_blink": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJAAAAA6CAYAAABfwdAwAAAAtElEQVR4nO3WsQqDMBAGYC3F2TdwdxKy+viugm9Sly4u6SZtKZYSg0i/DwIZ/hzHcUOKAgAAAAAAAAAAAAAA/lSZWiAuc3wpWNWbNX/N56b/tP4vKY/hmlqg70LWPNuOnn/yAt3uddZ8bn0XimEa1/ve+dyOnn/yAp3dMI3rIgzTWJRVvWueL+Iyx7YJsW1CfP+g7ZHPLS5zfD5753M7+/wBAAAAAAAAAAAAAAAAAAAAAPjoAdQWfuIAU53xAAAAAElFTkSuQmCC", "frames": 3, "fps": 12, "loop": false, "file": "rabbit_overlay_blink.png", "maps": [{"t": "n"}, {"t": "n"}, {"t": "n"}]}, "overlay_mouth": {"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAAA6CAYAAADm1VZ4AAAA/0lEQVR4nO3WMUoDQRQG4CeIYOcFrGIVG8EyAS9i4Sk8RE6RwosE1nJhG620ygXsAjZrIQ+ShQQCE5OR76t2ppj55+0MMxEAAAAAAAAAAAAAAAAAAAAAAAAAAMAxnJUesP/+6ndOeHFVfM6SMv/07n6jv+naiKgj/zB7arr25PNPxqM+a53rWG+/vn8WzX+QA1DzD8j8D5fXG/2L1bKK/JPxqB9mT4vVsvgGKm19/zRvHxERMb29+W0foP7nJQdLeWJr1XTt1hugJs+PTxERMXuZHzXHvv6y/p5AA/8hf+03cH4Pn0ARp19/AAAAAAAAAAAAAAAAAAAAAAAAAPb1A3olZCuLJrKhAAAAAElFTkSuQmCC", "frames": 4, "fps": 0, "loop": false, "file": "rabbit_overlay_mouth.png", "maps": [{"t": "n"}, {"t": "n"}, {"t": "n"}, {"t": "n"}]}}, "palette": [["Outline", "#3b2a23"], ["Fur", "#fffaf0"], ["Fur shade", "#e6d8c5"], ["Inner ear", "#f6baba"], ["Eye", "#2a1f33"], ["Shine", "#ffffff"], ["Nose", "#e98a93"], ["Blush", "#f7aba3"], ["Mouth", "#7a3340"], ["Tongue", "#f08fa0"], ["Bow tie", "#d9534f"], ["Bow knot", "#aa383a"], ["Jacket", "#dea848"], ["Jacket check", "#b57f2c"], ["Waistcoat", "#2f8f83"], ["Waistcoat edge", "#236e65"], ["Gold", "#f2c14e"], ["Watch face", "#fffdf5"], ["Hole", "#2a1f2d"], ["Hole lip", "#5b4661"], ["Sticker rim", "#fff8e7"]], "manifest": {"character": "rabbit", "cell": [48, 58], "anchor": "bottom center, feet end at row 53", "display": "whole-number scale only, image-rendering: pixelated", "jump_sequence": {"sending": ["hole_open", "dive", "hole_only reversed"], "receiving": ["hole_only", "hole_wait (loop)", "dive reversed", "hole_open reversed", "idle"]}, "states": {"idle": {"file": "rabbit_idle.png", "frames": 4, "fps": 3, "loop": true, "notes": "Ear twitch, then a one pixel breath. head_dy tells the renderer how far to push overlays down per frame.", "head_dy": [0, 0, 1, 1]}, "listening": {"file": "rabbit_listening.png", "frames": 3, "fps": 8, "loop": false, "notes": "Ears stretch up, eyes widen. Hold the last frame while the kid talks.", "head_dy": [0, 0, 0]}, "thinking": {"file": "rabbit_thinking.png", "frames": 4, "fps": 3, "loop": true, "notes": "He glances at his watch while dots count up. Loop while the model works."}, "confused": {"file": "rabbit_confused.png", "frames": 4, "fps": 4, "loop": true, "notes": "One ear flops over and a question mark bobs."}, "celebrate": {"file": "rabbit_celebrate.png", "frames": 6, "fps": 9, "loop": false, "notes": "A hop with happy eyes and sparkles, landing with a squash. Play once."}, "wave": {"file": "rabbit_wave.png", "frames": 4, "fps": 5, "loop": false, "notes": "He waves with his ear. Use for greetings."}, "sleepy": {"file": "rabbit_sleepy.png", "frames": 4, "fps": 2, "loop": true, "notes": "Both ears flopped, eyes shut, z's rising. Bedtime and session limits."}, "dragged": {"file": "rabbit_dragged.png", "frames": 2, "fps": 4, "loop": true, "notes": "Startled and swinging while the kid drags him."}, "hole_only": {"file": "rabbit_hole_only.png", "frames": 3, "fps": 10, "loop": false, "notes": "An empty rabbit hole opening. Reverse it to close."}, "hole_open": {"file": "rabbit_hole_open.png", "frames": 3, "fps": 10, "loop": false, "notes": "The hole opens under his feet. Reverse it to close once he has popped out."}, "dive": {"file": "rabbit_dive.png", "frames": 7, "fps": 12, "loop": false, "notes": "He drops into the hole. Reverse it to pop out on the other screen."}, "hole_wait": {"file": "rabbit_hole_wait.png", "frames": 4, "fps": 4, "loop": true, "notes": "Ears poking out of the hole. Loop while the handoff completes."}, "overlay_blink": {"file": "rabbit_overlay_blink.png", "frames": 3, "fps": 12, "loop": false, "notes": "Eye patch: half, closed, half. Draw over idle, offset by head_dy."}, "overlay_mouth": {"file": "rabbit_overlay_mouth.png", "frames": 4, "fps": 0, "loop": false, "notes": "Mouth patch: 0 flat, 1 open, 2 wide, 3 smile. Pick by voice loudness. Offset by head_dy."}}}};
+const names=Object.keys(DATA.states);
+const F={},ORIG={};
+let st="idle",fi=0,tool="pencil",color=[59,42,35,255],zoom=10,back="check";
+let undoS=[],redoS=[],stroke=null,last=null,clip=null,dl=null;
+const $=id=>document.getElementById(id);
+const stage=$("stage"),sx=stage.getContext("2d"),off=document.createElement("canvas");off.width=W;off.height=H;const ox=off.getContext("2d");
+const note=t=>{$("note").textContent=t;clearTimeout(note.t);note.t=setTimeout(()=>$("note").textContent="",3500);};
+(async()=>{try{if(window.claude&&window.claude.use)dl=await window.claude.use("downloads");}catch(e){dl=null;}})();
+
+function hex(h){return [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16),255];}
+function loadStrip(src,n){return new Promise((res,rej)=>{const im=new Image();im.onload=()=>{if(im.height!==H||im.width!==W*n){rej(new Error("size"));return;}
+  const c=document.createElement("canvas");c.width=im.width;c.height=H;const x=c.getContext("2d");x.drawImage(im,0,0);
+  const out=[];for(let i=0;i<n;i++)out.push(x.getImageData(i*W,0,W,H).data);res(out);};im.onerror=()=>rej(new Error("load"));im.src=src;});}
+function stripCanvas(name){const fr=F[name];const c=document.createElement("canvas");c.width=W*fr.length;c.height=H;const x=c.getContext("2d");
+  fr.forEach((d,i)=>x.putImageData(new ImageData(new Uint8ClampedArray(d),W,H),i*W,0));return c;}
+let saveT=null;
+function autosave(){clearTimeout(saveT);saveT=setTimeout(()=>{try{const o={};names.forEach(n=>o[n]=stripCanvas(n).toDataURL("image/png"));localStorage.setItem(KEY,JSON.stringify(o));}catch(e){}},500);}
+
+function inv(map,r,c){if(map.t==="n")return [r,c];if(map.t==="b"){if(r===0)return null;return r<=41?[r-1,c]:[r,c];}return [r-map.dy,c-map.dx];}
+function fwd(map,r,c){let p;if(map.t==="n")p=[r,c];else if(map.t==="b"){if(r===41)return null;p=r<41?[r+1,c]:[r,c];}
+  else{p=[r+map.dy,c+map.dx];if(map.clip&&p[0]>=53)return null;}
+  return (p[0]<0||p[0]>=H||p[1]<0||p[1]>=W)?null:p;}
+function setPx(name,i,r,c,col){const d=F[name][i],k=(r*W+c)*4;if(d[k]===col[0]&&d[k+1]===col[1]&&d[k+2]===col[2]&&d[k+3]===col[3])return;
+  stroke.push([name,i,k,[d[k],d[k+1],d[k+2],d[k+3]],col]);d[k]=col[0];d[k+1]=col[1];d[k+2]=col[2];d[k+3]=col[3];}
+function targets(){const sc=$("scope").value;if(sc==="one"||st.startsWith("overlay"))return [[st,fi]];
+  const list=[];(sc==="state"?[st]:names.filter(n=>!n.startsWith("overlay"))).forEach(n=>F[n].forEach((_,i)=>list.push([n,i])));return list;}
+function paint(r,c){const col=tool==="eraser"?[0,0,0,0]:color;const cols=$("mirror").checked?[c,W-1-c]:[c];
+  const base0=DATA.states[st].maps[fi];
+  cols.forEach(cc=>{const b=inv(base0,r,cc);targets().forEach(([n,i])=>{if(n===st&&i===fi){setPx(n,i,r,cc,col);return;}
+    if(!b)return;const p=fwd(DATA.states[n].maps[i],b[0],b[1]);if(p)setPx(n,i,p[0],p[1],col);});});}
+function lineTo(r0,c0,r1,c1){let dx=Math.abs(c1-c0),dy=-Math.abs(r1-r0),sxs=c0<c1?1:-1,sys=r0<r1?1:-1,e=dx+dy;
+  for(;;){paint(r0,c0);if(r0===r1&&c0===c1)break;const e2=2*e;if(e2>=dy){e+=dy;c0+=sxs;}if(e2<=dx){e+=dx;r0+=sys;}}}
+function flood(r,c){const d=F[st][fi],k0=(r*W+c)*4,t=[d[k0],d[k0+1],d[k0+2],d[k0+3]],col=color;
+  if(t.every((v,i)=>v===col[i]))return;const q=[[r,c]];
+  while(q.length){const [y,x]=q.pop();if(y<0||y>=H||x<0||x>=W)continue;const k=(y*W+x)*4;
+    if(d[k]!==t[0]||d[k+1]!==t[1]||d[k+2]!==t[2]||d[k+3]!==t[3])continue;setPx(st,fi,y,x,col);q.push([y+1,x],[y-1,x],[y,x+1],[y,x-1]);}}
+function endStroke(){if(stroke&&stroke.length){undoS.push(stroke);if(undoS.length>200)undoS.shift();redoS=[];autosave();thumbs();}stroke=null;last=null;btns();}
+function apply(set,which){(which?set:set.slice().reverse()).forEach(([n,i,k,before,after])=>{const v=which?after:before,d=F[n][i];d[k]=v[0];d[k+1]=v[1];d[k+2]=v[2];d[k+3]=v[3];});autosave();thumbs();draw();}
+function rebuildRim(){if(st.startsWith("overlay")){note("Overlay patches have no rim");return;}stroke=[];const RIM=[255,248,231,255];
+  targets().forEach(([n,i])=>{const d=F[n][i];
+    for(let k=0;k<d.length;k+=4){if(d[k]===255&&d[k+1]===248&&d[k+2]===231&&d[k+3]===255){stroke.push([n,i,k,RIM,[0,0,0,0]]);d[k]=d[k+1]=d[k+2]=d[k+3]=0;}}
+    const solid=new Uint8Array(W*H);for(let p=0;p<W*H;p++)solid[p]=d[p*4+3]?1:0;
+    for(let r=0;r<H;r++)for(let c=0;c<W;c++){const p=r*W+c;if(solid[p])continue;
+      if((r>0&&solid[p-W])||(r<H-1&&solid[p+W])||(c>0&&solid[p-1])||(c<W-1&&solid[p+1])){const k=p*4;stroke.push([n,i,k,[0,0,0,0],RIM]);d[k]=255;d[k+1]=248;d[k+2]=231;d[k+3]=255;}}});
+  endStroke();draw();note("Rim rebuilt");}
+function btns(){$("undo").disabled=!undoS.length;$("redo").disabled=!redoS.length;}
+
+function draw(){const Z=zoom;stage.width=W*Z;stage.height=H*Z;sx.imageSmoothingEnabled=false;
+  if(back==="check"){for(let y=0;y<H;y+=2)for(let x=0;x<W;x+=2){sx.fillStyle=((x+y)/2)%2?"#c9d2cc":"#e3e9e4";sx.fillRect(x*Z,y*Z,2*Z,2*Z);}}
+  else{sx.fillStyle=back;sx.fillRect(0,0,W*Z,H*Z);}
+  if($("onion").checked&&F[st].length>1){const p=(fi-1+F[st].length)%F[st].length;ox.putImageData(new ImageData(new Uint8ClampedArray(F[st][p]),W,H),0,0);
+    sx.globalAlpha=.28;sx.drawImage(off,0,0,W*Z,H*Z);sx.globalAlpha=1;}
+  ox.putImageData(new ImageData(new Uint8ClampedArray(F[st][fi]),W,H),0,0);sx.drawImage(off,0,0,W*Z,H*Z);
+  if($("grid").checked){sx.lineWidth=1;sx.strokeStyle="rgba(90,110,100,.22)";sx.beginPath();
+    for(let x=1;x<W;x++){sx.moveTo(x*Z+.5,0);sx.lineTo(x*Z+.5,H*Z);}for(let y=1;y<H;y++){sx.moveTo(0,y*Z+.5);sx.lineTo(W*Z,y*Z+.5);}sx.stroke();}
+  if($("mirror").checked){sx.strokeStyle="rgba(47,143,131,.9)";sx.lineWidth=2;sx.beginPath();sx.moveTo(W*Z/2,0);sx.lineTo(W*Z/2,H*Z);sx.stroke();}
+  $("fLabel").textContent=st.replace("_"," ")+" "+(fi+1)+" of "+F[st].length;}
+function thumbs(){const box=$("frames");box.innerHTML="";F[st].forEach((d,i)=>{const b=document.createElement("button");b.setAttribute("aria-pressed",i===fi);b.setAttribute("aria-label","Frame "+(i+1));
+  const c=document.createElement("canvas");c.width=W;c.height=H;c.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(d),W,H),0,0);b.appendChild(c);
+  b.onclick=()=>{fi=i;thumbs();draw();};box.appendChild(b);});}
+function pickState(n){st=n;fi=0;[...$("states").children].forEach(b=>b.setAttribute("aria-pressed",b.dataset.n===n));thumbs();draw();}
+
+function cell(e){const r=stage.getBoundingClientRect();const c=Math.floor((e.clientX-r.left)/r.width*W),y=Math.floor((e.clientY-r.top)/r.height*H);
+  return (c<0||c>=W||y<0||y>=H)?null:[y,c];}
+stage.addEventListener("contextmenu",e=>e.preventDefault());
+stage.addEventListener("pointerdown",e=>{const p=cell(e);if(!p)return;stage.setPointerCapture(e.pointerId);
+  const erasing=(e.buttons&32)||e.button===2||e.button===5;const keep=tool;
+  if(tool==="pick"&&!erasing){const d=F[st][fi],k=(p[0]*W+p[1])*4;if(d[k+3]===0){setTool("eraser");}else{setColor([d[k],d[k+1],d[k+2],255],"Picked");setTool("pencil");}return;}
+  stroke=[];if(erasing)tool="eraser";
+  if(tool==="fill"&&!erasing){flood(p[0],p[1]);endStroke();draw();return;}
+  paint(p[0],p[1]);last=p;stage.dataset.keep=keep;draw();});
+stage.addEventListener("pointermove",e=>{const p=cell(e);$("pos").textContent=p?"Column "+p[1]+", row "+p[0]:"";
+  if(!stroke||!p||!last)return;if(p[0]!==last[0]||p[1]!==last[1]){lineTo(last[0],last[1],p[0],p[1]);last=p;draw();}});
+const up=()=>{if(stroke){if(stage.dataset.keep){tool=stage.dataset.keep;stage.dataset.keep="";}endStroke();draw();}};
+stage.addEventListener("pointerup",up);stage.addEventListener("pointercancel",up);
+
+function setTool(t){tool=t;[...$("tools").children].forEach(b=>b.setAttribute("aria-pressed",b.dataset.tool===t));}
+function setColor(c,name){color=c;const h="#"+c.slice(0,3).map(v=>v.toString(16).padStart(2,"0")).join("");$("curSw").style.background=h;$("custom").value=h;
+  const hit=DATA.palette.find(p=>p[1]===h);$("curName").textContent=hit?hit[0]:(name||"Custom");
+  [...$("sw").children].forEach(b=>b.setAttribute("aria-pressed",b.dataset.h===h));}
+[...$("tools").children].forEach(b=>b.onclick=()=>setTool(b.dataset.tool));
+DATA.palette.forEach(([n,h])=>{const b=document.createElement("button");b.style.background=h;b.dataset.h=h;b.title=n;b.setAttribute("aria-label",n);b.setAttribute("aria-pressed","false");
+  b.onclick=()=>{setColor(hex(h));if(tool==="eraser"||tool==="pick")setTool("pencil");};$("sw").appendChild(b);});
+$("custom").oninput=e=>{setColor(hex(e.target.value));if(tool==="eraser")setTool("pencil");};
+$("undo").onclick=()=>{const s=undoS.pop();if(s){redoS.push(s);apply(s,false);}btns();};
+$("redo").onclick=()=>{const s=redoS.pop();if(s){undoS.push(s);apply(s,true);}btns();};
+["mirror","onion","grid"].forEach(id=>$(id).onchange=draw);
+$("rim").onclick=rebuildRim;
+$("zoom").onchange=e=>{zoom=+e.target.value;draw();};$("back").onchange=e=>{back=e.target.value;draw();};
+$("prevF").onclick=()=>{fi=(fi-1+F[st].length)%F[st].length;thumbs();draw();};
+$("nextF").onclick=()=>{fi=(fi+1)%F[st].length;thumbs();draw();};
+$("copyF").onclick=()=>{clip=new Uint8ClampedArray(F[st][fi]);$("pasteF").disabled=false;note("Frame copied");};
+$("pasteF").onclick=()=>{if(!clip)return;stroke=[];const d=F[st][fi];for(let k=0;k<d.length;k+=4){const a=[clip[k],clip[k+1],clip[k+2],clip[k+3]];
+  if(d[k]!==a[0]||d[k+1]!==a[1]||d[k+2]!==a[2]||d[k+3]!==a[3]){stroke.push([st,fi,k,[d[k],d[k+1],d[k+2],d[k+3]],a]);d[k]=a[0];d[k+1]=a[1];d[k+2]=a[2];d[k+3]=a[3];}}
+  endStroke();draw();note("Pasted");};
+document.addEventListener("keydown",e=>{if(e.target.tagName==="INPUT"||e.target.tagName==="SELECT")return;const k=e.key.toLowerCase();
+  if((e.ctrlKey||e.metaKey)&&k==="z"){e.preventDefault();(e.shiftKey?$("redo"):$("undo")).click();return;}
+  if((e.ctrlKey||e.metaKey)&&k==="y"){e.preventDefault();$("redo").click();return;}
+  if(e.ctrlKey||e.metaKey)return;
+  ({b:()=>setTool("pencil"),e:()=>setTool("eraser"),g:()=>setTool("fill"),i:()=>setTool("pick"),z:()=>$("undo").click(),y:()=>$("redo").click(),
+    m:()=>{$("mirror").checked=!$("mirror").checked;draw();},o:()=>{$("onion").checked=!$("onion").checked;draw();},"[":()=>$("prevF").click(),"]":()=>$("nextF").click()}[k]||(()=>{}))();});
+
+async function saveFile(filename,blob){if(dl){try{await dl.save({filename,data:blob});note("Saved "+filename);}
+    catch(err){note(err&&err.code==="declined"?"Save cancelled":"Can't save from this view ("+((err&&err.code)||"unavailable")+")");}return;}
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);note("Saved "+filename);}
+const toBlob=c=>new Promise(r=>c.toBlob(r,"image/png"));
+$("saveStrip").onclick=async()=>saveFile(DATA.states[st].file,await toBlob(stripCanvas(st)));
+$("saveAll").onclick=async()=>{if(!window.JSZip){note("ZIP library didn't load. Save strips one at a time.");return;}const z=new JSZip();
+  for(const n of names)z.file(DATA.states[n].file,await toBlob(stripCanvas(n)));z.file("manifest.json",JSON.stringify(DATA.manifest,null,2));
+  saveFile("wonderland-rabbit-edited.zip",await z.generateAsync({type:"blob"}));};
+$("load").onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=async()=>{try{F[st]=await loadStrip(rd.result,DATA.states[st].frames);
+    undoS=[];redoS=[];btns();fi=0;autosave();thumbs();draw();note("Loaded into "+st);}catch(err){note("That strip needs to be "+(W*DATA.states[st].frames)+" by "+H+" pixels");}};rd.readAsDataURL(f);e.target.value="";};
+function armed(btn,fn){btn.onclick=()=>{if(btn.dataset.arm){delete btn.dataset.arm;btn.textContent=btn.dataset.label;fn();return;}
+  btn.dataset.label=btn.textContent;btn.dataset.arm="1";btn.textContent="Click again to confirm";setTimeout(()=>{if(btn.dataset.arm){delete btn.dataset.arm;btn.textContent=btn.dataset.label;}},3000);};}
+armed($("resetS"),()=>{F[st]=ORIG[st].map(d=>new Uint8ClampedArray(d));undoS=[];redoS=[];btns();autosave();thumbs();draw();note("State reset");});
+armed($("resetAll"),()=>{names.forEach(n=>F[n]=ORIG[n].map(d=>new Uint8ClampedArray(d)));undoS=[];redoS=[];btns();try{localStorage.removeItem(KEY);}catch(e){}thumbs();draw();note("Everything reset");});
+
+const pv=$("prev"),px=pv.getContext("2d");let pf=0,pa=0,pl=performance.now();
+function tick(t){const dt=(t-pl)/1000;pl=t;const fps=Math.max(DATA.states[st].fps,2);pa+=dt;if(pa>=1/fps){pa=0;pf=(pf+1)%F[st].length;}
+  if(pf>=F[st].length)pf=0;px.imageSmoothingEnabled=false;px.fillStyle=back==="check"?"#dfe6ee":back;px.fillRect(0,0,144,174);
+  ox.putImageData(new ImageData(new Uint8ClampedArray(F[st][pf]),W,H),0,0);px.drawImage(off,0,0,144,174);requestAnimationFrame(tick);}
+
+(async()=>{let saved=null;try{saved=JSON.parse(localStorage.getItem(KEY)||"null");}catch(e){}
+  for(const n of names){ORIG[n]=await loadStrip(DATA.states[n].src,DATA.states[n].frames);F[n]=ORIG[n].map(d=>new Uint8ClampedArray(d));
+    if(saved&&saved[n]){try{F[n]=await loadStrip(saved[n],DATA.states[n].frames);}catch(e){}}}
+  names.forEach(n=>{const b=document.createElement("button");b.dataset.n=n;b.textContent=n.replace("_"," ");b.setAttribute("aria-pressed",n===st);b.onclick=()=>pickState(n);$("states").appendChild(b);});
+  setColor(color);btns();thumbs();draw();requestAnimationFrame(tick);if(saved)note("Picked up where you left off");})();
+</script>
+</body>
+</html>

@@ -1,0 +1,134 @@
+{
+  "character": "rabbit",
+  "cell": [
+    48,
+    58
+  ],
+  "anchor": "bottom center, feet end at row 53",
+  "display": "whole-number scale only, image-rendering: pixelated",
+  "jump_sequence": {
+    "sending": [
+      "hole_open",
+      "dive",
+      "hole_only reversed"
+    ],
+    "receiving": [
+      "hole_only",
+      "hole_wait (loop)",
+      "dive reversed",
+      "hole_open reversed",
+      "idle"
+    ]
+  },
+  "states": {
+    "idle": {
+      "file": "rabbit_idle.png",
+      "frames": 4,
+      "fps": 3,
+      "loop": true,
+      "notes": "Ear twitch, then a one pixel breath. head_dy tells the renderer how far to push overlays down per frame.",
+      "head_dy": [
+        0,
+        0,
+        1,
+        1
+      ]
+    },
+    "listening": {
+      "file": "rabbit_listening.png",
+      "frames": 3,
+      "fps": 8,
+      "loop": false,
+      "notes": "Ears stretch up, eyes widen. Hold the last frame while the kid talks.",
+      "head_dy": [
+        0,
+        0,
+        0
+      ]
+    },
+    "thinking": {
+      "file": "rabbit_thinking.png",
+      "frames": 4,
+      "fps": 3,
+      "loop": true,
+      "notes": "He glances at his watch while dots count up. Loop while the model works."
+    },
+    "confused": {
+      "file": "rabbit_confused.png",
+      "frames": 4,
+      "fps": 4,
+      "loop": true,
+      "notes": "One ear flops over and a question mark bobs."
+    },
+    "celebrate": {
+      "file": "rabbit_celebrate.png",
+      "frames": 6,
+      "fps": 9,
+      "loop": false,
+      "notes": "A hop with happy eyes and sparkles, landing with a squash. Play once."
+    },
+    "wave": {
+      "file": "rabbit_wave.png",
+      "frames": 4,
+      "fps": 5,
+      "loop": false,
+      "notes": "He waves with his ear. Use for greetings."
+    },
+    "sleepy": {
+      "file": "rabbit_sleepy.png",
+      "frames": 4,
+      "fps": 2,
+      "loop": true,
+      "notes": "Both ears flopped, eyes shut, z's rising. Bedtime and session limits."
+    },
+    "dragged": {
+      "file": "rabbit_dragged.png",
+      "frames": 2,
+      "fps": 4,
+      "loop": true,
+      "notes": "Startled and swinging while the kid drags him."
+    },
+    "hole_only": {
+      "file": "rabbit_hole_only.png",
+      "frames": 3,
+      "fps": 10,
+      "loop": false,
+      "notes": "An empty rabbit hole opening. Reverse it to close."
+    },
+    "hole_open": {
+      "file": "rabbit_hole_open.png",
+      "frames": 3,
+      "fps": 10,
+      "loop": false,
+      "notes": "The hole opens under his feet. Reverse it to close once he has popped out."
+    },
+    "dive": {
+      "file": "rabbit_dive.png",
+      "frames": 7,
+      "fps": 12,
+      "loop": false,
+      "notes": "He drops into the hole. Reverse it to pop out on the other screen."
+    },
+    "hole_wait": {
+      "file": "rabbit_hole_wait.png",
+      "frames": 4,
+      "fps": 4,
+      "loop": true,
+      "notes": "Ears poking out of the hole. Loop while the handoff completes."
+    },
+    "overlay_blink": {
+      "file": "rabbit_overlay_blink.png",
+      "frames": 3,
+      "fps": 12,
+      "loop": false,
+      "notes": "Eye patch: half, closed, half. Draw over idle, offset by head_dy."
+    },
+    "overlay_mouth": {
+      "file": "rabbit_overlay_mouth.png",
+      "frames": 4,
+      "fps": 0,
+      "loop": false,
+      "notes": "Mouth patch: 0 flat, 1 open, 2 wide, 3 smile. Pick by voice loudness. Offset by head_dy."
+    }
+  }
+}
