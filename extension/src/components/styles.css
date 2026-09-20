@@ -557,3 +557,36 @@
    own section below this one: whole pixels, 3px grid, steps() timing, cream/brown/teal/gold palette. */
 .pip-actfx { position: fixed; inset: 0; pointer-events: none; overflow: visible; }
 .pip-actfx > * { position: fixed; pointer-events: none; image-rendering: pixelated; }
+
+/* ---------- Action set pieces: watching along (actfx/video.ts) ---------- */
+/* The pieces are hand-placed pixels from extension/public/ui/actfx drawn at whole-number scales;
+   video.ts sets the url() variables on the layer and sizes everything in whole steps. */
+/* The frame dims through four Bayer tiles (4 x 4 source cells drawn at 3px), sparse to dense, never solid. */
+.pip-vfx-dim { background: none 0 0 / 12px 12px repeat; }
+.pip-vfx-dim.d1 { background-image: var(--vfx-dim-1); }
+.pip-vfx-dim.d2 { background-image: var(--vfx-dim-2); }
+.pip-vfx-dim.d3 { background-image: var(--vfx-dim-3); }
+.pip-vfx-dim.d4 { background-image: var(--vfx-dim-4); }
+/* The big pause glyph: two cream bars with 3px outlines and a bevel, lit from the top left like the frames. */
+.pip-vfx-pause { display: flex; gap: var(--gap, 12px); }
+.pip-vfx-pause > i { display: block; width: var(--bar, 18px); height: 100%; background: var(--cream); border: 3px solid var(--ink); box-shadow: inset -3px -3px 0 #e6d8c5, var(--shadow); }
+/* The corner badge, the play glyph and the "!" are single pictures stretched to their whole-number size. */
+.pip-vfx-badge, .pip-vfx-play, .pip-vfx-bang { background-repeat: no-repeat; background-size: 100% 100%; filter: drop-shadow(3px 3px 0 rgba(59, 42, 35, 0.25)); }
+.pip-vfx-badge { background-image: var(--vfx-badge); }
+.pip-vfx-play { background-image: var(--vfx-play); }
+.pip-vfx-bang { background-image: var(--vfx-bang); }
+/* His pocket watch: eight frames of 13 x 14 side by side, the hand a turn further each; one turn a
+   spin, three spins a seek (video.ts matches 0.36 s a turn). */
+.pip-vfx-watch { background: var(--vfx-watch) 0 0 / 312px 42px no-repeat; filter: drop-shadow(3px 3px 0 rgba(59, 42, 35, 0.25)); }
+.pip-vfx-watch.spin { animation: pip-vfx-spin 0.36s steps(8, end) 3; }
+@keyframes pip-vfx-spin { from { background-position: 0 0; } to { background-position: -312px 0; } }
+/* A three-frame drop into place for the badge and the watch: above, a touch below, home. */
+.drop.pip-vfx-badge, .drop.pip-vfx-watch { animation: pip-vfx-drop 0.18s steps(1, end); }
+@keyframes pip-vfx-drop { 0% { transform: translateY(-9px); } 50% { transform: translateY(3px); } 100% { transform: none; } }
+/* Six cream motes drift up the frame in twelve whole steps (video.ts sets --rise to twelve 9px or 12px
+   steps) and fade out in three steps over the last half. */
+.pip-vfx-mote { width: 9px; height: 9px; animation: pip-vfx-rise 0.96s steps(12, end) both; }
+.pip-vfx-mote.big { width: 12px; height: 12px; }
+.pip-vfx-mote > i { display: block; width: 100%; height: 100%; background: var(--cream); border: 3px solid var(--ink); animation: pip-vfx-fade 0.96s steps(3, end) both; }
+@keyframes pip-vfx-rise { from { transform: none; } to { transform: translateY(var(--rise, -108px)); } }
+@keyframes pip-vfx-fade { 0%, 50% { opacity: 1; } 100% { opacity: 0; } }
