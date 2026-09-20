@@ -58,3 +58,16 @@ Status: open. Requested 2026-09-20, from a scripted audit of 30 live replies on 
 - "Where is the sign in button?" on the algebra page said "the Sign in link is in the footer area" while pointing correctly at the header link. The words should come from the element's actual position (the page model has the rect), or not name a position at all.
 - Escape while a question is being answered cancels the answer (the universal interrupt in `extension/src/content/controller.ts`). Pressing Escape to close the panel is a natural thing to do right after asking; consider limiting the interrupt to speech and confirmations, and letting the reply land.
 
+
+## 8. Tablet watcher touched backend-lane files
+
+Status: heads-up, 2026-09-20. Micah asked for the tablet watcher end to end, so the front end crossed lanes. Please keep these when you refactor, or tell Micah what to move.
+
+- `extension/src/background/tablet.ts` (new) and `ink-trigger.ts` (new, pure rules with tests): the watcher. Wired in `background/index.ts`: three requests `tablet.open`, `tablet.stop`, `tablet.status`, the `open-tablet` command, and `initTablet(...)` at the bottom.
+- `extension/src/shared/messages.ts`: `TabletState`, the three requests, and the `ink.judgement` broadcast.
+- `extension/src/proactive/engine.ts`: `onInkJudgement`. It speaks a confident off verdict right away and uses `onOffer`, so "yes" after a nudge goes through your existing offer flow. `extension/src/content/controller.ts`: one broadcast case.
+- `server/src/api/ink.ts` (new), the `/api/ink/judge` route and `ink` in `/health` in `server/src/index.ts`, `geminiApiKey` and `inkModel` in `server/src/config.ts`, and `GEMINI_API_KEY` and `INK_MODEL` in `.env.example`.
+- `shared/src/ink.ts` (new): the judge contract, validator and mock.
+- `extension/manifest.json`: the `system.display` permission and the `open-tablet` command (Alt+Shift+D).
+
+The judge is one Gemini call per check and returns text only; the rabbit speaks through Deepgram as before. `INK_DEBUG_DIR` on the server dumps judged frames for tuning.

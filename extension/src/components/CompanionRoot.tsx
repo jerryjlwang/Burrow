@@ -84,8 +84,9 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
     petRef.current = c;
   }, []);
 
-  // Nothing going on: the pet may wander now and then.
-  const quiet = !panelOpen && !bubble && characterState === "idle" && voice.mode === "off";
+  // Nothing going on: the pet may wander now and then. A voice error counts as off: the error
+  // bubble blocks him while it is up, and a mic that never started should not freeze him after.
+  const quiet = !panelOpen && !bubble && characterState === "idle" && (voice.mode === "off" || voice.mode === "error");
 
   useEffect(() => loadKidFont(), []);
 

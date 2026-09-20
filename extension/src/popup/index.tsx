@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { getSettings, setSettings, type Settings } from "../shared/settings";
-import type { ServerHealth, VoiceState } from "../shared/messages";
+import type { ServerHealth, TabletState, VoiceState } from "../shared/messages";
 
 /* The toolbar card: his face, one status line, the actions, and the same toggles as his panel. */
 function Popup() {
@@ -10,6 +10,7 @@ function Popup() {
   const [voice, setVoice] = useState<VoiceState | null>(null);
   const [tabOk, setTabOk] = useState(true);
   const [url, setUrl] = useState("");
+  const [tablet, setTablet] = useState<TabletState | null>(null);
 
   useEffect(() => {
     void getSettings().then((s) => {
@@ -19,6 +20,10 @@ function Popup() {
     chrome.runtime.sendMessage({ type: "server.health" }, (h: ServerHealth) => setHealth(h ?? { ok: false }));
     chrome.runtime.sendMessage({ type: "voice.status" }, (v: VoiceState) => setVoice(v ?? null));
     void chrome.tabs.query({ active: true, currentWindow: true }).then(([t]) => setTabOk(!!t?.url && /^https?:|^file:/.test(t.url)));
+    const pollTablet = () => chrome.runtime.sendMessage({ type: "tablet.status" }, (t: TabletState) => setTablet(t ?? null));
+    pollTablet();
+    const timer = window.setInterval(pollTablet, 2000);
+    return () => window.clearInterval(timer);
   }, []);
 
   const update = async (patch: Partial<Settings>) => {
@@ -32,6 +37,19 @@ function Popup() {
   };
   const openTab = (u: string) => {
     void chrome.tabs.create({ url: u });
+  };
+
+  const toggleTablet = () => {
+    const msg = tablet?.watching ? { type: "tablet.stop", close: false } : { type: "tablet.open" };
+    chrome.runtime.sendMessage(msg, (t: TabletState) => setTablet(t ?? null));
+  };
+  const verdictText = (t: TabletState) => {
+    const v = t.lastVerdict;
+    if (t.error) return t.error;
+    if (!v) return t.frames ? "waiting for ink" : "starting";
+    if (v.status === "off") return `line ${v.line ?? "?"}: ${v.nudge}`;
+    if (v.status === "ok") return v.solved ? "solved" : "on track";
+    return "can't read that yet";
   };
 
   if (!settings) return null;
@@ -55,6 +73,7 @@ function Popup() {
   else if (listening) notes.push("Listening right now.");
   else if (health?.ok && !health.deepgram) notes.push("No Deepgram key on the server, so no voice.");
   if (!tabOk) notes.push("He can't run on this page. Chrome's own pages are protected.");
+  if (tablet?.watching) notes.push(`Watching the tablet (${tablet.checks} checks): ${verdictText(tablet)}`);
 
   return (
     <div className="card px-frame">
@@ -90,6 +109,9 @@ function Popup() {
             </button>
             <button className="link" onClick={() => openTab(chrome.runtime.getURL("parent.html"))}>
               Parent view
+            </button>
+            <button className="link" title="Alt+Shift+D" onClick={toggleTablet}>
+              {tablet?.watching ? "Stop watching" : "Watch the tablet"}
             </button>
           </div>
         </div>

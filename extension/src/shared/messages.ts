@@ -6,6 +6,7 @@ import type { StepPlan } from "@shared/plan";
 import type { WorkingJudgement } from "@shared/steps";
 import type { TranscriptSegment, WatchNote } from "@shared/video";
 import type { KeyChord } from "@shared/keys";
+import type { InkJudgement } from "@shared/ink";
 import type { Settings } from "./settings";
 
 /**
@@ -49,6 +50,18 @@ export interface TabSession {
   /** URL history for oscillation detection: [{url, at}] */
   urlTrail: { url: string; at: number }[];
   updatedAt: number;
+}
+
+/** What the tablet watcher is doing, for the popup. */
+export interface TabletState {
+  watching: boolean;
+  windowId: number | null;
+  contextTabId: number | null;
+  frames: number;
+  checks: number;
+  lastCheckAt: number | null;
+  lastVerdict: InkJudgement | null;
+  error?: string;
 }
 
 export type OffscreenCommand =
@@ -105,6 +118,9 @@ export type BgRequest =
   | { type: "graph.get" }
   | { type: "graph.event"; event: GraphEvent }
   | { type: "graph.clear" }
+  | { type: "tablet.open" }
+  | { type: "tablet.stop"; close?: boolean }
+  | { type: "tablet.status" }
   | { type: "ping" };
 
 export interface ServerHealth {
@@ -145,6 +161,9 @@ export type BgResponseMap = {
   "graph.get": GraphSnapshot | null;
   "graph.event": { ok: boolean };
   "graph.clear": { ok: boolean };
+  "tablet.open": TabletState;
+  "tablet.stop": TabletState;
+  "tablet.status": TabletState;
   ping: { ok: boolean; at: number };
 };
 
@@ -156,7 +175,8 @@ export type ContentBroadcast =
   | { type: "tts.level"; level: number }
   | { type: "command"; name: "toggle-companion" | "toggle-voice" }
   | { type: "ask.selection"; text: string; prompt: string }
-  | { type: "settings.changed"; settings: Settings };
+  | { type: "settings.changed"; settings: Settings }
+  | { type: "ink.judgement"; judgement: InkJudgement; reason: "ink" | "pause" };
 
 export class BgUnavailableError extends Error {
   constructor(message = "background unavailable") {

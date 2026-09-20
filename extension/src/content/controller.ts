@@ -216,6 +216,9 @@ export class CompanionController {
         case "settings.changed":
           this.applySettings(msg.settings);
           break;
+        case "ink.judgement":
+          this.engine.onInkJudgement(msg.judgement);
+          break;
       }
       sendResponse?.({ ok: true });
     });

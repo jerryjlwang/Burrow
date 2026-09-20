@@ -17,6 +17,9 @@ export interface Config {
   ttsExpressivity: number;
   sttModel: string;
   demoMode: boolean;
+  /** Gemini key for the tablet judge; without it the judge runs its scripted mock. */
+  geminiApiKey: string;
+  inkModel: string;
   /** Optional: lets look_up return actual videos instead of a YouTube search link. */
   youtubeApiKey: string;
   /** Optional: Supadata key. Lets the rabbit read along with YouTube videos; without it only pages with their own captions work. */
@@ -51,6 +54,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ttsExpressivity: num(env.DEEPGRAM_TTS_EXPRESSIVITY, 0),
     sttModel: env.DEEPGRAM_STT_MODEL || "flux-general-en",
     demoMode,
+    geminiApiKey: env.GEMINI_API_KEY || "",
+    inkModel: env.INK_MODEL || "gemini-3.8-flash",
     youtubeApiKey: env.YOUTUBE_API_KEY || "",
     transcriptApiKey: env.SUPADATA_API_KEY || "",
   };

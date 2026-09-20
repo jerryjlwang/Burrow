@@ -13,7 +13,8 @@
     "offscreen",
     "contextMenus",
     "topSites",
-    "favicon"
+    "favicon",
+    "system.display"
   ],
   "host_permissions": [
     "http://localhost:8787/*",
@@ -67,6 +68,12 @@
         "default": "Alt+Shift+V"
       },
       "description": "Start or stop voice mode"
+    },
+    "open-tablet": {
+      "suggested_key": {
+        "default": "Alt+Shift+D"
+      },
+      "description": "Open the drawing board on the tablet and watch it"
     }
   },
   "web_accessible_resources": [

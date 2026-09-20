@@ -2,6 +2,7 @@ import type { PageSummary, PendingOffer, InterventionInput } from "@shared/types
 import { validateIntervention } from "@shared/validate";
 import type { InterventionDecision } from "@shared/actions";
 import type { Misconception } from "@shared/graph";
+import type { InkJudgement } from "@shared/ink";
 import { composeMisconceptionNudge } from "@shared/nudge";
 import { suggestNext, suggestionKey, type PathKind } from "@shared/path";
 import { findAnswerInput } from "@shared/mock-agent";
@@ -20,6 +21,10 @@ import type { PageWatcher } from "../page-understanding/watcher";
 import { HOST_ID } from "../page-understanding/extract";
 
 const logger = log("proactive");
+/** Ink verdicts below this confidence only earn a glance; at or above it the rabbit speaks. */
+const INK_SPEAK_CONFIDENCE = 0.6;
+/** The same tablet issue is not nudged twice inside this window. */
+const INK_COOLDOWN_MS = 25_000;
 /** Feedback that grades an answer as right — "Draft saved" and "Signed in" are successes but not attempts. */
 const CORRECT_RE = /\b(correct|that'?s right|you got it|well done)\b/i;
 /** Path kinds offered in a quiet moment rather than in response to something the student just did. */
@@ -85,6 +90,11 @@ export class ProactiveEngine {
   /** The element holding the student's written working, for step-judge cues. */
   private workingEl: (HTMLTextAreaElement | HTMLInputElement) | null = null;
   private judgeTimer: number | null = null;
+  /** Tablet watcher: the issue last nudged and when it may repeat, whether the ink was off, and the work already cheered. */
+  private inkKey: string | null = null;
+  private inkCooldownUntil = 0;
+  private inkOff = false;
+  private inkSolved: string | null = null;
   /** What the on-screen offer is, so its outcome lands in the learner profile. */
   private activeOffer: { kind: string; key?: string } | null = null;
   /** Concepts answered wrong in this page-session (id → misses): what a finished quiz needs reconciled. */
@@ -503,6 +513,56 @@ export class ProactiveEngine {
     this.deps.onOffer({ type: "nudge", message: suggestion.message, elementId: null, at: now, goal: suggestion.goal, path });
     const st = store.getState();
     if (st.settings.ttsEnabled && st.voice.mode === "listening") void this.deps.speak(suggestion.message);
+  }
+
+  /**
+   * A verdict from the tablet watcher (the background judged a fresh frame of the kid's ink).
+   * Ink gets no glance-first ladder: a confident "off" speaks right away, because the kid is
+   * looking at the tablet, not at us, and it preempts an ambient offer that happens to be up.
+   * The same issue never repeats inside the cooldown, a shaky
+   * verdict only earns a glance, and a solved page earns one celebration.
+   */
+  onInkJudgement(j: InkJudgement): void {
+    const s = store.getState();
+    const now = Date.now();
+    if (!s.settings.proactiveEnabled) return;
+    if (j.status === "off" && j.nudge) {
+      const key = `${j.line ?? 0}:${j.issue.toLowerCase().slice(0, 60)}`;
+      if (j.confidence < INK_SPEAK_CONFIDENCE) {
+        if (!this.offerActive && s.attention === 0) {
+          store.setState({ attention: 1 });
+          if (this.cueTimer) window.clearTimeout(this.cueTimer);
+          this.cueTimer = window.setTimeout(() => store.setState((st) => (st.attention === 1 ? { attention: 0 } : {})), 3000);
+        }
+        return;
+      }
+      if (this.deps.isBusy()) return;
+      if (key === this.inkKey && now < this.inkCooldownUntil) return;
+      // A live "off track" beats whatever ambient offer is up; that one counts as dismissed.
+      if (this.offerActive) this.offerResolved("dismissed");
+      this.inkKey = key;
+      this.inkCooldownUntil = now + INK_COOLDOWN_MS;
+      this.inkOff = true;
+      logger.info("ink nudge", { line: j.line, issue: j.issue, confidence: j.confidence });
+      this.offerActive = true;
+      this.activeOffer = { kind: "ink", key };
+      store.setState({ attention: 2 });
+      this.deps.onOffer({ type: "hint", message: j.nudge, elementId: null, at: now, goal: `Help me with my work on the tablet: ${j.issue || j.nudge}` });
+      if (s.settings.ttsEnabled) void this.deps.speak(j.nudge);
+      return;
+    }
+    if (j.status !== "ok") return;
+    if (this.inkOff) {
+      this.inkOff = false;
+      this.inkKey = null;
+    }
+    if (j.solved) {
+      const key = j.lines.join("|");
+      if (key !== this.inkSolved && !this.deps.isBusy()) {
+        this.inkSolved = key;
+        this.deps.onCelebrate("Nice, that's it.");
+      }
+    }
   }
 
   evaluate(trigger: string): void {
