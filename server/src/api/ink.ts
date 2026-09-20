@@ -26,7 +26,7 @@ Reply with ONE JSON object and nothing else:
  "solved":<true only when the work ends in a correct final answer for the task>}
 Rules:
 - "off" only when you can read a specific mistake with confidence: a wrong operation, a wrong number carried over, a setup that does not match the task, a misread of the task.
-- Being slow, messy, unfinished or mid-step is "ok". Blank, unreadable or unrelated ink is "unclear".
+- Being slow, messy, unfinished or mid-step is "ok". The kid may be mid-word or mid-number on the last line: a line that could still be growing (a cut-off number, a trailing operator, an equals sign with little after it) is unfinished, never "off". Blank, unreadable or unrelated ink is "unclear".
 - Never state the answer, the corrected line, or the missing number. Name the step, like "Look again at how you moved the 5."
 - Keep the nudge under 15 words. Warm and plain. No praise words, no exclamation marks.`;
 
