@@ -281,22 +281,8 @@ export async function openTablet(contextTab?: chrome.tabs.Tab | null, opts: { sk
   }
   if (ctx && watch && ctx.windowId === watch.windowId) ctx = null; // pressed on the board itself
   if (watch) {
-    // A board is already open: bring it forward, retarget the context if the kid moved, keep watching.
-    try {
-      await chrome.windows.update(watch.windowId, { focused: true });
-    } catch {
-      /* the window is gone; onRemoved already cleared the watch */
-    }
-    if (watch && ctx?.id != null) {
-      watch.contextTabId = ctx.id;
-      watch.contextWindowId = ctx.windowId;
-      watch.context = null;
-    }
-    if (watch) {
-      startLoop();
-      await persist();
-      return tabletStatus();
-    }
+    // Pressed again while he is on the board: the trip back. The board closes and he comes home.
+    return stopTablet(true);
   }
   const display = opts.skipDisplay ? null : await pickDisplay();
   const area = display?.workArea;

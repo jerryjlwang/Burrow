@@ -25,6 +25,12 @@ export interface PetController {
   goTo(x: number, y: number): Promise<void>;
   /** Sending half of a jump. Resolves once the rabbit is gone. */
   jumpOut(): Promise<void>;
+  /** Hop off the screen through that edge (to the next screen). Resolves once he is off and hidden. */
+  slideOut(edge: "left" | "right"): Promise<void>;
+  /** Hop in from that edge to where he stands. Resolves once he has landed. */
+  slideIn(edge: "left" | "right"): Promise<void>;
+  /** Hide at once, no animation: for a page that loads while he is elsewhere. */
+  vanish(): void;
   /** Receiving half: open a hole, wait in it until `ready` settles, then pop out. */
   jumpIn(ready: Promise<unknown>): Promise<void>;
   /** Throw him with a velocity in px/s. Resolves on landing. No flight under reduced motion. */
@@ -458,6 +464,53 @@ export function SpritePet({ character = DEFAULT_CHARACTER, state, speaking = fal
       p.setHidden(true);
       setGone(true);
     };
+    const SLIDE_MS = 900;
+    const slideDistance = (edge: "left" | "right") => {
+      const r = rootRef.current?.getBoundingClientRect();
+      const w = r?.width ?? geo.bodyW;
+      return edge === "right" ? window.innerWidth - (r?.left ?? 0) + w : -((r?.left ?? 0) + w);
+    };
+    const slideOut = async (edge: "left" | "right") => {
+      const p = playerRef.current;
+      const el = rootRef.current;
+      if (!p || !el) return;
+      cancelMotion();
+      p.setState("hop");
+      if (!latest.current.reducedMotion) {
+        el.style.transition = `transform ${SLIDE_MS}ms cubic-bezier(0.5, 0, 0.9, 0.6)`;
+        el.style.transform = `translateX(${slideDistance(edge)}px)`;
+        await wait(SLIDE_MS);
+      }
+      p.setHidden(true);
+      setGone(true);
+      el.style.transition = "";
+      el.style.transform = "";
+      p.setState(latest.current.state);
+    };
+    const slideIn = async (edge: "left" | "right") => {
+      const p = playerRef.current;
+      const el = rootRef.current;
+      if (!p || !el) return;
+      cancelMotion();
+      p.setHidden(false);
+      if (!latest.current.reducedMotion) {
+        el.style.transition = "";
+        el.style.transform = `translateX(${slideDistance(edge)}px)`;
+        p.setState("hop");
+        await wait(30);
+        el.style.transition = `transform ${SLIDE_MS}ms cubic-bezier(0.1, 0.4, 0.5, 1)`;
+        el.style.transform = "translateX(0px)";
+        await wait(SLIDE_MS);
+        el.style.transition = "";
+        el.style.transform = "";
+      }
+      setGone(false);
+      p.setState(latest.current.state);
+    };
+    const vanish = () => {
+      playerRef.current?.setHidden(true);
+      setGone(true);
+    };
     const jumpIn = async (ready: Promise<unknown>) => {
       const p = playerRef.current;
       if (!p) return;
@@ -477,6 +530,9 @@ export function SpritePet({ character = DEFAULT_CHARACTER, state, speaking = fal
       play: (s) => playerRef.current?.setState(s),
       jumpOut,
       jumpIn,
+      slideOut,
+      slideIn,
+      vanish,
       moveTo,
       hopTo,
       goTo: (x, y) => {

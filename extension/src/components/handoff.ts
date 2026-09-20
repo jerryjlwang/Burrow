@@ -7,7 +7,6 @@ import type { GraphSnapshot } from "@shared/graph";
 import type { CompanionController } from "../content/controller";
 import type { PetController } from "./pet";
 import { dig, dropNotes, holeOf, journey, tunnelIn, unrollNotes, whoosh } from "./tunnel";
-import type { Journey } from "./journey";
 
 /** kid: any page the kid works on; parent: parent.html; board: the drawing board the tablet watcher opens (excalidraw, or the server's notebook page that mirrors a paper notebook through the webcam). */
 export type Role = "kid" | "parent" | "board";
@@ -91,6 +90,10 @@ export const SKILLS: Record<string, string> = {
 const HANDOFF_TIMEOUT_MS = 12_000;
 /** The board: how long he is underground after the other screen says he is gone, before its hole opens. */
 const BOARD_TRAVEL_MS = 2_500;
+/** The hop off one screen and onto the next, each way. */
+const SLIDE_MS = 900;
+/** A jump record older than this says nothing about where he is now (a board closed with the browser, a stale parent trip). */
+const STALE_JUMP_MS = 10 * 60_000;
 /** The board: how long his ears poke out of the hole before he pops out. */
 const BOARD_EARS_MS = 700;
 /** The notes he brought stay open beside him this long once typed. */
@@ -206,6 +209,18 @@ export function startHandoff(deps: Deps): () => void {
     if (!pet) return;
     say(`jump-${jump.id}`, departLine(role, jump.to), 2500);
     await new Promise((r) => setTimeout(r, 900));
+    if (jump.to === "board" || role === "board") {
+      // The tablet sits beside the laptop: no hole, he hops off the edge facing it and comes in
+      // from the facing edge over there. The trip sound starts as he leaves and its burst lands
+      // on the moment he lands over there.
+      const trip = journey();
+      await pet.slideOut(jump.to === "board" ? "right" : "left");
+      pauseEngine();
+      const gone: Jump = { ...jump, stage: "gone", at: Date.now() };
+      await storageSet(JUMP_KEY, gone);
+      trip?.emerge(BOARD_TRAVEL_MS + SLIDE_MS);
+      return;
+    }
     // The set piece: the page darkens to dirt around the hole as it opens, the whoosh falls with him
     // once the dive starts, and the notes he carries drop in after him while the hole is still open.
     const reduced = deps.reducedMotion();
@@ -214,8 +229,6 @@ export function startHandoff(deps: Deps): () => void {
     const diveAt = stateMs(pet, "hole_open");
     // To the board, the trip has its own sound: it starts as he goes under and its burst lands on
     // the moment the board pops him out (its travel, hole and ears are the same constants).
-    let trip: Journey | null = null;
-    const tripTimer = jump.to === "board" ? window.setTimeout(() => (trip = journey()), diveAt) : 0;
     const timers = [
       window.setTimeout(() => whoosh("down"), diveAt),
       window.setTimeout(() => {
@@ -228,10 +241,6 @@ export function startHandoff(deps: Deps): () => void {
     const graph = role === "kid" ? controller.session.graph.toJSON() : await storageGet<GraphSnapshot>(GRAPH_KEY);
     const gone: Jump = { ...jump, stage: "gone", at: Date.now(), summary: summarize(graph, Date.now()), graph: graph ?? undefined };
     await storageSet(JUMP_KEY, gone);
-    if (jump.to === "board") {
-      window.clearTimeout(tripTimer);
-      (trip ?? journey())?.emerge(BOARD_TRAVEL_MS + stateMs(pet, "hole_only") + BOARD_EARS_MS + 150);
-    }
     if (tunnel) window.setTimeout(() => void tunnel.out(), TUNNEL_HOLD_MS);
   };
 
@@ -249,17 +258,23 @@ export function startHandoff(deps: Deps): () => void {
         });
     let ready = goneGate;
     let popDelayMs = alreadyGone ? stateMs(pet, "hole_only") : 0;
-    if (role === "board") {
-      // Nothing shows on the board until he is all the way down on the other screen. Then he is
-      // underground for a few seconds, and only then does the hole open here, his ears poke out for
-      // a beat, and he pops out. A board that loaded late counts the seconds from when he went.
+    if (role === "board" || jump.from === "board") {
+      // A board trip: nothing shows here until he is off the other screen, then he is between
+      // screens for a moment, then he hops in from the edge that faces the screen he left.
+      // A page that loaded late counts the moment from when he went.
       await goneGate;
       const sinceGone = alreadyGone ? Math.max(0, Date.now() - jump.at) : 0;
       await new Promise((r) => setTimeout(r, Math.max(0, BOARD_TRAVEL_MS - sinceGone)));
       if (stopped) return;
-      ready = new Promise((r) => setTimeout(r, stateMs(pet, "hole_only") + BOARD_EARS_MS));
-      popDelayMs = 0;
+      await pet.slideIn(role === "board" ? "left" : "right");
+      resumeEngine();
+      waiting.delete(jump.id);
+      const latestJump = (await storageGet<Jump>(JUMP_KEY)) ?? jump;
+      if (latestJump.id === jump.id && latestJump.stage !== "arrived") await storageSet(JUMP_KEY, { ...latestJump, stage: "arrived", at: Date.now(), graph: undefined });
+      say(`arrive-${jump.id}`, role === "board" ? "Here I am. Show me your working!" : "I am back on the page.", 6000);
+      return;
     }
+
     // While the other side digs, dirt flies out of the hole here; it stops the moment he is on his way up.
     const reduced = deps.reducedMotion();
     const hole = holeOf(pet);
@@ -284,12 +299,12 @@ export function startHandoff(deps: Deps): () => void {
     const text =
       role === "parent"
         ? latest.summary ?? summarize(latest.graph, Date.now())
-        : role === "board"
+        : (role as Role) === "board"
           ? "Here I am. Show me your working!"
           : latest.from === "board"
             ? "I am back on the page."
             : "I am back! Your parent says hi.";
-    if (role === "board") {
+    if ((role as Role) === "board") {
       say(`arrive-${jump.id}`, text, 6000);
     } else {
       // He is out: a bounce, then the notes unroll beside him and what he learned types out inside.
@@ -335,12 +350,13 @@ export function startHandoff(deps: Deps): () => void {
   // On load: if he is away from this side, he should not be standing here.
   void storageGet<Jump>(JUMP_KEY).then((jump) => {
     if (!jump || stopped) return;
-    if (jump.to !== role && (jump.stage === "gone" || jump.stage === "arrived")) {
+    if (jump.to !== role && (jump.stage === "gone" || jump.stage === "arrived") && Date.now() - jump.at < STALE_JUMP_MS) {
       handled.add(`${jump.id}:requested`);
+      // He is elsewhere: this page must never show him and then hide him, so no dive, just not here.
       const tryHide = () => {
         const pet = getPet();
         if (pet) {
-          void pet.jumpOut();
+          pet.vanish();
           pauseEngine();
         } else if (!stopped) setTimeout(tryHide, 300);
       };
