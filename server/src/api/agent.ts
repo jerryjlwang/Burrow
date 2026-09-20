@@ -1,5 +1,8 @@
 import { validateDecision, validateIntervention } from "@shared/validate";
+import type { AgentDecision } from "@shared/actions";
 import type { AgentInput, AgentOutput, InterventionInput, InterventionOutput } from "@shared/types";
+import { detectProblem, hintFor } from "@shared/hints";
+import { finalAnswersFor, leakedAnswer } from "@shared/ladder";
 import type { AgentProvider } from "../agent/provider";
 import { MockProvider } from "../agent/mock";
 import { OpenAIProvider } from "../agent/openai";
@@ -37,8 +40,9 @@ export class AgentService {
           v = validateDecision(raw);
         }
         if (v.ok) {
-          logger.info("decide", { provider: this.primary.name, action: v.decision.action, elementId: v.decision.elementId, ms: Date.now() - started, utterance: input.utterance.slice(0, 80) });
-          return { decision: v.decision, provider: this.primary.name, degraded: false, latencyMs: Date.now() - started, taskType: v.decision.taskType };
+          const decision = await this.enforceNoLeak(v.decision, input);
+          logger.info("decide", { provider: this.primary.name, action: decision.action, elementId: decision.elementId, ms: Date.now() - started, utterance: input.utterance.slice(0, 80) });
+          return { decision, provider: this.primary.name, degraded: false, latencyMs: Date.now() - started, taskType: decision.taskType };
         }
         logger.warn("primary decision still invalid; falling back", { error: v.error });
       } catch (e) {
@@ -52,6 +56,32 @@ export class AgentService {
       : { action: "speak" as const, say: "I'm having trouble thinking right now. Try me again in a moment.", elementId: null, text: null, url: null, direction: null, amount: null, value: null, pendingAction: null, taskType: "chat" as const, reason: "fallback", done: true };
     logger.info("decide", { provider: "mock", action: decision.action, elementId: decision.elementId, ms: Date.now() - started, utterance: input.utterance.slice(0, 80) });
     return { decision, provider: this.primary === this.fallback ? "mock" : "mock-fallback", degraded: this.primary !== this.fallback, latencyMs: Date.now() - started, taskType: decision.taskType };
+  }
+
+  /**
+   * The leak-check pass: reject any hint that states the final answer. One corrective retry at
+   * the same rung; if the model leaks again, swap in the deterministic safe hint. Only enforced
+   * where the answer is computable (detected problems) — the ladder prompt covers the rest.
+   */
+  private async enforceNoLeak(decision: AgentDecision, input: AgentInput): Promise<AgentDecision> {
+    const problem = detectProblem(input.page);
+    const answers = finalAnswersFor(problem);
+    if (!answers.length) return decision;
+    const textOf = (d: AgentDecision) => `${d.say ?? ""}\n${d.text ?? ""}`;
+    const first = leakedAnswer(textOf(decision), answers, { utterance: input.utterance });
+    if (!first.leaked) return decision;
+    logger.warn("hint leaked the final answer; retrying once", { matched: first.matched });
+    try {
+      const raw = await this.primary.decide({ ...input, retryNote: `your reply stated or confirmed the final answer (${first.matched}) — give the same level of hint again WITHOUT revealing or confirming the final answer in any form` });
+      const v = validateDecision(raw);
+      if (v.ok && !leakedAnswer(textOf(v.decision), answers, { utterance: input.utterance }).leaked) return v.decision;
+    } catch (e) {
+      logger.warn("leak retry failed", { error: e instanceof Error ? e.message : String(e) });
+    }
+    // Backstop: keep the action but replace the words with the deterministic safe hint.
+    const safe = hintFor(problem, input.student.hintsForCurrentProblem, input.student);
+    logger.warn("leak retry still leaked; substituting deterministic hint");
+    return { ...decision, say: safe, text: decision.text ? safe : null };
   }
 
   async intervene(input: InterventionInput): Promise<InterventionOutput> {
