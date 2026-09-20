@@ -83,7 +83,8 @@ function hintDecision(input: AgentInput, opts: { fromOffer: boolean }): AgentDec
   if (target) {
     // A step-judge signal points at the exact wrong line of the working, not just the box.
     const line = input.signals.wrongStep && (target.value ?? "").includes("=") ? input.signals.wrongStep.step : null;
-    const say = line ? `Look at step ${line} again—right here. What did that move do to both sides?` : preface + hint;
+    const lineText = line ? (target.value ?? "").split("\n")[line - 1]?.trim() : undefined;
+    const say = line ? `Right here${lineText ? ` — “${truncate(lineText, 40)}”` : ""}. What did that move do to both sides?` : preface + hint;
     return d({ action: "point_to", elementId: target.id, line, say, done: true, taskType: "learning", reason: line ? "point at the wrong step" : "progressive hint" });
   }
   return d({ action: "speak", say: preface + hint, done: true, taskType: "learning", reason: "progressive hint" });
@@ -248,19 +249,22 @@ export function decideMock(input: AgentInput): AgentDecision {
 }
 
 /** Rule-based proactive decision. `level` is computed by the client; we decide message + target. */
+const ordinal = (n: number): string => (n === 1 ? "first" : n === 2 ? "second" : n === 3 ? "third" : `${n}th`);
+
 export function interveneMock(input: InterventionInput): InterventionDecision {
   const { signals, page, student } = input;
   const none: InterventionDecision = { intervene: false, confidence: 0, type: "none", message: null, elementId: null, reason: "no strong signal" };
   const answer = findAnswerInput(page);
 
   if (signals.wrongStep) {
-    // Point at WHERE, never at WHAT: the step number is safe, the mistake's content is not.
+    // Point at WHERE, never at WHAT: quoting the student's own line is safe, the fix is not.
     const working = page.elements.find((e) => (e.role === "textarea" || e.role === "textbox") && (e.value ?? "").includes("=")) ?? answer;
+    const lineText = (working?.value ?? "").split("\n")[signals.wrongStep.step - 1]?.trim();
     return {
       intervene: true,
       confidence: 0.9,
       type: "hint",
-      message: `Step ${signals.wrongStep.step} might be worth a second look. Want to check it together?`,
+      message: `That ${ordinal(signals.wrongStep.step)} line${lineText ? ` — “${truncate(lineText, 40)}”` : ""} — might be worth a second look. Want to check it together?`,
       elementId: working?.id ?? null,
       reason: "step judge found a wrong line in the working",
     };

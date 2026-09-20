@@ -3,6 +3,7 @@ import { validateIntervention } from "@shared/validate";
 import type { InterventionDecision } from "@shared/actions";
 import type { Misconception } from "@shared/graph";
 import { composeMisconceptionNudge } from "@shared/nudge";
+import { suggestNext, type PathSuggestion } from "@shared/path";
 import { interveneMock, findAnswerInput } from "@shared/mock-agent";
 import { detectProblem } from "@shared/hints";
 import { judgeWorking } from "@shared/steps";
@@ -36,6 +37,8 @@ export interface EngineDeps {
   registry: ElementRegistry;
   watcher: PageWatcher;
   getPage: () => PageSummary | null;
+  /** Re-extracts the page right now — input values change without DOM mutations, so snapshots go stale. */
+  refreshPage: () => PageSummary;
   /** True while the agent loop runs, a confirmation is pending or the character is speaking. */
   isBusy: () => boolean;
   speak: (text: string) => Promise<void>;
@@ -60,6 +63,12 @@ export class ProactiveEngine {
   private requesting = false;
   /** Misconception ids already nudged this page-session, so one belief nudges at most once. */
   private nudgedMisconceptions = new Set<string>();
+  /** Path suggestions already offered this page-session (kind:concept), so each fires once. */
+  private suggestedPaths = new Set<string>();
+  /** Most salient concepts of the current page, freshest extraction first. */
+  private currentConceptIds: string[] = [];
+  private lastJudgementWrongStep: number | null = null;
+  private suggestTimer: number | null = null;
   /** The nudge currently on screen / most recently answered, for success attribution. */
   private activeNudge: NudgeRecord | null = null;
   private lastNudge: (NudgeRecord & { outcome: "accepted" | "declined" | "dismissed" }) | null = null;
@@ -96,6 +105,7 @@ export class ProactiveEngine {
     if (this.tickTimer) window.clearInterval(this.tickTimer);
     if (this.cueTimer) window.clearTimeout(this.cueTimer);
     if (this.judgeTimer) window.clearTimeout(this.judgeTimer);
+    if (this.suggestTimer) window.clearTimeout(this.suggestTimer);
   }
 
   /** Debounced local step-judging of whatever multi-line working the student is typing. */
@@ -105,7 +115,7 @@ export class ProactiveEngine {
     if (!(target instanceof HTMLTextAreaElement) && !(target instanceof HTMLInputElement)) return;
     this.workingEl = target;
     if (this.judgeTimer) window.clearTimeout(this.judgeTimer);
-    this.judgeTimer = window.setTimeout(() => this.judgeNow(), 900);
+    this.judgeTimer = window.setTimeout(() => this.judgeNow(), 350);
   }
 
   private judgeNow(): void {
@@ -116,7 +126,26 @@ export class ProactiveEngine {
     if (!judgement.judged) return;
     this.deps.tracker.recordWorkingJudgement(judgement, Date.now());
     logger.debug("working judged", { firstWrongStep: judgement.firstWrongStep, solved: judgement.solved });
+    this.lastJudgementWrongStep = judgement.firstWrongStep;
+    this.applyConfusionCue();
     this.evaluate("working");
+  }
+
+  /**
+   * The live "that doesn't look right" face: while the judge flags a line, hold the confused cue
+   * and keep the gaze on that line (it moves as they type); drop it the moment the working checks
+   * out. Runs on every judgement (350ms after each pause in typing) — pure local, no model.
+   */
+  private applyConfusionCue(): void {
+    if (this.offerActive) return;
+    const wrong = this.lastJudgementWrongStep;
+    if (wrong !== null && this.workingEl) {
+      const rect = lineLocator(this.workingEl, wrong)?.() ?? this.workingEl.getBoundingClientRect();
+      if (this.cueTimer) window.clearTimeout(this.cueTimer);
+      store.setState({ attention: 2, lookAt: { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 } });
+    } else if (wrong === null && store.getState().attention === 2 && !this.deps.isBusy()) {
+      store.setState({ attention: 0, lookAt: null });
+    }
   }
 
   private handlePointerDown(e: PointerEvent): void {
@@ -155,6 +184,14 @@ export class ProactiveEngine {
       this.celebratedProblem = this.deps.tracker.currentProblemKey;
       this.deps.session.updateStudent({ successes: student.successes + 1, hintsForCurrentProblem: 0, recentErrors: [] });
       this.deps.onCelebrate(student.hintsForCurrentProblem > 0 ? "Nice—you got it." : null);
+      // A success is the cheapest moment to steer: suggest the next move once the cheer lands.
+      // Second attempt covers the case where the celebration is still being spoken at the first.
+      if (this.suggestTimer) window.clearTimeout(this.suggestTimer);
+      const suggest = () => this.offerPathSuggestion(["revisit", "advance"], { ignoreCooldown: true });
+      this.suggestTimer = window.setTimeout(() => {
+        suggest();
+        this.suggestTimer = window.setTimeout(suggest, 3000);
+      }, 2600);
       this.hadTrouble = false;
       this.level = 0;
       return;
@@ -211,6 +248,36 @@ export class ProactiveEngine {
     this.lastNudge = null;
   }
 
+  /**
+   * Fresh extraction landed for this page: remember its top concepts and, on arrival, check the
+   * one suggestion that's worth an interruption — an unseen prerequisite of what they're reading.
+   */
+  onConceptsExtracted(conceptIds: string[]): void {
+    this.currentConceptIds = conceptIds;
+    this.offerPathSuggestion(["prerequisite"], { ignoreCooldown: false });
+  }
+
+  /** Offer the graph's best next move, respecting the same budget as every other offer. */
+  private offerPathSuggestion(kinds: PathSuggestion["kind"][], opts: { ignoreCooldown: boolean }): void {
+    const s = store.getState();
+    const now = Date.now();
+    if (!s.settings.proactiveEnabled) return;
+    if (this.offerActive || this.deps.isBusy() || (s.panelOpen && s.busy)) return;
+    if (!opts.ignoreCooldown && now < this.deps.session.proactiveCooldownUntil) return;
+    const suggestion = suggestNext(this.deps.session.graph, { currentConceptIds: this.currentConceptIds, kinds });
+    if (!suggestion) return;
+    const key = `${suggestion.kind}:${suggestion.conceptId}`;
+    if (this.suggestedPaths.has(key)) return;
+    this.suggestedPaths.add(key);
+    logger.info("path suggestion", { kind: suggestion.kind, concept: suggestion.conceptId, reason: suggestion.reason });
+    this.offerActive = true;
+    store.setState({ attention: 2 });
+    this.deps.session.setCooldown(now + THRESHOLDS.cooldownMs);
+    this.deps.onOffer({ type: "nudge", message: suggestion.message, elementId: null, at: now, goal: suggestion.goal });
+    const st = store.getState();
+    if (st.settings.ttsEnabled && st.voice.mode === "listening") void this.deps.speak(suggestion.message);
+  }
+
   evaluate(trigger: string): void {
     const s = store.getState();
     const now = Date.now();
@@ -228,6 +295,8 @@ export class ProactiveEngine {
       this.deps.session.updateStudent({ recentErrors: [...student.recentErrors.slice(-4), signals.lastErrorText] });
     }
     store.setState({ signals, debug: { ...s.debug, proactiveLevel: level } });
+    // Keep the confused gaze pinned while the working stays wrong (cue timers may have cleared it).
+    if (signals.wrongStep && !this.offerActive && store.getState().attention !== 2) this.applyConfusionCue();
     if (level === 0) {
       this.level = 0;
       return;
@@ -291,7 +360,8 @@ export class ProactiveEngine {
   }
 
   private async requestIntervention(level: number): Promise<InterventionDecision> {
-    const page = this.deps.getPage();
+    // Fresh extraction: the cached page predates whatever typing triggered this escalation.
+    const page = this.deps.refreshPage() ?? this.deps.getPage();
     const input: InterventionInput = {
       page: page ?? ({} as PageSummary),
       signals: this.deps.tracker.snapshot(Date.now()),
