@@ -183,6 +183,57 @@ try {
   check("agent loop resumes after navigation and replies on the new page", afterNav.msgs.length >= 3 && afterNav.msgs[afterNav.msgs.length - 1].trim().length > 0, afterNav.msgs[afterNav.msgs.length - 1] ?? "");
   await page.screenshot({ path: resolve(shots, "03-after-navigation.png") });
 
+  // open_tab: "in a new tab" must create a real second tab, leaving this page untouched.
+  {
+    const before = context.pages().length;
+    await ask("Open the modules page in a new tab");
+    let opened = null;
+    for (const t0 = Date.now(); Date.now() - t0 < 10000; ) {
+      opened = context.pages().find((p) => p.url().includes("modules.html")) ?? null;
+      if (opened) break;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    check("'open X in a new tab' opens a real new tab (open_tab)", !!opened && context.pages().length > before && page.url().includes("signin.html"), opened?.url() ?? "(no new tab)");
+    if (opened) {
+      // switch_tab: from the original tab, ask to go back to the one we just opened.
+      await page.bringToFront();
+      await ask("Switch to the modules tab");
+      const focused = await (async () => {
+        for (const t0 = Date.now(); Date.now() - t0 < 10000; ) {
+          if ((await opened.evaluate(() => document.visibilityState).catch(() => "hidden")) === "visible") return true;
+          await new Promise((r) => setTimeout(r, 250));
+        }
+        return false;
+      })();
+      check("'switch to the X tab' activates that tab (switch_tab)", focused);
+      await opened.close();
+      await page.bringToFront();
+    }
+  }
+
+  // press_enter: keyboard-submit the algebra answer. Quiz UI, so the new policy gate must ask first.
+  {
+    const ap = await context.newPage();
+    await ap.goto(`http://localhost:${PORT}/demo/algebra.html`, { waitUntil: "load" });
+    await ap.locator("#pip-companion-host").waitFor({ state: "attached", timeout: 10000 });
+    await ap.evaluate(() => document.getElementById("pip-companion-host").shadowRoot.querySelector(".pip-char-btn")?.click());
+    await ap.locator(".pip-panel").waitFor({ timeout: 5000 });
+    await ap.locator(".pip-input").fill("Type 5 into the answer box");
+    await ap.locator(".pip-send").click();
+    await new Promise((r) => setTimeout(r, 1500));
+    await ap.locator(".pip-input").fill("press enter");
+    await ap.locator(".pip-send").click();
+    const gate = ap.locator(".pip-bubble.kind-confirmation");
+    await gate.waitFor({ timeout: 10000 }).catch(() => null);
+    check("press_enter on quiz UI asks before submitting", (await gate.count()) > 0, (await gate.count()) ? await gate.first().textContent() : "(no gate)");
+    if ((await gate.count()) > 0) {
+      await ap.locator(".pip-bubble.kind-confirmation .pip-btn.primary").click();
+      const graded = await ap.locator("#feedback.success.show").waitFor({ timeout: 8000 }).then(() => true).catch(() => false);
+      check("'press enter' submits the answer after consent (press_enter)", graded, graded ? await ap.locator("#feedback").textContent() : "(no submit)");
+    }
+    await ap.close();
+  }
+
   // Password field must be redacted / marked sensitive in the page model.
   const sensitive = await page.evaluate(() => new Promise((res) => setTimeout(() => res(true), 300)));
   check("password field present on sign-in page", await page.locator("#password").count() === 1 && sensitive);

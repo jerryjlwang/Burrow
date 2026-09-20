@@ -145,6 +145,10 @@ export interface AgentInput {
   demoMode?: boolean;
   /** Set on a retry after the model produced an invalid action, so it can correct itself. */
   retryNote?: string;
+  /** Other open tabs (filled by the background), so switch_tab has real targets. */
+  openTabs?: { id: number; title: string; url: string; active: boolean }[];
+  /** Results of the previous step's look_up, pre-formatted for the prompt. */
+  lookupResults?: string | null;
 }
 
 export interface AgentOutput {

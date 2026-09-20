@@ -9,11 +9,15 @@ export const ACTIONS = [
   "type",
   "clear",
   "select",
+  "press_enter",
   "scroll",
   "scroll_to",
   "navigate",
+  "open_tab",
+  "switch_tab",
   "go_back",
   "wait",
+  "look_up",
   "ask_user",
   "ask_confirmation",
   "explain",
@@ -49,6 +53,8 @@ export interface AgentDecision {
   quote: string | null;
   /** point_to/highlight on a textbox/textarea: 1-based line of its value to anchor to (e.g. a working step). */
   line: number | null;
+  /** switch_tab: the id of the tab to activate, from the OPEN TABS list. */
+  tabId: number | null;
   pendingAction: PendingAction | null;
   taskType: TaskType | null;
   reason: string;
@@ -74,6 +80,7 @@ export const DECISION_DEFAULTS: Omit<AgentDecision, "action" | "reason"> = {
   value: null,
   quote: null,
   line: null,
+  tabId: null,
   pendingAction: null,
   taskType: null,
   done: false,

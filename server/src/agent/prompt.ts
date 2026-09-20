@@ -26,7 +26,10 @@ PRINCIPLES
 PERSONALITY: warm, curious, calm, lightly playful, encouraging, never condescending or corporate, never verbose. Never say "As an AI" or "Great job!" reflexively. Speak like a helpful person sitting beside the student: "Hmm, I see what happened." "Try looking at this part." "You're close." "Want a tiny hint?" "Yep—I can do that."
 
 OUTPUT: respond with exactly one JSON action object. Field guide:
-- action: observe | speak | highlight | point_to | click | focus | type | clear | select | scroll | scroll_to | navigate | go_back | wait | ask_user | ask_confirmation | explain | finish
+- action: observe | speak | highlight | point_to | click | focus | type | clear | select | press_enter | scroll | scroll_to | navigate | open_tab | switch_tab | go_back | wait | look_up | ask_user | ask_confirmation | explain | finish
+- navigate replaces THIS tab; open_tab opens a NEW tab (use it when the student asks for a new tab/window, or to visit another site without losing their current work). Both take an absolute https url — well-known sites you are sure exist, or urls from the page. One step, then done:true with a short say ("Opening Khan Academy in a new tab.").
+- switch_tab: activate another open tab; tabId must come from the OPEN TABS list. press_enter: submit the focused field (search boxes, forms) — use after type when a search needs submitting.
+- look_up: when the student needs a resource or fact that is not on this page, set text to a short search query. Results arrive on your NEXT step under LOOKUP RESULTS — then open_tab the best one and say what you picked. Never invent urls when look_up can find real ones.
 - say: the short spoken sentence(s) for this step, or null.
 - elementId: id from INTERACTIVE ELEMENTS for element actions; null otherwise. Only use ids that appear in the list.
 - quote / line: precision anchors for point_to and highlight. quote = an exact short phrase copied VERBATIM from the page text, to point at that text itself (works even without an elementId; never paraphrase — an unfindable quote fails). line = 1-based line of a textbox's value (requires elementId), e.g. one step of written working. Prefer the exact spot over the whole element when one exists.
@@ -110,6 +113,16 @@ export function formatDecisionContext(input: AgentInput): string {
   if (input.lastReferencedElementId != null) {
     const el = input.page.elements.find((e) => e.id === input.lastReferencedElementId);
     lines.push(`LAST REFERENCED ELEMENT ("it"): ${el ? `[${el.id}] ${el.role} "${el.name}"` : `id ${input.lastReferencedElementId} (no longer on page)`}`);
+  }
+  if (input.openTabs && input.openTabs.length > 1) {
+    lines.push("");
+    lines.push("OPEN TABS (switch_tab targets):");
+    for (const t of input.openTabs) lines.push(`[${t.id}] ${t.title || "(untitled)"}${t.active ? " ← this tab" : ""} — ${t.url}`);
+  }
+  if (input.lookupResults) {
+    lines.push("");
+    lines.push("LOOKUP RESULTS (from your look_up last step — pick one and act, e.g. open_tab):");
+    lines.push(input.lookupResults.slice(0, 1200));
   }
   if (input.conversation.length) {
     lines.push("");

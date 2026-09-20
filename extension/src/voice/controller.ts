@@ -19,6 +19,9 @@ export class VoiceController {
   private callbacks: VoiceCallbacks;
   private speeches = new Map<string, { resolve: () => void; text: string }>();
   private currentSpeechId: string | null = null;
+  private lastTtsEndedAt = 0;
+  /** Recent TTS texts, for discriminating the rabbit's own voice from the student's (echo gate). */
+  private spokenRecently: { text: string; at: number }[] = [];
   private voiceErrorShown = false;
   private levelDecay: number | null = null;
 
@@ -81,6 +84,7 @@ export class VoiceController {
     // settle the previous promise locally (an explicit stop message could overtake the new speak).
     if (this.currentSpeechId) this.finishSpeech(this.currentSpeechId, "interrupted");
     this.currentSpeechId = id;
+    this.spokenRecently = [...this.spokenRecently.slice(-2), { text, at: Date.now() }];
     return new Promise<void>((resolve) => {
       this.speeches.set(id, { resolve, text });
       sendToBackground({ type: "tts.speak", id, text }, 10_000)
@@ -100,11 +104,34 @@ export class VoiceController {
     this.finishSpeech(id, "interrupted");
   }
 
+  /**
+   * Is this transcript the rabbit hearing itself? Only meaningful while TTS plays (or within a
+   * short tail after it ends). An empty start-of-turn during playback is treated as echo too —
+   * real interruption asserts itself with words within a beat.
+   */
+  private isLikelyEcho(text: string): boolean {
+    const playing = store.getState().voice.ttsPlaying || Date.now() - this.lastTtsEndedAt < 800;
+    if (!playing) return false;
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+    const t = norm(text);
+    if (!t) return true;
+    const cutoff = Date.now() - 20_000;
+    for (const s of this.spokenRecently) {
+      if (s.at < cutoff) continue;
+      const spoken = norm(s.text);
+      if (spoken.includes(t)) return true;
+      const tokens = t.split(" ");
+      if (tokens.length >= 3 && tokens.filter((w) => spoken.includes(w)).length / tokens.length >= 0.8) return true;
+    }
+    return false;
+  }
+
   private finishSpeech(id: string, state: "ended" | "error" | "interrupted", error?: string): void {
     const entry = this.speeches.get(id);
     if (!entry) return;
     this.speeches.delete(id);
     if (this.currentSpeechId === id) this.currentSpeechId = null;
+    this.lastTtsEndedAt = Date.now();
     if (state === "error" && error && !this.voiceErrorShown) {
       this.voiceErrorShown = true;
       logger.warn("tts error", { error });
@@ -140,6 +167,11 @@ export class VoiceController {
       }
       case "voice.transcript": {
         const text = msg.text.trim();
+        // Echo gate: while the rabbit speaks (or just finished), drop transcripts of its own voice
+        // picked up through the speakers — otherwise it barge-ins on itself, the echo becomes a
+        // "user" turn, and it loops saying the same thing forever. Genuinely different speech
+        // ("stop", a redirect) passes through and still interrupts.
+        if (this.isLikelyEcho(text)) return true;
         if (msg.event === "StartOfTurn" || (!msg.final && text && store.getState().interimTranscript === "")) this.callbacks.onSpeechStart?.();
         if (msg.final) {
           store.setState({ interimTranscript: "", debug: { ...store.getState().debug, lastTranscript: text } });

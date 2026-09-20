@@ -5,6 +5,7 @@ import { WebSocketServer } from "ws";
 import { loadConfig } from "./config";
 import { AgentService } from "./api/agent";
 import { ExtractService } from "./api/extract";
+import { lookUp } from "./api/lookup";
 import { attachSttSession } from "./voice/stt";
 import { attachTtsSession } from "./voice/tts";
 import { serveStatic } from "./util/static";
@@ -79,6 +80,15 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       json(res, 200, await agent.intervene({ ...input, demoMode: cfg.demoMode }));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/lookup") {
+      const body = (await readJson(req)) as { query?: string };
+      if (!body || typeof body.query !== "string" || !body.query.trim()) {
+        json(res, 400, { error: "invalid query" });
+        return;
+      }
+      json(res, 200, { ok: true, results: await lookUp(body.query) });
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/extract") {

@@ -3,7 +3,7 @@ import { ACTIONS, DECISION_DEFAULTS, INTERVENTION_TYPES, TASK_TYPES, type Action
 const ACTION_SET = new Set<string>(ACTIONS);
 const TASK_SET = new Set<string>(TASK_TYPES);
 const INTERVENTION_SET = new Set<string>(INTERVENTION_TYPES);
-const ELEMENT_ACTIONS = new Set<ActionName>(["highlight", "point_to", "click", "focus", "type", "clear", "select", "scroll_to"]);
+const ELEMENT_ACTIONS = new Set<ActionName>(["highlight", "point_to", "click", "focus", "type", "clear", "select", "press_enter", "scroll_to"]);
 /** Actions that may anchor to a sub-element target (a verbatim quote or a line of a field's value). */
 const ANCHOR_ACTIONS = new Set<ActionName>(["highlight", "point_to"]);
 
@@ -67,6 +67,7 @@ export function validateDecision(raw: unknown): DecisionValidation {
       value: optStr(raw.value, "value"),
       quote: optStr(raw.quote, "quote"),
       line: optInt(raw.line, "line"),
+      tabId: optInt(raw.tabId, "tabId"),
       pendingAction: parsePending(raw.pendingAction),
       taskType: taskType as AgentDecision["taskType"],
       reason: typeof raw.reason === "string" ? raw.reason : "",
@@ -90,7 +91,10 @@ export function validateDecision(raw: unknown): DecisionValidation {
     if (d.action === "type" && (d.text === null || d.text.length === 0)) return { ok: false, error: "type requires text" };
     if (d.action === "type" && d.text!.length > 2000) return { ok: false, error: "type text too long" };
     if (d.action === "select" && d.value === null) return { ok: false, error: "select requires value" };
-    if (d.action === "navigate" && (!d.url || !/^https?:\/\//i.test(d.url))) return { ok: false, error: "navigate requires an absolute http(s) url" };
+    if ((d.action === "navigate" || d.action === "open_tab") && (!d.url || !/^https?:\/\//i.test(d.url))) return { ok: false, error: `${d.action} requires an absolute http(s) url` };
+    if (d.action === "switch_tab" && d.tabId === null) return { ok: false, error: "switch_tab requires a tabId from the open tabs list" };
+    if (d.action === "look_up" && (!d.text || !d.text.trim())) return { ok: false, error: "look_up requires text (the query)" };
+    if (d.action === "look_up" && d.text!.length > 200) return { ok: false, error: "look_up query too long" };
     if (d.action === "scroll" && d.direction === null) return { ok: false, error: "scroll requires direction" };
     if (d.action === "ask_confirmation") {
       if (!d.pendingAction) return { ok: false, error: "ask_confirmation requires pendingAction" };

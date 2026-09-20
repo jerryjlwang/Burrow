@@ -173,7 +173,9 @@ export function decideMock(input: AgentInput): AgentDecision {
   const typeMatch = u.match(/^(?:please )?(?:type|enter|put|write|fill in|fill)\s+(.+?)\s+(?:in|into|in the|on|onto|to)\s+(?:the |my )?(.+)$/);
   if (typeMatch) {
     const [, text, fieldPhrase] = typeMatch;
-    const field = resolveTarget(input, fieldPhrase, "typeable");
+    // "the answer box" should match a field named "Your answer": drop UI furniture words and retry.
+    const bare = fieldPhrase.replace(/\b(box|field|input|bar|area)\b/g, " ").replace(/\s+/g, " ").trim();
+    const field = resolveTarget(input, fieldPhrase, "typeable") ?? (bare && bare !== fieldPhrase ? resolveTarget(input, bare, "typeable") : null);
     if (!field) return d({ action: "speak", say: `I don't see a "${truncate(fieldPhrase, 30)}" field on this page.`, done: true, taskType: "administrative" });
     if (field.sensitive) return d({ action: "point_to", elementId: field.id, say: "That's a private field—please type that one yourself.", done: true, taskType: "administrative" });
     return d({ action: "type", elementId: field.id, text: text.trim(), say: "Sure.", taskType: "administrative" });
@@ -197,6 +199,30 @@ export function decideMock(input: AgentInput): AgentDecision {
   if (/^(go|take me|head) back$/.test(u) || /^back$/.test(u)) return d({ action: "go_back", say: "Going back.", taskType: "navigation" });
 
   // ---- Clicking / navigating ----
+  // ---- Tab switching / enter (must outrank plain click/open handling) ----
+  const switchTo = /\bswitch (?:to|back to)\s+(?:the\s+)?(.+?)\s+tab\b/i.exec(utterance);
+  if (switchTo && input.openTabs?.length) {
+    const term = normalizeText(switchTo[1]);
+    const tab = input.openTabs.find((t) => !t.active && (normalizeText(t.title).includes(term) || t.url.toLowerCase().includes(term.replace(/\s+/g, ""))));
+    if (tab) return d({ action: "switch_tab", tabId: tab.id, say: `Taking you back over there.`, done: true, taskType: "navigation", reason: "switch tab by title" });
+    return d({ action: "speak", say: "I don't see that tab open right now.", done: true, taskType: "navigation" });
+  }
+  if (/\b(?:press|hit) enter\b/i.test(u) && input.lastReferencedElementId != null) {
+    return d({ action: "press_enter", elementId: input.lastReferencedElementId, say: "Done.", done: true, taskType: "administrative", reason: "enter on the referenced field" });
+  }
+
+  // ---- New tab / window (must outrank plain click/open handling) ----
+  const newTab = /\b(?:open|show|take me to)\b(.*)\bin a new (?:tab|window)\b|\bnew (?:tab|window)\b.*\b(?:for|with|of)\b(.*)/i.exec(utterance);
+  if (newTab) {
+    const what = (newTab[1] ?? newTab[2] ?? "").trim();
+    const link = what ? findBestElement(page.elements.filter((e) => e.role === "link" && !!e.href), what, {}) : null;
+    if (link?.href) {
+      const url = /^https?:\/\//i.test(link.href) ? link.href : new URL(link.href, page.url).href;
+      return d({ action: "open_tab", url, say: `Opening ${truncate(link.name, 40)} in a new tab.`, done: true, taskType: "navigation", reason: "new tab from page link" });
+    }
+    return d({ action: "speak", say: "I don't see that here to open. Which link should I use?", done: true, taskType: "navigation" });
+  }
+
   const wantsClick = /^(?:please |pip |ok |okay |yeah |yes |can you |could you |would you )*(click|press|tap|hit|open|select|choose|check|tick|pick|go to|take me to|navigate to|bring me to|start|launch|submit|turn in|send)\b/.test(u);
   if (wantsClick) {
     const urlMatch = utterance.match(/((?:https?:\/\/)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:\/\S*)?)/i);

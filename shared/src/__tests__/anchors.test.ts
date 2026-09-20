@@ -37,3 +37,23 @@ describe("decision anchor validation", () => {
     expect(v.ok).toBe(false);
   });
 });
+
+describe("switch_tab / look_up / press_enter validation", () => {
+  it("switch_tab requires a tabId; look_up requires a query; press_enter needs its element", () => {
+    expect(validateDecision({ ...base, action: "switch_tab", elementId: null, tabId: 41 }).ok).toBe(true);
+    expect(validateDecision({ ...base, action: "switch_tab", elementId: null }).ok).toBe(false);
+    expect(validateDecision({ ...base, action: "look_up", elementId: null, text: "two step equations video" }).ok).toBe(true);
+    expect(validateDecision({ ...base, action: "look_up", elementId: null, text: "  " }).ok).toBe(false);
+    expect(validateDecision({ ...base, action: "press_enter", elementId: 4 }).ok).toBe(true);
+    expect(validateDecision({ ...base, action: "press_enter", elementId: null }).ok).toBe(false);
+  });
+});
+
+describe("open_tab validation", () => {
+  it("requires an absolute http(s) url, like navigate", () => {
+    expect(validateDecision({ ...base, action: "open_tab", elementId: null, url: "https://www.khanacademy.org/" }).ok).toBe(true);
+    expect(validateDecision({ ...base, action: "open_tab", elementId: null, url: "khanacademy.org" }).ok).toBe(false);
+    expect(validateDecision({ ...base, action: "open_tab", elementId: null, url: "javascript:alert(1)" }).ok).toBe(false);
+    expect(validateDecision({ ...base, action: "open_tab", elementId: null }).ok).toBe(false);
+  });
+});
