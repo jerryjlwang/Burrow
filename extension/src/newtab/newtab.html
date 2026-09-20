@@ -59,6 +59,8 @@
       @keyframes pop { 0% { transform: translateY(-6px); } 50% { transform: translateY(-3px); } 100% { transform: translateY(0); } }
       .caret { display: none; width: 3px; height: 21px; background: var(--ink); margin-left: 2px; vertical-align: -3px; }
       .board:focus-within .caret { display: inline-block; animation: blink 1s steps(1, end) infinite; }
+      .board.demo-type .caret, .board.demo-delete .caret, .board.demo-gap .caret { display: inline-block; background: var(--muted); }
+      .board.demo-hold .caret { display: inline-block; background: var(--muted); animation: blink 1s steps(1, end) infinite; }
       @keyframes blink { 50% { opacity: 0; } }
       .legs { display: flex; justify-content: space-between; width: min(630px, calc(100% - 48px)); padding: 0 96px; margin-top: -3px; }
       .leg { width: 18px; height: 93px; background: url("scene/post.png") repeat-y; background-size: 18px 18px; image-rendering: pixelated; }
