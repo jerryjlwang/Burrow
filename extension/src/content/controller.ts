@@ -66,6 +66,13 @@ export class CompanionController {
             window.open(url, "_blank", "noopener");
           }
         },
+        switchTab: async (tabId) => {
+          await sendToBackground({ type: "nav.switch", tabId }, 3000);
+        },
+        lookup: async (query) => {
+          const r = await sendToBackground({ type: "lookup", query }, 15_000);
+          return r.results;
+        },
         goBack: async () => {
           try {
             await sendToBackground({ type: "nav.back" }, 3000);

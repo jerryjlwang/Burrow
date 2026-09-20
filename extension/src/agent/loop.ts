@@ -53,6 +53,7 @@ export class AgentLoop {
   private lastReferencedElementId: number | null = null;
   private lastReferencedElementName: string | null = null;
   private pendingScreenshot: string | null = null;
+  private pendingLookup: string | null = null;
   runCount = 0;
 
   constructor(deps: LoopDeps) {
@@ -118,11 +119,13 @@ export class AgentLoop {
           pendingOffer,
           lastReferencedElementId: this.lastReferencedElementId,
           screenshot: this.pendingScreenshot,
+          lookupResults: this.pendingLookup,
           step,
           maxSteps: maxStep,
           resumedAfterNavigation: !!opts.resume && step === (opts.resume?.step ?? 0),
         };
         this.pendingScreenshot = null;
+        this.pendingLookup = null;
 
         const output = await this.decide(input, signal);
         check();
@@ -186,6 +189,19 @@ export class AgentLoop {
         if (decision.action === "observe") {
           if (decision.text === "screenshot") this.pendingScreenshot = await this.captureScreenshot();
           history.push({ step, decision, result: { ok: true, message: "observed" }, at: Date.now() });
+          continue;
+        }
+
+        // look_up runs server-side (vetted endpoints, no user cookies); results feed the next step.
+        if (decision.action === "look_up") {
+          let result: { ok: boolean; message: string };
+          try {
+            this.pendingLookup = await this.deps.executor.lookup(decision.text!);
+            result = { ok: true, message: "results attached to your next step" };
+          } catch (e) {
+            result = { ok: false, message: `lookup failed: ${e instanceof Error ? e.message : String(e)}` };
+          }
+          history.push({ step, decision, result, at: Date.now() });
           continue;
         }
 
@@ -298,7 +314,7 @@ export class AgentLoop {
   private localDecision(input: AgentInput): AgentDecision {
     const v = validateDecision(decideMock(input));
     if (v.ok) return v.decision;
-    return { action: "speak", say: "I'm having trouble thinking right now. Try me again in a moment.", elementId: null, text: null, url: null, direction: null, amount: null, value: null, quote: null, line: null, pendingAction: null, taskType: "chat", reason: "fallback", done: true };
+    return { action: "speak", say: "I'm having trouble thinking right now. Try me again in a moment.", elementId: null, text: null, url: null, direction: null, amount: null, value: null, quote: null, line: null, tabId: null, pendingAction: null, taskType: "chat", reason: "fallback", done: true };
   }
 
   private async captureScreenshot(): Promise<string | null> {

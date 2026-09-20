@@ -46,6 +46,10 @@ export function requiresConfirmation(decision: AgentDecision, ctx: PolicyContext
       return { required: true, reason: "form submission", message: `This looks like it sends the form. Want me to go ahead?` };
     }
   }
+  if (decision.action === "press_enter" && page?.hasQuizUi) {
+    // Enter inside quiz UI can submit graded work; a search box on a content page is fine.
+    return { required: true, reason: "enter may submit assessed work", message: "Pressing Enter here might submit your answer. Want me to go ahead?" };
+  }
   if (decision.action === "navigate" || decision.action === "open_tab") {
     if (page && decision.url) {
       try {

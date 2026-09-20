@@ -74,7 +74,9 @@ export type BgRequest =
   | { type: "tab.session.clear" }
   | { type: "nav.navigate"; url: string }
   | { type: "nav.open"; url: string }
+  | { type: "nav.switch"; tabId: number }
   | { type: "nav.back" }
+  | { type: "lookup"; query: string }
   | { type: "screenshot" }
   | { type: "open.onboarding" }
   | { type: "open.demo" }
@@ -108,7 +110,9 @@ export type BgResponseMap = {
   "tab.session.clear": { ok: boolean };
   "nav.navigate": { ok: boolean };
   "nav.open": { ok: boolean };
+  "nav.switch": { ok: boolean };
   "nav.back": { ok: boolean };
+  lookup: { ok: boolean; results: string };
   screenshot: { ok: boolean; dataUrl?: string; error?: string };
   "open.onboarding": { ok: boolean };
   "open.demo": { ok: boolean };

@@ -195,8 +195,15 @@ async function handle(msg: BgRequest, sender: chrome.runtime.MessageSender): Pro
       return { ok: true, at: Date.now() };
     case "server.health":
       return (await health(true));
-    case "agent.decide":
-      return (await postJson("/api/agent/decide", msg.input, 40_000));
+    case "agent.decide": {
+      // Enrich with live tab context so switch_tab has real targets; content scripts can't see tabs.
+      const tabs = await chrome.tabs.query({ url: ["http://*/*", "https://*/*"] });
+      const openTabs = tabs
+        .filter((t) => t.id !== undefined)
+        .map((t) => ({ id: t.id!, title: (t.title ?? "").slice(0, 80), url: (t.url ?? "").slice(0, 200), active: t.id === tabId }))
+        .slice(0, 12);
+      return (await postJson("/api/agent/decide", { ...msg.input, openTabs }, 40_000));
+    }
     case "agent.intervene":
       return (await postJson("/api/agent/intervene", msg.input, 15_000));
     case "extract":
@@ -273,6 +280,15 @@ async function handle(msg: BgRequest, sender: chrome.runtime.MessageSender): Pro
       if (!/^https?:\/\//i.test(msg.url)) throw new Error("only http(s) urls");
       await chrome.tabs.create({ url: msg.url, active: true });
       return { ok: true };
+    case "nav.switch": {
+      const target = await chrome.tabs.get(msg.tabId).catch(() => null);
+      if (!target?.id) return { ok: false };
+      await chrome.tabs.update(target.id, { active: true });
+      if (target.windowId !== undefined) await chrome.windows.update(target.windowId, { focused: true }).catch(() => undefined);
+      return { ok: true };
+    }
+    case "lookup":
+      return (await postJson("/api/lookup", { query: msg.query }, 15_000));
     case "nav.back":
       if (tabId == null) throw new Error("no tab");
       await chrome.tabs.goBack(tabId);

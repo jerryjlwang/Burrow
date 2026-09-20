@@ -18,7 +18,10 @@ export interface ExecutorDeps {
   waitForChange: (timeoutMs: number) => Promise<{ changed: boolean; urlChanged: boolean }>;
   navigate: (url: string) => Promise<void>;
   openTab: (url: string) => Promise<void>;
+  switchTab: (tabId: number) => Promise<void>;
   goBack: () => Promise<void>;
+  /** Server-side vetted lookup (no user cookies); returns pre-formatted result lines. */
+  lookup: (query: string) => Promise<string>;
   /** Called right before an action that may unload the page. */
   beforeMaybeNavigate?: () => Promise<void> | void;
 }
@@ -386,6 +389,28 @@ export async function executeAction(decision: AgentDecision, deps: ExecutorDeps)
         // The current page stays put; the new tab gets its own content script and session.
         await deps.openTab(decision.url!);
         return { ok: true, message: "opened in a new tab" };
+      }
+
+      case "switch_tab": {
+        await deps.switchTab(decision.tabId!);
+        return { ok: true, message: "switched to that tab" };
+      }
+
+      case "press_enter": {
+        const r = getEl();
+        if ("error" in r) return r.error;
+        const el = r.el as HTMLElement;
+        el.focus?.();
+        await deps.beforeMaybeNavigate?.();
+        const opts = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true } as KeyboardEventInit;
+        const proceed = el.dispatchEvent(new KeyboardEvent("keydown", opts));
+        el.dispatchEvent(new KeyboardEvent("keypress", opts));
+        el.dispatchEvent(new KeyboardEvent("keyup", opts));
+        // Sites that only listen for form submission need the real thing when keydown wasn't handled.
+        const form = (el as HTMLInputElement).form;
+        if (proceed && form) form.requestSubmit ? form.requestSubmit() : form.submit();
+        const { changed, urlChanged } = await deps.waitForChange(2500);
+        return { ok: true, message: changed || urlChanged ? "pressed Enter" : "pressed Enter, but nothing seemed to happen", changed, urlChanged, elementFound: true };
       }
 
       case "go_back": {
