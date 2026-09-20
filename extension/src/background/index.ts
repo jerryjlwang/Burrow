@@ -424,8 +424,8 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
 initTablet({ postJudge: (input: InkJudgeInput) => postJson<InkJudgeOutput>("/api/ink/judge", input, 20_000), sendToTab });
 
 const MENU: Array<{ id: string; title: string; prompt: string }> = [
-  { id: "pip-explain", title: "Explain this with Pip", prompt: "Explain this to me simply" },
-  { id: "pip-summarize", title: "Summarize this with Pip", prompt: "Summarize this" },
+  { id: "pip-explain", title: "Explain this with Bunny", prompt: "Explain this to me simply" },
+  { id: "pip-summarize", title: "Summarize this with Bunny", prompt: "Summarize this" },
   { id: "pip-read", title: "Read this aloud", prompt: "Read this" },
   { id: "pip-hint", title: "Give me a hint about this", prompt: "Give me a hint about this, without giving the answer" },
 ];
@@ -433,7 +433,7 @@ const MENU: Array<{ id: string; title: string; prompt: string }> = [
 function installMenus(): void {
   try {
     chrome.contextMenus.removeAll(() => {
-      chrome.contextMenus.create({ id: "pip-root", title: "Pip", contexts: ["selection"] });
+      chrome.contextMenus.create({ id: "pip-root", title: "Bunny", contexts: ["selection"] });
       for (const m of MENU) chrome.contextMenus.create({ id: m.id, parentId: "pip-root", title: m.title, contexts: ["selection"] });
     });
   } catch (e) {

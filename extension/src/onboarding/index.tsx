@@ -77,7 +77,7 @@ function Onboarding() {
       {step === 1 && (
         <>
           <h1>Let him hear you</h1>
-          <p>With the microphone on, you can just talk to him. Chrome asks once. You can mute him any time from his panel.</p>
+          <p>With the microphone on, you can just talk to him. Chrome asks once: choose "Allow while visiting the site". "Allow this time" only covers this tab, and he won't hear you anywhere else. You can mute him any time from his panel.</p>
           {mic === "granted" && <p className="ok">Microphone enabled. Turn voice on from his panel.</p>}
           {mic === "denied" && <p className="err">Chrome blocked the microphone. You can allow it later from the lock icon. Typing works either way.</p>}
           <div className="row">

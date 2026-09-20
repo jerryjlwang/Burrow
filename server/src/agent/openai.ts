@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import type { AgentDecision, InterventionDecision } from "@shared/actions";
 import type { AgentInput, InterventionInput } from "@shared/types";
 import type { AgentProvider } from "./provider";
-import { SYSTEM_PROMPT, INTERVENTION_PROMPT, formatDecisionContext, formatInterventionContext } from "./prompt";
+import { SYSTEM_PROMPT, INTERVENTION_PROMPT, formatDecisionContext, formatInterventionContext, formatVideoReference } from "./prompt";
 import { DECISION_JSON_SCHEMA, INTERVENTION_JSON_SCHEMA } from "./json-schemas";
 import { log } from "../util/logger";
 
@@ -108,6 +108,8 @@ export class OpenAIProvider implements AgentProvider {
 
   async decide(input: AgentInput, onPartial?: (jsonSoFar: string) => void): Promise<AgentDecision> {
     const parts: ContentPart[] = [];
+    const video = formatVideoReference(input);
+    if (video) parts.push({ type: "text", text: video });
     if (input.screenshot && /^data:image\/(jpeg|png|webp|gif);base64,/.test(input.screenshot)) {
       parts.push({ type: "image_url", image_url: { url: input.screenshot, detail: "high" } });
     }

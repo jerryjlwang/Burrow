@@ -114,7 +114,7 @@ const server = http.createServer(async (req, res) => {
         json(res, 400, { error: "invalid query" });
         return;
       }
-      json(res, 200, { ok: true, results: await lookUp(body.query, { prefer: typeof body.prefer === "string" ? body.prefer : undefined }) });
+      json(res, 200, { ok: true, results: await lookUp(body.query, { prefer: typeof body.prefer === "string" ? body.prefer : undefined, videos: !cfg.demoMode }) });
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/steps/plan") {
@@ -180,7 +180,7 @@ server.on("upgrade", (req, socket, head) => {
 });
 
 server.listen(cfg.port, () => {
-  logger.info(`Pip server listening on http://localhost:${cfg.port}`);
+  logger.info(`Bunny server listening on http://localhost:${cfg.port}`);
   logger.info(`agent provider: ${agent.providerName}${cfg.demoMode ? " (demo mode)" : ""} · deepgram: ${cfg.deepgramApiKey ? "configured" : "NOT configured (voice disabled)"} · tts: ${cfg.ttsModel} speed=${cfg.ttsSpeed} expressivity=${cfg.ttsExpressivity} · stt: ${cfg.sttModel} · tablet judge: ${ink.providerName}`);
   logger.info(`demo pages: http://localhost:${cfg.port}/demo/`);
 });

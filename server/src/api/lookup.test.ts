@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatResults, rankResults } from "./lookup";
+import { formatResults, rankResults, youtubeSearch } from "./lookup";
 
 describe("formatResults", () => {
   it("renders numbered, citable lines with snippets capped", () => {
@@ -16,6 +16,30 @@ describe("formatResults", () => {
 
   it("says so plainly when there is nothing", () => {
     expect(formatResults("zzz", [])).toContain('No results for "zzz"');
+  });
+});
+
+describe("youtubeSearch", () => {
+  const video = (videoId: string, length: string | null) => ({ videoRenderer: { videoId, title: { runs: [{ text: `Lesson ${videoId}` }] }, ownerText: { runs: [{ text: "Mr. Chen" }] }, ...(length ? { lengthText: { simpleText: length } } : {}) } });
+  const resultsPage = (items: unknown[]) => `<html><script>var ytInitialData = ${JSON.stringify({ contents: { sections: [{ items }, { shelf: { items: [] } }] } })};</script></html>`;
+  const respond = (body: string, status = 200) => (async () => new Response(body, { status })) as unknown as typeof fetch;
+
+  it("returns watchable lessons only: no Shorts, no live streams, at most three", async () => {
+    const out = await youtubeSearch("two-step equations", respond(resultsPage([video("short", "0:40"), video("live", null), { channelRenderer: {} }, video("a", "10:29"), video("b", "1:30"), video("c", "1:02:03"), video("d", "5:00")])));
+    expect(out.map((r) => r.url)).toEqual(["a", "b", "c"].map((id) => `https://www.youtube.com/watch?v=${id}`));
+    expect(out[0].title).toBe("Lesson a (YouTube · Mr. Chen · 10:29)");
+  });
+
+  it("asks for captioned videos in Restricted Mode, without anyone's cookies", async () => {
+    let asked: { url: string; headers: Record<string, string> } | null = null;
+    await youtubeSearch("x", (async (url: string, init: RequestInit) => ((asked = { url, headers: init.headers as Record<string, string> }), new Response(resultsPage([])))) as unknown as typeof fetch);
+    expect(asked!.url).toContain("sp=EgQQASgB");
+    expect(asked!.headers.cookie).toBe("PREF=f2=8000000");
+  });
+
+  it("fails loudly when the page changes shape, so lookUp falls back to the search link", async () => {
+    await expect(youtubeSearch("x", respond("<html>consent wall</html>"))).rejects.toThrow("ytInitialData");
+    await expect(youtubeSearch("x", respond("", 429))).rejects.toThrow("429");
   });
 });
 

@@ -2,15 +2,15 @@
 
 Things the front end needs from backend-owned code. Anything not done yet is mocked on the front end so work is not blocked.
 
-## 1. Finish the rename from Pip to Burrow
+## 1. Finish the rename from Bunny to Burrow
 
 Status: open. Requested 2026-09-19.
 
 Front end files now say Burrow, and the default character name is White Rabbit. These strings live in backend-owned files:
 
-- `server/src/agent/prompt.ts`: the persona still tells the model it is Pip. The pet should be the White Rabbit: curious, a little naive, asks the kid questions, forgets on a schedule and asks to be re-taught.
-- `extension/src/background/index.ts`: context menu titles "Pip", "Explain this with Pip", "Summarize this with Pip".
-- `extension/src/content/controller.ts`: the "Pip was updated" status string.
+- `server/src/agent/prompt.ts`: the persona still tells the model it is Bunny. The pet should be the White Rabbit: curious, a little naive, asks the kid questions, forgets on a schedule and asks to be re-taught.
+- `extension/src/background/index.ts`: context menu titles "Bunny", "Explain this with Bunny", "Summarize this with Bunny".
+- `extension/src/content/controller.ts`: the "Bunny was updated" status string.
 - `extension/src/offscreen/offscreen.html`: page title.
 - `server/src/index.ts`: startup log line.
 - `demo-pages/*.html`: footer text.
@@ -35,7 +35,7 @@ Status: covered by the `burrow.grants` record above. The parent view writes it, 
 Status: open.
 
 - `e2e/.profile-anysite/` (about 800 files of a Chrome profile) was committed to main. It should be removed from git and added to `.gitignore` next to `e2e/.profile/`.
-- The new tab page and its smoke test labels still say Pip. The front end changed the new tab page's default name to White Rabbit; the test labels in `e2e/smoke.mjs` are yours to rename.
+- The new tab page and its smoke test labels still say Bunny. The front end changed the new tab page's default name to White Rabbit; the test labels in `e2e/smoke.mjs` are yours to rename.
 
 ## 5. Unhandled rejection in `runExtract` with two extension pages open
 

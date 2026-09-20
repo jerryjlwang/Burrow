@@ -1,4 +1,5 @@
 import { parseKeyChord } from "./keys";
+import { VIDEO_OPS, VIDEO_RATE_MAX, VIDEO_RATE_MIN, parseVideoTime } from "./video";
 import { ACTIONS, DECISION_DEFAULTS, INTERVENTION_TYPES, TASK_TYPES, type ActionName, type AgentDecision, type InterventionDecision, type PendingAction } from "./actions";
 
 const ACTION_SET = new Set<string>(ACTIONS);
@@ -124,6 +125,12 @@ export function validateDecision(raw: unknown): DecisionValidation {
     if (d.action === "sketch" && d.text!.length > 1200) return { ok: false, error: "sketch text too long" };
     // sketch's value is a mode switch: "add" extends the drawing on screen, "erase" removes from it; anything else means a fresh one.
     if (d.action === "sketch" && d.value !== null && d.value !== "add" && d.value !== "erase") d.value = null;
+    if (d.action === "video") {
+      if (!(VIDEO_OPS as readonly string[]).includes(d.value ?? "")) return { ok: false, error: 'video requires value: "play", "pause", "seek" or "speed"' };
+      if (d.value === "seek" && (!d.text || parseVideoTime(d.text, 0) === null)) return { ok: false, error: 'video seek requires text: a time like "6:40", or "+10" / "-10" seconds from here' };
+      const rate = Number(d.text);
+      if (d.value === "speed" && !(rate >= VIDEO_RATE_MIN && rate <= VIDEO_RATE_MAX)) return { ok: false, error: `video speed requires text: a rate from ${VIDEO_RATE_MIN} to ${VIDEO_RATE_MAX}, e.g. "0.75"` };
+    }
     if (d.action === "look_up" && d.text!.length > 200) return { ok: false, error: "look_up query too long" };
     if (d.action === "make_plan" && (!d.text || !d.text.trim())) return { ok: false, error: "make_plan requires text (what the student wants to learn)" };
     if (d.action === "make_plan" && d.text!.length > 200) return { ok: false, error: "make_plan goal too long" };

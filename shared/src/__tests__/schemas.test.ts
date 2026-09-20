@@ -122,3 +122,17 @@ describe("sketch modes", () => {
     expect(fresh.ok && fresh.decision.value).toBeNull();
   });
 });
+
+describe("video control", () => {
+  it("accepts the four controls with a usable argument", () => {
+    for (const d of [{ value: "pause" }, { value: "play" }, { value: "seek", text: "6:40" }, { value: "seek", text: "-15" }, { value: "speed", text: "0.75" }]) {
+      expect(validateDecision({ action: "video", reason: "r", ...d }).ok).toBe(true);
+    }
+  });
+
+  it("rejects an unknown control, a seek with no time, and a speed the player cannot do", () => {
+    for (const d of [{ value: "rewind" }, { value: null }, { value: "seek", text: "the sign flip" }, { value: "seek" }, { value: "speed", text: "5" }, { value: "speed" }]) {
+      expect(validateDecision({ action: "video", reason: "r", ...d }).ok).toBe(false);
+    }
+  });
+});

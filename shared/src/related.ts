@@ -15,9 +15,28 @@ export function isVideoQuestion(text: string): boolean {
 /** "Photosynthesis for kids - YouTube" → "Photosynthesis for kids": site suffixes off, capped. */
 export function videoQuery(title: string): string {
   return title
+    .replace(/^\(\d+\+?\)\s*/, "")
     .replace(/\s*[-–—|·]\s*(YouTube|Khan Academy|Vimeo|TED).*$/i, "")
     .trim()
     .slice(0, 80);
+}
+
+const FILLER = new Set("a an the and or but so of to in on at for with from by as is are was were be been do does did can could would should will why how what when where who which that this these those it its he she they them his her their i me my we you your just really still again wait explain mean means meant get got understand understood say said says tell show did didn don doesn t s not no video part bit here there now then about".split(" "));
+
+/**
+ * What to search for after a question about a video: the question's own content words, anchored
+ * by the video's topic. "Why does the sign flip?" on "Solving two-step equations" looks for the
+ * sign flip, not for the same lesson again. A question that only points ("wait, what did he just
+ * do?") has nothing to search for, so the topic stands alone. Beside a question the topic is cut
+ * to the title's longest segment: "Algebra Basics: Solving 2-Step Equations - Math Antics" would
+ * otherwise turn the search into one for more of that channel.
+ */
+export function relatedQuery(question: string, title: string): string {
+  const full = videoQuery(title);
+  const wordCount = (s: string) => s.split(/\s+/).length;
+  const topic = full.split(/\s+[-–—|·]\s+|:\s+/).reduce((best, part) => (wordCount(part) > wordCount(best) ? part : best)).trim();
+  const words = question.toLowerCase().replace(/[^a-z0-9\s-]/g, " ").split(/\s+/).filter((w) => w.length > 1 && !FILLER.has(w));
+  return words.length >= 2 ? `${words.join(" ")} ${topic}`.trim().slice(0, 120) : full;
 }
 
 const RESULT_RE = /^\d+\.\s*(?:\[(\w+)\]\s*)?(.+?) — (https?:\/\/\S+)/;

@@ -36,14 +36,26 @@ let micActive = false;
 let lastLevelEmit = 0;
 let currentServerUrl = "";
 
+/** A granted microphone opens in well under a second; longer means a prompt nobody can see. */
+const MIC_GRANT_WAIT_MS = 6000;
+
 async function startMic(serverUrl: string): Promise<{ ok: boolean; error?: string; code?: "permission" | "server" | "device" | "unknown" }> {
   currentServerUrl = serverUrl;
   if (micActive && sttWs?.readyState === WebSocket.OPEN) return { ok: true };
   emit({ type: "mic.state", state: "starting" });
   try {
-    micStream = await navigator.mediaDevices.getUserMedia({
+    // This document can't show Chrome's permission prompt. When one would be needed — a mic allowed
+    // with "Allow this time" covers only the tab that asked — the request can sit unanswered, so
+    // waiting it out is reported as the permission problem it is, not as a connection failure.
+    const request = navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
+    const stream = await Promise.race([request, new Promise<null>((r) => setTimeout(() => r(null), MIC_GRANT_WAIT_MS))]);
+    if (!stream) {
+      void request.then((late) => late.getTracks().forEach((t) => t.stop())).catch(() => undefined);
+      throw new DOMException("no answer to the microphone request", "NotAllowedError");
+    }
+    micStream = stream;
   } catch (e) {
     const name = e instanceof Error ? e.name : "";
     const code = name === "NotAllowedError" || name === "PermissionDeniedError" || name === "SecurityError" ? "permission" : name === "NotFoundError" || name === "NotReadableError" ? "device" : "unknown";
@@ -204,7 +216,7 @@ function looksLikeEcho(text: string): boolean {
   const words = t.split(" ");
   // A lone word while audio is actually playing is almost always our own voice coming back
   // through the speakers. The multi-word heuristics below can't judge a single token, and
-  // letting it through lets Pip barge in on itself mid-sentence.
+  // letting it through lets Bunny barge in on itself mid-sentence.
   if (words.length === 1) return currentTts !== null && spoken.includes(t);
   if (words.length >= 2 && spoken.includes(t)) return true;
   if (words.length >= 4) {
@@ -230,7 +242,7 @@ function handleTranscript(msg: { text: string; final: boolean; event: string; tu
       logger.debug("dropping echo transcript", { text });
       return;
     }
-    // Two words (or one confirmed final) before we cut Pip off: a single interim token is far
+    // Two words (or one confirmed final) before we cut Bunny off: a single interim token is far
     // more often speaker bleed than a real interruption.
     const wordCount = text.split(/\s+/).filter(Boolean).length;
     if (currentTts && (wordCount >= 2 || (msg.final && wordCount >= 1)) && (msg.event === "StartOfTurn" || msg.event === "Update" || msg.event === "EagerEndOfTurn" || msg.final)) {

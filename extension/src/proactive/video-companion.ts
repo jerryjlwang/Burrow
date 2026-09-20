@@ -1,5 +1,6 @@
 import type { PendingOffer } from "@shared/types";
-import { TranscriptBuffer, VIDEO_THRESHOLDS, WatchLog, decideSurface, fmtTime, type TranscriptSegment, type VideoContext, type WatchNote } from "@shared/video";
+import { TranscriptBuffer, VIDEO_THRESHOLDS, WatchLog, decideSurface, fmtTime, parseVideoTime, type TranscriptSegment, type VideoContext, type VideoOp, type WatchNote } from "@shared/video";
+import type { ActionResult } from "@shared/types";
 import { VideoWatcher } from "../page-understanding/video";
 import { THRESHOLDS } from "./signals";
 import { store, type Bubble } from "../content/store";
@@ -78,12 +79,28 @@ export class VideoCompanion {
       t: signals.t,
       duration: this.watcher.duration,
       paused: signals.paused,
-      // Never past where they are: the agent must not know (or spoil) what the student hasn't heard yet.
       heard: this.buffer.text(signals.t - 75, signals.t),
-      understanding: this.log.format(signals.t),
+      // Snapped to five minutes so a windowed transcript (a very long video) stays the same text, and cacheable, between turns.
+      transcript: this.buffer.stamped(Math.round(signals.t / 300) * 300),
+      understanding: this.log.format(Infinity, 4000),
       behaviour: signals.summary,
       hasTranscript: this.hasTranscript,
     };
+  }
+
+  /** The agent working the player because the student asked it to. */
+  control(op: VideoOp, arg: string | null): ActionResult {
+    const w = this.watcher;
+    if (!w.active) return { ok: false, message: "there is no video on this page to control", elementFound: true };
+    if (op === "pause") w.pause();
+    else if (op === "play") w.play();
+    else if (op === "speed") w.setRate(Number(arg));
+    else {
+      const to = w.seek(parseVideoTime(arg ?? "", w.time) ?? NaN);
+      if (to === null || Number.isNaN(to)) return { ok: false, message: `could not seek to "${arg}"`, elementFound: true };
+      return { ok: true, message: `video is now at ${fmtTime(to)} of ${fmtTime(w.duration)}`, changed: true, elementFound: true };
+    }
+    return { ok: true, message: op === "speed" ? `video speed is now ${w.rate}` : `video ${op === "pause" ? "paused" : "playing"} at ${fmtTime(w.time)}`, changed: true, elementFound: true };
   }
 
   private get settings(): Settings {
