@@ -14,6 +14,8 @@
       .ui { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
       .ui > * { pointer-events: auto; }
       .hidden { visibility: hidden; }
+      /* Off stage during the boot: fully clipped but still present, so the page extractor can see the sign. */
+      .offstage { clip-path: inset(0 0 100% 0); }
 
       .clockwrap { position: absolute; top: 7vh; left: 0; right: 0; text-align: center; pointer-events: none; }
       .clock { display: block; margin: 0 auto; image-rendering: pixelated; }

@@ -55,7 +55,7 @@ export function bootLabel(elapsed: number): string {
 
 /** The three step drop of a sign: hidden, then -60, -30, -9, a 3px squash, and in place. */
 export function dropClass(elapsed: number, start: number): string {
-  if (elapsed < start) return "hidden";
+  if (elapsed < start) return "offstage";
   const step = Math.floor((elapsed - start) / 80);
   return ["drop-1", "drop-2", "drop-3", "squash"][step] ?? "";
 }

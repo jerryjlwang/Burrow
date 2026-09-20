@@ -302,7 +302,7 @@ function Search({ boot }: { boot: Boot }) {
           onFocus={onFocus}
           onBlur={onBlur}
           placeholder="Ask the meadow"
-          aria-label="Ask the meadow"
+          aria-label="Search box"
           autoComplete="off"
           spellCheck={false}
         />
