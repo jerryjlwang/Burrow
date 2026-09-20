@@ -6,6 +6,7 @@ import { composeMisconceptionNudge } from "@shared/nudge";
 import { interveneMock, findAnswerInput } from "@shared/mock-agent";
 import { detectProblem } from "@shared/hints";
 import { judgeWorking } from "@shared/steps";
+import { lineLocator } from "../actions/locate";
 import { computeLevel, SignalTracker, THRESHOLDS, type ClickRecord } from "./signals";
 import { store } from "../content/store";
 import { sendToBackground } from "../shared/messages";
@@ -247,15 +248,15 @@ export class ProactiveEngine {
 
   private async act(level: 1 | 2 | 3 | 4, summary: string[]): Promise<void> {
     if (level <= 2) {
-      // A wrong working step glances at the working itself; otherwise at the answer input.
+      // A wrong working step glances at the exact line; otherwise at the answer input.
       const wrongStep = store.getState().signals.wrongStep;
-      let rect = wrongStep && this.workingEl ? this.workingEl.getBoundingClientRect() : undefined;
+      let rect = wrongStep && this.workingEl ? lineLocator(this.workingEl, wrongStep.step)?.() ?? this.workingEl.getBoundingClientRect() : undefined;
       if (!rect) {
         const id = this.issueElementId();
         rect = (id != null ? this.deps.registry.get(id) : null)?.getBoundingClientRect();
       }
       const cue = level as 1 | 2;
-      store.setState({ attention: cue, lookAt: rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : null });
+      store.setState({ attention: cue, lookAt: rect ? { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 } : null });
       if (this.cueTimer) window.clearTimeout(this.cueTimer);
       this.cueTimer = window.setTimeout(() => store.setState((st) => (st.attention === cue ? { attention: 0, lookAt: st.pointer ? st.lookAt : null } : {})), cue === 1 ? 3000 : 6000);
       return;

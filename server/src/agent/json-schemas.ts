@@ -33,12 +33,14 @@ export const DECISION_JSON_SCHEMA = {
     direction: nullable({ type: "string", enum: ["up", "down"] }, "Scroll direction for scroll. Otherwise null."),
     amount: nullable({ type: "number" }, "Pixels for scroll or milliseconds for wait. Otherwise null."),
     value: nullable(str(), "Option label or value for select. Otherwise null."),
+    quote: nullable(str(), "point_to/highlight only: EXACT short text (3-12 words) copied verbatim from VISIBLE TEXT, to point at that specific text; may replace elementId. Otherwise null."),
+    line: nullable({ type: "integer" }, "point_to/highlight on a textbox/textarea: 1-based line of its value to anchor to (requires elementId), e.g. a step of written working. Otherwise null."),
     pendingAction: nullable(PENDING_ACTION, "Only for ask_confirmation. Otherwise null."),
     taskType: nullable({ type: "string", enum: [...TASK_TYPES] }, "Your classification of what the student is trying to do."),
     reason: str("One short internal sentence explaining the choice. Never spoken."),
     done: { type: "boolean", description: "true when nothing else should happen after this action." },
   },
-  required: ["action", "say", "elementId", "text", "url", "direction", "amount", "value", "pendingAction", "taskType", "reason", "done"],
+  required: ["action", "say", "elementId", "text", "url", "direction", "amount", "value", "quote", "line", "pendingAction", "taskType", "reason", "done"],
   additionalProperties: false,
 } as const;
 

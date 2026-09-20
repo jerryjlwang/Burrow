@@ -81,7 +81,10 @@ function hintDecision(input: AgentInput, opts: { fromOffer: boolean }): AgentDec
     null;
   const preface = opts.fromOffer ? "" : "";
   if (target) {
-    return d({ action: "point_to", elementId: target.id, say: preface + hint, done: true, taskType: "learning", reason: "progressive hint" });
+    // A step-judge signal points at the exact wrong line of the working, not just the box.
+    const line = input.signals.wrongStep && (target.value ?? "").includes("=") ? input.signals.wrongStep.step : null;
+    const say = line ? `Look at step ${line} again—right here. What did that move do to both sides?` : preface + hint;
+    return d({ action: "point_to", elementId: target.id, line, say, done: true, taskType: "learning", reason: line ? "point at the wrong step" : "progressive hint" });
   }
   return d({ action: "speak", say: preface + hint, done: true, taskType: "learning", reason: "progressive hint" });
 }
@@ -214,6 +217,11 @@ export function decideMock(input: AgentInput): AgentDecision {
   }
 
   // ---- Pointing / finding ----
+  // A quoted phrase gets a text anchor: point at the words themselves, not a whole element.
+  const quoted = utterance.match(/(?:where does it say|point (?:to|at)|highlight)\s+["“']([^"”']{3,120})["”']/i);
+  if (quoted) {
+    return d({ action: "point_to", quote: quoted[1], say: "Right here.", done: true, taskType: "navigation", reason: "quote anchor" });
+  }
   const wantsFind = /(where|find|show me|which (one|button|link)|point (to|at)|highlight|locate|how do i (get to|find|open|submit)|where do i)/.test(u);
   if (wantsFind) {
     const target = extractTarget(utterance);

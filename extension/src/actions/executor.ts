@@ -2,8 +2,9 @@ import type { AgentDecision } from "@shared/actions";
 import type { ActionResult, PageSummary } from "@shared/types";
 import { normalizeText } from "@shared/text";
 import { ElementRegistry } from "../page-understanding/registry";
-import { isSensitiveField } from "../page-understanding/extract";
+import { isSensitiveField, HOST_ID } from "../page-understanding/extract";
 import { OverlayController } from "./overlay";
+import { lineLocator, quoteLocator, type RectLocator } from "./locate";
 import { log } from "../shared/logger";
 
 const logger = log("action");
@@ -215,18 +216,39 @@ export async function executeAction(decision: AgentDecision, deps: ExecutorDeps)
         return { ok: true, message: `waited ${decision.amount ?? 800}ms` };
       }
 
-      case "highlight": {
-        const r = getEl();
-        if ("error" in r) return r.error;
-        await overlay.scrollIntoViewIfNeeded(r.el);
-        overlay.highlight(decision.elementId!, { durationMs: 8000 });
-        return { ok: true, message: "highlighted", elementFound: true };
-      }
-
+      case "highlight":
       case "point_to": {
-        const r = getEl();
-        if ("error" in r) return r.error;
-        const ok = await overlay.pointAt(decision.elementId!, { durationMs: 12000 });
+        // Sub-element anchors: a line of a field's working, or a verbatim quote. Quotes resolve
+        // within the target element when given, else anywhere on the page; an unresolvable quote
+        // fails honestly instead of pointing at nothing.
+        let el: Element | null = decision.elementId != null ? registry.get(decision.elementId) : null;
+        let locator: RectLocator | undefined;
+        if (decision.line != null && el) {
+          locator = lineLocator(el, decision.line) ?? undefined;
+          if (!locator) return { ok: false, message: `that field has no line ${decision.line} to point at`, elementFound: true };
+        } else if (decision.quote) {
+          const root = el ?? document.body;
+          locator = quoteLocator(root, decision.quote, HOST_ID) ?? (el ? undefined : quoteLocator(document.body, decision.quote, HOST_ID) ?? undefined);
+          if (!locator && !el) return { ok: false, message: `I couldn't find "${decision.quote.slice(0, 60)}" on the page`, elementFound: false };
+        }
+        if (!el && locator) {
+          // Quote-only targeting: anchor the overlay to the body; the locator supplies the rect.
+          el = document.body;
+        }
+        if (!el) return { ok: false, message: "That element isn't on the page anymore—let me look again.", elementFound: false };
+        const id = decision.elementId ?? registry.idFor(el);
+        // Bring an off-screen sub-target into view (element targets are scrolled by the overlay itself).
+        const sub = locator?.();
+        if (sub && (sub.y < 8 || sub.y + sub.height > window.innerHeight - 8)) {
+          window.scrollBy({ top: sub.y + sub.height / 2 - window.innerHeight / 2, behavior });
+          await sleep(reduced ? 60 : 420);
+        }
+        if (decision.action === "highlight") {
+          await overlay.scrollIntoViewIfNeeded(el);
+          overlay.highlight(id, { durationMs: 8000, locator });
+          return { ok: true, message: "highlighted", elementFound: true };
+        }
+        const ok = await overlay.pointAt(id, { durationMs: 12000, locator });
         return { ok, message: ok ? "pointing" : "could not point", elementFound: ok };
       }
 

@@ -53,7 +53,7 @@ export class AgentService {
     const v = validateDecision(raw);
     const decision = v.ok
       ? v.decision
-      : { action: "speak" as const, say: "I'm having trouble thinking right now. Try me again in a moment.", elementId: null, text: null, url: null, direction: null, amount: null, value: null, pendingAction: null, taskType: "chat" as const, reason: "fallback", done: true };
+      : { action: "speak" as const, say: "I'm having trouble thinking right now. Try me again in a moment.", elementId: null, text: null, url: null, direction: null, amount: null, value: null, quote: null, line: null, pendingAction: null, taskType: "chat" as const, reason: "fallback", done: true };
     logger.info("decide", { provider: "mock", action: decision.action, elementId: decision.elementId, ms: Date.now() - started, utterance: input.utterance.slice(0, 80) });
     return { decision, provider: this.primary === this.fallback ? "mock" : "mock-fallback", degraded: this.primary !== this.fallback, latencyMs: Date.now() - started, taskType: decision.taskType };
   }

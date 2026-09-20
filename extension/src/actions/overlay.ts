@@ -1,6 +1,7 @@
 import type { Rect } from "@shared/types";
 import { store, type HighlightBox } from "../content/store";
 import { ElementRegistry } from "../page-understanding/registry";
+import type { RectLocator } from "./locate";
 import { log } from "../shared/logger";
 
 const logger = log("action");
@@ -10,6 +11,8 @@ export interface HighlightOptions {
   spotlight?: boolean;
   kind?: HighlightBox["kind"];
   label?: string;
+  /** Sub-element target (a line of working, a quoted phrase). Re-resolved every frame; falls back to the element rect. */
+  locator?: RectLocator;
 }
 
 function rectOf(el: Element): Rect {
@@ -28,7 +31,7 @@ function isInViewport(r: Rect, margin = 8): boolean {
  */
 export class OverlayController {
   private registry: ElementRegistry;
-  private active = new Map<number, { options: Required<Pick<HighlightOptions, "spotlight" | "kind">> & { label?: string }; expiresAt: number }>();
+  private active = new Map<number, { options: Required<Pick<HighlightOptions, "spotlight" | "kind">> & { label?: string; locator?: RectLocator }; expiresAt: number }>();
   private pointerId: number | null = null;
   private raf: number | null = null;
   /** Provided by the character component: where the character currently is (viewport coords). */
@@ -57,7 +60,7 @@ export class OverlayController {
       return false;
     }
     const durationMs = options.durationMs ?? 8000;
-    this.active.set(id, { options: { spotlight: !!options.spotlight, kind: options.kind ?? "highlight", label: options.label }, expiresAt: Date.now() + durationMs });
+    this.active.set(id, { options: { spotlight: !!options.spotlight, kind: options.kind ?? "highlight", label: options.label, locator: options.locator }, expiresAt: Date.now() + durationMs });
     this.ensureLoop();
     return true;
   }
@@ -68,9 +71,9 @@ export class OverlayController {
     if (!el) return false;
     await this.scrollIntoViewIfNeeded(el);
     this.clear();
-    this.highlight(id, { durationMs: options.durationMs ?? 12000, spotlight: options.spotlight, kind: "point", label: options.label });
+    this.highlight(id, { durationMs: options.durationMs ?? 12000, spotlight: options.spotlight, kind: "point", label: options.label, locator: options.locator });
     this.pointerId = id;
-    const r = rectOf(el);
+    const r = options.locator?.() ?? rectOf(el);
     store.setState({ lookAt: { x: r.x + r.width / 2, y: r.y + r.height / 2 } });
     this.ensureLoop();
     return true;
@@ -101,7 +104,7 @@ export class OverlayController {
           if (this.pointerId === id) this.pointerId = null;
           continue;
         }
-        const r = rectOf(el);
+        const r = entry.options.locator?.() ?? rectOf(el);
         if (r.width === 0 && r.height === 0) {
           this.active.delete(id);
           if (this.pointerId === id) this.pointerId = null;
