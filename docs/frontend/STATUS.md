@@ -41,7 +41,7 @@ Updated: 2026-09-19
 
 ## In progress
 
-- Nothing.
+- Meadow interactivity round (subagent, new tab lane): clock at half size, pet the rabbit for hearts and a wave, feed him carrots from a patch, drag the sun to scrub the hour, click reactions on flowers, mushrooms, clouds, birds, grass, chimney and door, concept flowers grown from `burrow.graph` with signs, a pixel cursor, WebAudio wind, birds and crickets with a speaker toggle, and a small HUD.
 
 ## Blocked
 
