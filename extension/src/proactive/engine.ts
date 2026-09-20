@@ -1,6 +1,8 @@
 import type { PageSummary, PendingOffer, InterventionInput } from "@shared/types";
 import { validateIntervention } from "@shared/validate";
 import type { InterventionDecision } from "@shared/actions";
+import type { Misconception } from "@shared/graph";
+import { composeMisconceptionNudge } from "@shared/nudge";
 import { interveneMock, findAnswerInput } from "@shared/mock-agent";
 import { computeLevel, SignalTracker, THRESHOLDS, type ClickRecord } from "./signals";
 import { store } from "../content/store";
@@ -44,6 +46,8 @@ export class ProactiveEngine {
   private hadTrouble = false;
   private celebratedProblem: string | null = null;
   private requesting = false;
+  /** Misconception ids already nudged this page-session, so one belief nudges at most once. */
+  private nudgedMisconceptions = new Set<string>();
 
   constructor(deps: EngineDeps) {
     this.deps = deps;
@@ -109,6 +113,30 @@ export class ProactiveEngine {
     }
     if (newSuccesses.length) this.deps.session.updateStudent({ successes: student.successes + 1 });
     window.setTimeout(() => this.evaluate("page"), 250);
+  }
+
+  /**
+   * A misconception just surfaced in the knowledge graph (from a page/query extraction). Skip the
+   * cheap-signal escalation — the detection itself is the evidence — and lead with a Socratic
+   * question as the bubble. Respects the same budget as other offers: cooldowns, busy, one active
+   * offer at a time, and at most one nudge per belief per page-session.
+   */
+  onMisconception(m: Misconception): void {
+    const s = store.getState();
+    const now = Date.now();
+    if (!s.settings.proactiveEnabled) return;
+    if (this.nudgedMisconceptions.has(m.id)) return;
+    if (now < this.deps.session.proactiveCooldownUntil) return;
+    if (this.offerActive || this.deps.isBusy() || (s.panelOpen && s.busy)) return;
+    this.nudgedMisconceptions.add(m.id);
+    const nudge = composeMisconceptionNudge(m);
+    logger.info("misconception nudge", { concept: m.concept, status: m.status, belief: m.belief.slice(0, 80) });
+    this.offerActive = true;
+    store.setState({ attention: 2 });
+    this.deps.session.setCooldown(now + THRESHOLDS.cooldownMs);
+    this.deps.onOffer({ type: "nudge", message: nudge.message, elementId: null, at: now, goal: nudge.goal });
+    const st = store.getState();
+    if (st.settings.ttsEnabled && st.voice.mode === "listening") void this.deps.speak(nudge.message);
   }
 
   evaluate(trigger: string): void {
