@@ -59,11 +59,49 @@ async function tabCard(ctx: PieceContext, x: number, text: string, how: "away" |
   gone();
 }
 
+/** He went up early on a guess and is waiting under the strip: where, since when, and where home is. */
+let ready: { action: string; until: number; home: { x: number; y: number }; timer: number } | null = null;
+const READY_MS = 9000;
+
+/**
+ * A request that reads like a tab request: he travels up to the strip now, while the model decides,
+ * and waits there. If the decision comes he taps at once; if nothing comes he goes back home.
+ */
+export async function anticipateTabPiece(action: "open_tab", ctx: PieceContext): Promise<void> {
+  const pet = ctx.pet;
+  const r = ctx.petRect();
+  if (!pet || !r || ctx.reduced || ready) return;
+  const home = { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  const x = Math.max(120, Math.min(window.innerWidth - 120, home.x));
+  const timer = window.setTimeout(() => {
+    if (ready?.timer !== timer) return;
+    ready = null;
+    void pet.goTo(home.x, home.y);
+  }, READY_MS);
+  ready = { action, until: Date.now() + READY_MS, home, timer };
+  await pet.goTo(x, APEX_Y + r.height / 2 + 3);
+}
+
 /** open_tab: he jumps up, taps the strip at the top of the jump, the card pops and flies up, he lands with a bounce. */
 async function openTab(d: ActDetail, ctx: PieceContext): Promise<void> {
   const pet = ctx.pet;
   const r = ctx.petRect();
   const text = host(d.url);
+  if (pet && r && ready && ready.action === "open_tab" && Date.now() < ready.until) {
+    // Already up there: tap now, no hold, the tab opens at once and the card follows him home.
+    const { home, timer } = ready;
+    window.clearTimeout(timer);
+    ready = null;
+    const tapX = r.x + r.width / 2 + 27;
+    pet.play("land");
+    dust(ctx, tapX, APEX_Y + 3, false);
+    void tabCard(ctx, tapX, text, "away").then(async () => {
+      await wait(200);
+      await pet.goTo(home.x, home.y);
+      pet.play("celebrate");
+    });
+    return;
+  }
   if (!pet || !r || ctx.reduced) {
     await tabCard(ctx, r ? r.x + r.width / 2 : window.innerWidth - 120, text, "away");
     return;

@@ -228,7 +228,7 @@ export interface ActDetail {
   hold?: Promise<unknown>;
 }
 const ACT_HOLD_MS = 900;
-async function announceAction(decision: AgentDecision, registry: ElementRegistry): Promise<void> {
+export async function announceAction(decision: AgentDecision, registry: ElementRegistry): Promise<void> {
   const el = decision.elementId != null ? registry.get(decision.elementId) : null;
   const r = el?.getBoundingClientRect();
   const detail: ActDetail = {

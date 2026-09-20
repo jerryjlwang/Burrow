@@ -81,4 +81,5 @@ One line changed in `e2e/smoke.mjs` (2026-09-20): the chalkboard close check now
 Status: heads-up, 2026-09-20. Two backend-lane files gained one announcement each, documented in `docs/frontend/ACTION_FX.md`; please keep them when you refactor.
 
 - `extension/src/actions/executor.ts`: `announceAction` dispatches `burrow:act` at the top of `executeAction` and waits for an optional `detail.hold` at most 900 ms. Nothing else about an action changed.
+- `extension/src/agent/loop.ts`: the loop runs `open_tab` itself (it needs the session's resume flag), so it calls the same `announceAction` before `openTab`. Please keep that call if the branch moves.
 - `extension/src/page-understanding/video.ts`: `announceVideo` dispatches `burrow:video` from `pause()` and `play()` (by us) and from the seeked, pause and play handlers (by them).
