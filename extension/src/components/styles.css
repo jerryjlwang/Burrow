@@ -557,3 +557,85 @@
    own section below this one: whole pixels, 3px grid, steps() timing, cream/brown/teal/gold palette. */
 .pip-actfx { position: fixed; inset: 0; pointer-events: none; overflow: visible; }
 .pip-actfx > * { position: fixed; pointer-events: none; image-rendering: pixelated; }
+
+/* ---------- Action set pieces: hands on the page (actfx/hands.ts) ---------- */
+/* His paws on the page: the tap ring, sparks and the menu card at a click, letter tiles and the pencil
+   at a type, the key cap at a press, speed lines at a scroll, the dotted trail and the towed ghost at a
+   drag, the gold glint at a select. Glyphs are 3px cells painted as box-shadow on a 3px element
+   (hands-glyphs.ts); the rings step in JS. Every keyframe here is a whole-pixel pose held with
+   steps(1, end), so nothing slides between pixels. Reduced motion (.pip-root.reduced) stops them all. */
+.pip-hand-ring { width: 3px; height: 3px; background: transparent; }
+.pip-hand-ring.dim { opacity: 0.5; }
+.pip-hand-spark { width: 12px; height: 12px; background: var(--cream); border: 3px solid var(--ink); --sx: 1; animation: pip-hand-spark-low 0.3s steps(1, end) forwards; }
+.pip-hand-spark.high { animation-name: pip-hand-spark-high; }
+@keyframes pip-hand-spark-high {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(calc(var(--sx) * 9px), -12px); }
+  50% { transform: translate(calc(var(--sx) * 18px), -21px); }
+  75% { transform: translate(calc(var(--sx) * 27px), -21px); opacity: 0.5; }
+  100% { transform: translate(calc(var(--sx) * 33px), -12px); opacity: 0; }
+}
+@keyframes pip-hand-spark-low {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(calc(var(--sx) * 12px), -3px); }
+  50% { transform: translate(calc(var(--sx) * 24px), -3px); }
+  75% { transform: translate(calc(var(--sx) * 33px), 3px); opacity: 0.5; }
+  100% { transform: translate(calc(var(--sx) * 39px), 12px); opacity: 0; }
+}
+/* The menu card and the glint's sparkles are painted glyphs; the card pops up two steps, the sparkles blink. */
+.pip-hand-menu { animation: pip-hand-pop 0.12s steps(1, end); }
+.pip-hand-sparkle { animation: pip-hand-blink 0.18s steps(2, end) infinite; }
+@keyframes pip-hand-pop { 0% { transform: translateY(6px); opacity: 0; } 50% { transform: translateY(3px); } 100% { transform: none; } }
+@keyframes pip-hand-blink { 0% { opacity: 1; } 100% { opacity: 0; } }
+/* Letter tiles: cream, a 3px ink border, the letter at 18px. Each pops in from two steps up (or down,
+   --dir -1, when the field sits at the top) and rests above the field; "in" drops it into the field and away. */
+.pip-hand-letter {
+  width: 21px; height: 27px; background: var(--cream); border: 3px solid var(--ink); color: var(--ink);
+  font: 18px/21px var(--pip-font); text-align: center; --dir: 1;
+  animation: pip-hand-letter-pop 0.18s steps(1, end);
+}
+.pip-hand-letter.in { animation: pip-hand-letter-in 0.24s steps(1, end) forwards; }
+.pip-hand-letter.still { animation: none; }
+@keyframes pip-hand-letter-pop { 0% { transform: translateY(calc(var(--dir) * -24px)); } 34% { transform: translateY(calc(var(--dir) * -12px)); } 67%, 100% { transform: none; } }
+@keyframes pip-hand-letter-in {
+  0% { transform: none; }
+  25% { transform: translateY(calc(var(--dir) * 12px)); }
+  50% { transform: translateY(calc(var(--dir) * 24px)); }
+  75% { transform: translateY(calc(var(--dir) * 33px)); opacity: 0.5; }
+  100% { transform: translateY(calc(var(--dir) * 33px)); opacity: 0; }
+}
+.pip-hand-pencil.away { animation: pip-hand-away 0.16s steps(1, end) forwards; }
+@keyframes pip-hand-away { 0% { transform: none; } 50% { transform: translateY(-12px); } 100% { transform: translateY(-24px); opacity: 0; } }
+/* Clear: blank tiles fly out backwards in four steps, and three sweep lines cross the field after them. */
+.pip-hand-blank { width: 18px; height: 24px; background: var(--cream); border: 3px solid var(--ink); animation: pip-hand-blank-out 0.24s steps(1, end) both; }
+.pip-hand-blank.still { animation: none; }
+@keyframes pip-hand-blank-out {
+  0% { transform: none; }
+  25% { transform: translate(-15px, -6px); }
+  50% { transform: translate(-30px, -9px); }
+  75% { transform: translate(-45px, -6px); opacity: 0.5; }
+  100% { transform: translate(-60px, 0); opacity: 0; }
+}
+.pip-hand-sweep { height: 3px; background: var(--teal); box-shadow: 0 3px 0 var(--cream); --dx: -120px; animation: pip-hand-sweep 0.32s steps(8, end) both; }
+@keyframes pip-hand-sweep { from { transform: none; } to { transform: translateX(var(--dx)); opacity: 0.2; } }
+/* The key cap: cream with a 3px ink border and a 3px ink depth under it. It drops in over three steps
+   and "down" presses it into its depth while he stamps. */
+.pip-hand-key {
+  display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 9px;
+  background: var(--cream); border: 3px solid var(--ink); box-shadow: 0 3px 0 var(--ink);
+  color: var(--ink); font: 18px/24px var(--pip-font); white-space: nowrap;
+}
+.pip-hand-key.drop { animation: pip-hand-key-drop 0.18s steps(1, end); }
+.pip-hand-key.down { transform: translateY(3px); box-shadow: none; }
+.pip-hand-key-arrow { position: relative; display: block; width: 21px; height: 24px; }
+.pip-hand-key-arrow > i { position: absolute; left: 0; top: 0; display: block; }
+@keyframes pip-hand-key-drop { 0% { transform: translateY(-24px); } 34% { transform: translateY(-12px); } 67%, 100% { transform: none; } }
+/* Scroll: three teal speed lines with a cream edge run 240px along the right edge in eight 30px steps. */
+.pip-hand-streak { width: 6px; background: var(--teal); box-shadow: -3px 0 0 var(--cream); animation: pip-hand-streak-down 0.48s steps(8, end) both; }
+.pip-hand-streak.up { animation-name: pip-hand-streak-up; }
+.pip-hand-streak.still { animation: none; }
+@keyframes pip-hand-streak-down { from { transform: none; } to { transform: translateY(240px); opacity: 0.25; } }
+@keyframes pip-hand-streak-up { from { transform: none; } to { transform: translateY(-240px); opacity: 0.25; } }
+/* Drag: the dotted trail and the dashed ghost of the element he tows along it (hands.ts moves it in whole steps). */
+.pip-hand-dot { width: 6px; height: 6px; background: var(--teal); }
+.pip-hand-ghost { border: 3px dashed var(--teal); background: rgba(47, 143, 131, 0.12); }
