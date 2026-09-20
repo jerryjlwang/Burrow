@@ -16,6 +16,14 @@ export interface OpenAIProviderOptions {
 
 type ContentPart = OpenAI.Chat.Completions.ChatCompletionContentPart;
 
+/** What a completion came to, whether it arrived whole or as a stream. */
+interface Completed {
+  text: string | null;
+  refusal: string | null;
+  finishReason: string | null;
+  usage: OpenAI.CompletionUsage | undefined;
+}
+
 /** OpenAI-backed provider using Chat Completions with strict JSON-schema structured outputs. */
 export class OpenAIProvider implements AgentProvider {
   readonly name: string;
@@ -38,7 +46,7 @@ export class OpenAIProvider implements AgentProvider {
   }
 
   /** One strict-JSON-schema completion. Shared by the agent, the step planner and the step judge. */
-  async complete<T>(system: string, user: ContentPart[], schemaName: string, schema: Record<string, unknown>, maxTokens: number, effort?: OpenAIProviderOptions["effort"]): Promise<T> {
+  async complete<T>(system: string, user: ContentPart[], schemaName: string, schema: Record<string, unknown>, maxTokens: number, effort?: OpenAIProviderOptions["effort"], onPartial?: (jsonSoFar: string) => void): Promise<T> {
     const params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming = {
       model: this.opts.model,
       messages: [
@@ -50,9 +58,31 @@ export class OpenAIProvider implements AgentProvider {
     };
     if (this.reasoningModel) params.reasoning_effort = this.effortFor(effort ?? this.opts.effort);
     else params.temperature = 0.3;
-    let res: OpenAI.Chat.Completions.ChatCompletion;
+    // With a listener the same request streams, so the caller can act on the front of the JSON
+    // (the spoken sentence) seconds before the object closes. The result is identical either way.
+    const request = async (): Promise<Completed> => {
+      if (!onPartial) {
+        const r = await this.client.chat.completions.create(params);
+        const c = r.choices[0];
+        return { text: c?.message.content ?? null, refusal: c?.message.refusal ?? null, finishReason: c?.finish_reason ?? null, usage: r.usage };
+      }
+      const stream = await this.client.chat.completions.create({ ...params, stream: true, stream_options: { include_usage: true } });
+      const done: Completed = { text: "", refusal: null, finishReason: null, usage: undefined };
+      for await (const chunk of stream) {
+        const c = chunk.choices[0];
+        if (c?.delta?.refusal) done.refusal = (done.refusal ?? "") + c.delta.refusal;
+        if (c?.finish_reason) done.finishReason = c.finish_reason;
+        if (chunk.usage) done.usage = chunk.usage;
+        if (c?.delta?.content) {
+          done.text += c.delta.content;
+          onPartial(done.text!);
+        }
+      }
+      return done;
+    };
+    let res: Completed;
     try {
-      res = await this.client.chat.completions.create(params);
+      res = await request();
     } catch (e) {
       // Model generations disagree on effort names ("minimal" vs "none"): adopt what the API tells us it supports.
       const supported = e instanceof OpenAI.APIError && /reasoning_effort/.test(e.message) ? e.message.match(/Supported values are: ([^.]+)/)?.[1] : null;
@@ -64,27 +94,25 @@ export class OpenAIProvider implements AgentProvider {
           logger.warn(`reasoning_effort '${wanted}' unsupported by ${this.opts.model}; using '${pick}'`);
           this.effortOverrides.set(wanted, pick);
           params.reasoning_effort = pick as OpenAI.Chat.Completions.ChatCompletionCreateParams["reasoning_effort"];
-          res = await this.client.chat.completions.create(params);
+          res = await request();
         } else throw e;
       } else throw e;
     }
-    const choice = res.choices[0];
-    if (!choice) throw new Error("empty completion");
-    if (choice.message.refusal) throw new Error(`model refused: ${choice.message.refusal}`);
-    if (choice.finish_reason === "length") throw new Error("completion truncated (max tokens)");
-    const text = choice.message.content;
-    if (!text) throw new Error("no content in completion");
+    if (res.refusal) throw new Error(`model refused: ${res.refusal}`);
+    if (res.finishReason === "length") throw new Error("completion truncated (max tokens)");
+    const text = res.text;
+    if (!text) throw new Error(res.finishReason === null ? "empty completion" : "no content in completion");
     logger.debug("usage", { prompt: res.usage?.prompt_tokens, completion: res.usage?.completion_tokens, cached: res.usage?.prompt_tokens_details?.cached_tokens });
     return JSON.parse(text) as T;
   }
 
-  async decide(input: AgentInput): Promise<AgentDecision> {
+  async decide(input: AgentInput, onPartial?: (jsonSoFar: string) => void): Promise<AgentDecision> {
     const parts: ContentPart[] = [];
     if (input.screenshot && /^data:image\/(jpeg|png|webp|gif);base64,/.test(input.screenshot)) {
       parts.push({ type: "image_url", image_url: { url: input.screenshot, detail: "high" } });
     }
     parts.push({ type: "text", text: formatDecisionContext(input) });
-    return this.complete<AgentDecision>(SYSTEM_PROMPT, parts, "agent_decision", DECISION_JSON_SCHEMA as unknown as Record<string, unknown>, 900);
+    return this.complete<AgentDecision>(SYSTEM_PROMPT, parts, "agent_decision", DECISION_JSON_SCHEMA as unknown as Record<string, unknown>, 900, undefined, onPartial);
   }
 
   async intervene(input: InterventionInput): Promise<InterventionDecision> {

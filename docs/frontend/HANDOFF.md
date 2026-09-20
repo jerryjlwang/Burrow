@@ -44,3 +44,11 @@ Arriving (the page that sees `requested` or `gone` for itself):
 3. The parent page keeps updating its status and buttons from the record as before. Its "What he brought back" box wears the same scroll frame and flashes gold when a new summary lands, and the status line counts dots while he is on his way.
 
 Sending him back is the same in reverse: the parent page leaves through the tunnel, the kid's page digs, then pops him out with the arrival beat. Under reduced motion the dirt, the drop and the digging are skipped and the notes appear whole and still; the sounds and the records are unchanged.
+
+## The drawing board (2026-09-20)
+
+A third role, `board`, is any page on `excalidraw.com`: the window the tablet watcher opens with Alt+Shift+D. The background writes the jump records for it, the pages react exactly as for kid and parent:
+
+- On open: `{ to: "board", from: "kid", stage: "requested" }`. The visible kid page dives and writes `gone`; the board page starts hidden and pops out on `gone` (12 s at most). A board opened by hand with no jump in flight pops him out after 400 ms.
+- On stop: `{ to: "kid", from: "board", stage: "requested" }` when the board window is still open (it dives first), or `stage: "gone"` when it was closed (nothing left to dive).
+- While a jump to another role is `gone` or `arrived`, a page that loads keeps him in the hole and pauses its proactive engine; the engine resumes when he lands. Jump records carry `from` so the arrival line can differ ("I am back on the page." after the board).

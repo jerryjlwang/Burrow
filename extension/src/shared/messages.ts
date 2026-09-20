@@ -88,7 +88,8 @@ export type InputOp =
   | { kind: "text"; text: string };
 
 export type BgRequest =
-  | { type: "agent.decide"; input: AgentInput }
+  /** `requestId` lets the background send this request's spoken sentence ahead of the decision (agent.say). */
+  | { type: "agent.decide"; input: AgentInput; requestId?: string }
   | { type: "agent.intervene"; input: InterventionInput }
   | { type: "server.health" }
   | { type: "tts.speak"; id: string; text: string }
@@ -176,6 +177,8 @@ export type ContentBroadcast =
   | { type: "command"; name: "toggle-companion" | "toggle-voice" }
   | { type: "ask.selection"; text: string; prompt: string }
   | { type: "settings.changed"; settings: Settings }
+  /** The spoken sentence of an in-flight decision, seconds before the decision itself returns. */
+  | { type: "agent.say"; requestId: string; say: string }
   | { type: "ink.judgement"; judgement: InkJudgement; reason: "ink" | "pause" };
 
 export class BgUnavailableError extends Error {

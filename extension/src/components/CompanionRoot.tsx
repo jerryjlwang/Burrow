@@ -12,7 +12,7 @@ import { SketchOverlay } from "./SketchOverlay";
 import { ActionFx } from "./actfx";
 import { PlanMap } from "./PlanMap";
 import { DebugPanel } from "./DebugPanel";
-import { escort, pageRole, readArrival, startHandoff, type Arrival } from "./handoff";
+import { escort, pageRole, pendingJumpTo, readArrival, startHandoff, type Arrival } from "./handoff";
 import { armSounds, playCue, setSoundsEnabled } from "./sounds";
 import { isOwnKey } from "../actions/surface";
 
@@ -118,6 +118,8 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
   // The new tab page draws its world first and then says "burrow:enter"; he stays in the hole until then
   // (or 3.5 s at most, so a broken page never hides him).
   const bootPage = useRef(/\/newtab\.html$/.test(location.pathname));
+  // The drawing board the tablet watcher opens: he arrives through the hole from the kid's page.
+  const boardPage = useRef(pageRole() === "board");
   const enterWaiters = useRef<(() => void)[]>([]);
   const entered = useRef(false);
   useEffect(() => {
@@ -151,6 +153,14 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
       if (bootPage.current) {
         const ready = entered.current ? Promise.resolve() : new Promise<void>((r) => enterWaiters.current.push(r));
         void c.jumpIn(ready);
+        return;
+      }
+      if (boardPage.current) {
+        // A jump in flight pops him out through the handoff when the other page says he is gone;
+        // a board opened by hand gets him right away.
+        void pendingJumpTo("board").then((pending) => {
+          if (!pending) void c.jumpIn(new Promise((r) => setTimeout(r, 400)));
+        });
       }
     },
     [onController, controller],
@@ -329,7 +339,7 @@ export function CompanionRoot({ controller }: { controller: CompanionController 
           {voice.mode === "listening" && <span className="pip-mic-badge" title="Microphone is on" aria-hidden="true" />}
           {unread > 0 && !panelOpen && bubble?.kind !== "reply" && <span className="pip-unread" aria-hidden="true">{unread}</span>}
           <button type="button" className={`pip-char-btn${busy ? " busy" : ""}`} onClick={() => controller.charClicked()} aria-label={label} aria-expanded={panelOpen} title={panelOpen ? "Close" : `Talk to ${settings.characterName}`}>
-            <Character state={characterState} level={level} lookAt={lookAt} attention={attention} reducedMotion={reduced} scale={petScale} onAnchor={onAnchor} onPosition={onPosition} onController={onControllerWithArrival} quiet={quiet} onShown={onShown} startHidden={!!arrival || bootPage.current} />
+            <Character state={characterState} level={level} lookAt={lookAt} attention={attention} reducedMotion={reduced} scale={petScale} onAnchor={onAnchor} onPosition={onPosition} onController={onControllerWithArrival} quiet={quiet} onShown={onShown} startHidden={!!arrival || bootPage.current || boardPage.current} />
           </button>
         </div>
       </div>

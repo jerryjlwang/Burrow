@@ -62,6 +62,9 @@ Updated: 2026-09-20
 - Tabs and pages set pieces (2026-09-20, `actfx/tabs.ts`): open_tab has him jump straight up (a real throw against the scene's gravity, peaking under the tab strip), tap, and a pixel tab card with the hostname pops out of the top edge and flies up into the strip with the tunnel's whoosh and a few flecks while he lands and bounces; switch_tab slides the card along the strip behind a teal wipe; navigate and go_back press an address or back card at the top left, he waves and dives ahead. Reduced motion shows the card whole.
 - The Cheshire cat (2026-09-20): redrawn as the cat, 24 by 21: a wide magenta head with violet stripe arcs, pointed ears, big yellow-green eyes with slit pupils, a crescent grin of teeth with curled corners, a small striped body in the leaves. His striped tail (`cattail`, three frames) hangs from the right of the crown and wiggles all day; a click on it starts the reveal: the grin, the eyes, the whole cat for about four seconds, then back to the grin and gone. The periodic grin stays. Only `cheshire` changed and `cattail` was added in the four atlases.
 
+- Extension pages no longer hijack the background (2026-09-20). The rabbit's message listener in `content/controller.ts` answered every runtime message with `{ok: true}`. On a web page that only ever saw the background's broadcasts, but the same controller runs on the new tab and parent pages, where `chrome.runtime.onMessage` also receives every request a content script or the popup sends to the background, and Chrome keeps the first reply. With a meadow tab open, health came back without the model or the Deepgram flag ("Voice needs a Deepgram key"), chat got no decision ("I can't reach my brain"), voice start got no state. The listener now answers only the nine broadcast types it handles. Proven with a probe: meadow open, `server.health`, `voice.status` and `graph.get` are real again.
+- The rabbit jumps to the drawing board (2026-09-20). `handoff.ts` has a third role, `board` (excalidraw.com). When Alt+Shift+D opens the board the background writes the jump record `{to: "board", from: "kid"}`: the visible kid page says "To your drawing board!", dives, writes `gone`; the board page starts with him in the hole and pops him out ("Here I am. Show me your working!") the moment `gone` lands, or after 12 s. While he is away every kid page keeps him in the hole and pauses its proactive engine so no bubble floats over an empty corner. Ink verdicts go to the board tab, so the nudge and its Yes and No buttons appear beside the ink on the touch screen. When the watch ends the background writes the return: a living board dives first, a closed one is simply `gone`, and the kid page pops him back out ("I am back on the page."). A board opened by hand, with no jump in flight, gets him after 400 ms.
+
 ## In progress
 
 - Nothing.
@@ -75,6 +78,11 @@ Updated: 2026-09-20
 1. Rehearse the four demo beats end to end with the real server and a Deepgram key on two laptops once the backend relay exists.
 2. The teach loop in the kid UI: "Did I get that right?" cards, once the backend persona teaches instead of tutors.
 3. If time: the burrow diorama on the new tab page.
+
+## Verification as of the jump to the board (2026-09-20)
+
+- Tablet run against the live server: 19 of 19, now including the dive on the task page, the pop-out on the board (screenshot shows him half out of the hole two seconds after the board opens), no rabbit on the task page while he is on the board, the nudge on the board 66 ms after the verdict, and the return to the task page after stop. `npx tsc -p tsconfig.json --noEmit` clean, `npx vitest run` 322 tests, `node tools/pet/check.mjs` 95 of 95.
+- The hijack probe (`server.health` from the popup with a meadow tab open) returns the full health object.
 
 ## Verification as of the plank, hills and oak round (2026-09-20)
 
