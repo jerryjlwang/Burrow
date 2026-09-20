@@ -36,14 +36,26 @@ let micActive = false;
 let lastLevelEmit = 0;
 let currentServerUrl = "";
 
+/** A granted microphone opens in well under a second; longer means a prompt nobody can see. */
+const MIC_GRANT_WAIT_MS = 6000;
+
 async function startMic(serverUrl: string): Promise<{ ok: boolean; error?: string; code?: "permission" | "server" | "device" | "unknown" }> {
   currentServerUrl = serverUrl;
   if (micActive && sttWs?.readyState === WebSocket.OPEN) return { ok: true };
   emit({ type: "mic.state", state: "starting" });
   try {
-    micStream = await navigator.mediaDevices.getUserMedia({
+    // This document can't show Chrome's permission prompt. When one would be needed — a mic allowed
+    // with "Allow this time" covers only the tab that asked — the request can sit unanswered, so
+    // waiting it out is reported as the permission problem it is, not as a connection failure.
+    const request = navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
+    const stream = await Promise.race([request, new Promise<null>((r) => setTimeout(() => r(null), MIC_GRANT_WAIT_MS))]);
+    if (!stream) {
+      void request.then((late) => late.getTracks().forEach((t) => t.stop())).catch(() => undefined);
+      throw new DOMException("no answer to the microphone request", "NotAllowedError");
+    }
+    micStream = stream;
   } catch (e) {
     const name = e instanceof Error ? e.name : "";
     const code = name === "NotAllowedError" || name === "PermissionDeniedError" || name === "SecurityError" ? "permission" : name === "NotFoundError" || name === "NotReadableError" ? "device" : "unknown";
