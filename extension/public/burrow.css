@@ -8,6 +8,12 @@
   font-weight: 400 700;
   font-display: swap;
 }
+@font-face {
+  font-family: "Burrow Digits";
+  src: url("fonts/VT323.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
 :root {
   color-scheme: light;
   --ink: #3b2a23;
@@ -21,8 +27,11 @@
   --muted: #7a6458;
   --font: "Burrow Pixel", "Pixelify Sans", "Segoe UI", system-ui, sans-serif;
   --font-plain: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Numerals: Pixelify's digits are hard to read, VT323's are clean. Use for clocks, counts and timers. */
+  --font-digits: "Burrow Digits", "VT323", ui-monospace, monospace;
   --shadow: 3px 3px 0 rgba(59, 42, 35, 0.25);
 }
+.px-digits { font-family: var(--font-digits); }
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 body {
