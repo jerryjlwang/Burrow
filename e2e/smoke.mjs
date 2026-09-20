@@ -636,6 +636,36 @@ try {
     await vp.close();
   }
 
+  // A same-document navigation (pushState, the way YouTube opens a result) loads no new content
+  // script, so nothing would resume a chain that stopped to wait for one: it carries on in place.
+  {
+    const sp = await context.newPage();
+    await sp.goto(`http://localhost:${PORT}/demo/spa.html`, { waitUntil: "load" });
+    await sp.locator("#pip-companion-host").waitFor({ state: "attached", timeout: 10000 });
+    await new Promise((r) => setTimeout(r, 1500));
+    await sp.evaluate(() => document.getElementById("pip-companion-host").shadowRoot.querySelector(".pip-char-btn")?.click());
+    await sp.locator(".pip-panel").waitFor({ timeout: 5000 });
+    await sp.locator(".pip-input").fill("Open how volcanoes erupt");
+    await sp.locator(".pip-send").click();
+    await sp.waitForURL(/watch=volcanoes/, { timeout: 15000 }).catch(() => null);
+    let landed = "";
+    for (const t0 = Date.now(); Date.now() - t0 < 12000 && !landed; ) {
+      landed = await sp.evaluate(() => [...(document.getElementById("pip-companion-host")?.shadowRoot?.querySelectorAll(".pip-msg.companion") ?? [])].map((m) => m.textContent ?? "").find((t) => /it's open/i.test(t)) ?? "");
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    const sameDocument = await sp.evaluate(() => !!document.getElementById("player") && performance.getEntriesByType("navigation").length === 1 && !performance.getEntriesByType("navigation")[0].name.includes("watch="));
+    check("a same-document navigation keeps the chain going on the new view", sp.url().includes("watch=volcanoes") && sameDocument && !!landed, landed || `(no landing reply) ${sp.url()}`);
+    const stale = sw
+      ? await sw.evaluate(async () => {
+          const all = await chrome.storage.session.get(null);
+          const s = Object.values(all).find((v) => v?.conversation?.some((t) => /open how volcanoes erupt/i.test(t.text)));
+          return s ? s.pendingLoop : "no session";
+        })
+      : "no service worker";
+    check("and leaves no pending loop behind to fire on a later page", stale === null, JSON.stringify(stale)?.slice(0, 200));
+    await sp.close();
+  }
+
   // Consequential action asks for confirmation.
   await page.goto(`http://localhost:${PORT}/demo/quiz.html`, { waitUntil: "load" });
   await page.locator("#pip-companion-host").waitFor({ state: "attached", timeout: 10000 });

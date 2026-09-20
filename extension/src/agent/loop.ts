@@ -155,6 +155,10 @@ export class AgentLoop {
     const taskType = classifyTask(utterance, store.getState().page);
     const videoWasInView = this.deps.videoInView?.() ?? false;
     let firstStep = true;
+    // The step that picks the chain up after a navigation: the first one on a new page, or the
+    // one after a same-document navigation further down this run.
+    let resumedStep = opts.resume?.step ?? null;
+    let leaving = false;
     session.updateStudent({ currentGoal: goal });
     store.setState({ busy: true, characterState: "thinking", status: "Thinking…", debug: { ...store.getState().debug, goal, loopStep: step, lastTranscript: utterance } });
     logger.info("run", { utterance, source: opts.source, resume: !!opts.resume, taskType });
@@ -174,7 +178,7 @@ export class AgentLoop {
           const byName = this.lastReferencedElementName ? page.elements.find((e) => e.name === this.lastReferencedElementName) : undefined;
           this.lastReferencedElementId = byName?.id ?? null;
         }
-        const input = this.buildInput({ utterance, goal, conversation: session.recentTurns(10), page, history, pendingOffer, path, learner, step, maxStep, withFrame: firstStep && taskType !== "navigation" && taskType !== "administrative", resumed: !!opts.resume && step === (opts.resume?.step ?? 0) });
+        const input = this.buildInput({ utterance, goal, conversation: session.recentTurns(10), page, history, pendingOffer, path, learner, step, maxStep, withFrame: firstStep && taskType !== "navigation" && taskType !== "administrative", resumed: step === resumedStep });
         // A plain spoken request may already be half-answered: the decision started when speech
         // recognition first thought the student was done (see speculate()).
         const head = firstStep && !opts.resume && !opts.goal && !pendingOffer && !path ? this.speculator.take(speculationKey(utterance, page.url)) : null;
@@ -337,9 +341,19 @@ export class AgentLoop {
           if (pendingOffer || decision.taskType === "learning" || decision.taskType === "assessment") this.noteHint(page);
         }
         if (result.urlChanged) {
-          // The page is navigating; the next content script resumes with the state saved above.
           await session.setPendingLoop({ utterance, goal, history: history.slice(-6), step: step + 1, at: Date.now(), pendingOffer: null, lastReferencedElementName: this.lastReferencedElementName, path });
-          break;
+          await this.settled();
+          // A cross-document navigation unloads this script before location.href moves, so a URL
+          // it can see has changed is a same-document one (YouTube, any SPA router). No content
+          // script will load to resume that chain, so it carries on right here. Otherwise the page
+          // is still on its way out and the next content script resumes from the state saved above.
+          if (location.href === page.url) {
+            leaving = true;
+            break;
+          }
+          await session.setPendingLoop(null);
+          resumedStep = step + 1;
+          continue;
         }
         if (mayNavigate) await session.setPendingLoop(null);
         // Aiming by eye needs eyes: after acting on a raw point, show the model what happened.
@@ -356,7 +370,7 @@ export class AgentLoop {
           this.say("I've done what I can for now—want me to keep going?");
         }
       }
-      if (opts.resume) await session.setPendingLoop(null);
+      if (opts.resume && !leaving) await session.setPendingLoop(null);
       this.bringVideoBack(videoWasInView, taskType, history[history.length - 1]?.decision.action ?? null);
     } catch (e) {
       if (e instanceof Cancelled) {
@@ -373,6 +387,15 @@ export class AgentLoop {
         store.setState({ busy: false, status: "" });
         this.deps.onIdle?.();
       }
+    }
+  }
+
+  /** Waits for a navigated view to render: until the page has been quiet for a beat, or 2s. */
+  private async settled(): Promise<void> {
+    const started = Date.now();
+    while (Date.now() - started < 2000) {
+      const change = await this.deps.executor.waitForChange(400);
+      if (!change.changed && !change.urlChanged) return;
     }
   }
 
