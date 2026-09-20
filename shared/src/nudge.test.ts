@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { composeMisconceptionNudge } from "./nudge";
-import type { Misconception } from "./graph";
+import { KnowledgeGraph, type Misconception } from "./graph";
 
 const T0 = 1_700_000_000_000;
 
@@ -55,6 +55,23 @@ describe("composeMisconceptionNudge", () => {
     expect(goal).toContain('they wrote "why is summer hot sun closer"');
     expect(goal).toContain(message);
     expect(goal).toMatch(/do NOT state the correct explanation/);
+  });
+
+  it("full loop: detect → resolve with the question as the note → recur → callback recalls it", () => {
+    // The exact sequence the proactive engine drives against the graph.
+    const g = new KnowledgeGraph();
+    const belief = "Summer happens because Earth is closer to the Sun.";
+    const m = g.recordMisconception("seasons", belief, T0, { evidence: "why is summer hot sun closer" });
+    const first = composeMisconceptionNudge(m);
+    expect(first.message).toContain("Australia");
+    // Success attributed → engine records the question as the resolution note.
+    g.resolveMisconception("seasons", belief, T0 + 60_000, { method: "self", note: first.message });
+    // A day later the same belief resurfaces on another page.
+    const again = g.recordMisconception("seasons", belief, T0 + 86_400_000);
+    expect(again.status).toBe("recurring");
+    const second = composeMisconceptionNudge(again);
+    expect(second.message).toContain("untangled this one before");
+    expect(second.message).toContain("Australia");
   });
 
   it("keeps a long resolution note to one bubble-sized sentence", () => {

@@ -17,6 +17,15 @@ import { HOST_ID } from "../page-understanding/extract";
 const logger = log("proactive");
 const INTERACTIVE_SELECTOR = "button, a, [role=button], [role=link], [role=tab], [role=menuitem], [role=option], [role=checkbox], [role=radio], input, select, textarea, summary, label, [onclick], [tabindex]";
 
+interface NudgeRecord {
+  m: Misconception;
+  /** The Socratic question asked — becomes the resolution note (the callback cue) if it works. */
+  question: string;
+  at: number;
+  /** Page the nudge happened on, for success attribution. */
+  pathname: string;
+}
+
 export interface EngineDeps {
   tracker: SignalTracker;
   session: Session;
@@ -48,6 +57,9 @@ export class ProactiveEngine {
   private requesting = false;
   /** Misconception ids already nudged this page-session, so one belief nudges at most once. */
   private nudgedMisconceptions = new Set<string>();
+  /** The nudge currently on screen / most recently answered, for success attribution. */
+  private activeNudge: NudgeRecord | null = null;
+  private lastNudge: (NudgeRecord & { outcome: "accepted" | "declined" | "dismissed" }) | null = null;
 
   constructor(deps: EngineDeps) {
     this.deps = deps;
@@ -98,6 +110,7 @@ export class ProactiveEngine {
     const now = Date.now();
     if (reason === "url") this.deps.tracker.recordUrl(page.url, now);
     const { newSuccesses, problemChanged } = this.deps.tracker.recordPage(page, now);
+    if (newSuccesses.length) this.maybeResolveNudged(now);
     if (problemChanged) {
       this.level = 0;
       this.hadTrouble = false;
@@ -131,12 +144,35 @@ export class ProactiveEngine {
     this.nudgedMisconceptions.add(m.id);
     const nudge = composeMisconceptionNudge(m);
     logger.info("misconception nudge", { concept: m.concept, status: m.status, belief: m.belief.slice(0, 80) });
+    this.activeNudge = { m, question: nudge.message, at: now, pathname: location.pathname };
     this.offerActive = true;
     store.setState({ attention: 2 });
     this.deps.session.setCooldown(now + THRESHOLDS.cooldownMs);
     this.deps.onOffer({ type: "nudge", message: nudge.message, elementId: null, at: now, goal: nudge.goal });
     const st = store.getState();
     if (st.settings.ttsEnabled && st.voice.mode === "listening") void this.deps.speak(nudge.message);
+  }
+
+  /**
+   * A success just appeared after a misconception nudge: close the loop by recording HOW it got
+   * resolved, so a future recurrence can call back to it ("remember what cracked it?").
+   * Attribution is a heuristic — same page, within 10 minutes; an LLM judge that checks the
+   * learner actually demonstrated the corrected idea replaces this later.
+   */
+  private maybeResolveNudged(now: number): void {
+    const n = this.activeNudge ? { ...this.activeNudge, outcome: "shown" as const } : this.lastNudge;
+    if (!n) return;
+    if (now - n.at > 10 * 60_000 || location.pathname !== n.pathname) return;
+    // Engaged nudge → the hint did it (rung 1). Shown-but-not-engaged or declined → they did it themselves.
+    const method = n.outcome === "accepted" ? "hint" : "self";
+    const resolved = this.deps.session.graph.resolveMisconception(n.m.concept, n.m.belief, now, {
+      method,
+      rung: method === "hint" ? 1 : undefined,
+      note: n.question,
+    });
+    if (resolved) logger.info("misconception resolved", { concept: n.m.concept, method, occurrences: resolved.occurrences });
+    this.activeNudge = null;
+    this.lastNudge = null;
   }
 
   evaluate(trigger: string): void {
@@ -236,6 +272,11 @@ export class ProactiveEngine {
   }
 
   offerResolved(outcome: "accepted" | "declined" | "dismissed"): void {
+    if (this.activeNudge) {
+      // Keep the nudge for success attribution even after the bubble is answered/dismissed.
+      this.lastNudge = { ...this.activeNudge, outcome };
+      this.activeNudge = null;
+    }
     this.offerActive = false;
     store.setState({ attention: 0 });
     const student = this.deps.session.student;
