@@ -1,5 +1,3 @@
-import { z } from "zod";
-
 /**
  * The learner knowledge graph: the shared spine of both pillars.
  *
@@ -126,67 +124,89 @@ const CAP = {
   nodes: 2000,
 } as const;
 
-const ConceptSourceSchema = z.object({
-  url: z.string(),
-  title: z.string(),
-  at: z.number(),
-  kind: z.enum(["page", "video", "query", "selection", "hint", "answer"]),
-  snippet: z.string().optional(),
-});
+// --- Snapshot validation, hand-written to match validate.ts house style (no zod dependency).
+// A corrupt or stale persisted blob must never crash a session, so parsing bails to null on a bad
+// envelope and drops individual malformed nodes/edges rather than throwing.
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+const finiteNum = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
-const LearnerConceptStateSchema = z.object({
-  firstSeenAt: z.number(),
-  lastSeenAt: z.number(),
-  exposures: z.number(),
-  dwellMs: z.number(),
-  asks: z.number(),
-  struggles: z.number(),
-  mastery: z.number(),
-});
+const SOURCE_KINDS = new Set<string>(["page", "video", "query", "selection", "hint", "answer"]);
+const RESOLUTION_METHODS = new Set<string>(["self", "hint", "resource", "peer", "unknown"]);
+const EDGE_TYPES = new Set<string>(["prerequisite", "related"]);
 
-const MisconceptionResolutionSchema = z.object({
-  at: z.number(),
-  method: z.enum(["self", "hint", "resource", "peer", "unknown"]),
-  rung: z.number().optional(),
-  note: z.string(),
-});
+function parseSource(v: unknown): ConceptSource | null {
+  if (!isObj(v)) return null;
+  const at = finiteNum(v.at);
+  if (typeof v.url !== "string" || typeof v.title !== "string" || at === null || typeof v.kind !== "string" || !SOURCE_KINDS.has(v.kind)) return null;
+  const s: ConceptSource = { url: v.url, title: v.title, at, kind: v.kind as SourceKind };
+  if (typeof v.snippet === "string") s.snippet = v.snippet;
+  return s;
+}
 
-const MisconceptionSchema = z.object({
-  id: z.string(),
-  concept: z.string(),
-  belief: z.string(),
-  status: z.enum(["active", "resolved", "recurring"]),
-  firstSeenAt: z.number(),
-  lastSeenAt: z.number(),
-  occurrences: z.number(),
-  evidence: z.string().optional(),
-  resolution: MisconceptionResolutionSchema.optional(),
-});
+function parseState(v: unknown): LearnerConceptState | null {
+  if (!isObj(v)) return null;
+  const firstSeenAt = finiteNum(v.firstSeenAt), lastSeenAt = finiteNum(v.lastSeenAt);
+  const exposures = finiteNum(v.exposures), dwellMs = finiteNum(v.dwellMs);
+  const asks = finiteNum(v.asks), struggles = finiteNum(v.struggles), mastery = finiteNum(v.mastery);
+  if (firstSeenAt === null || lastSeenAt === null || exposures === null || dwellMs === null || asks === null || struggles === null || mastery === null) return null;
+  return { firstSeenAt, lastSeenAt, exposures, dwellMs, asks, struggles, mastery };
+}
 
-const ConceptNodeSchema = z.object({
-  id: z.string(),
-  label: z.string(),
-  aliases: z.array(z.string()),
-  domain: z.string().optional(),
-  state: LearnerConceptStateSchema,
-  sources: z.array(ConceptSourceSchema),
-  // Optional so a graph persisted before misconceptions still loads; normalized to [] on load.
-  misconceptions: z.array(MisconceptionSchema).optional(),
-});
+function parseResolution(v: unknown): MisconceptionResolution | null {
+  if (!isObj(v)) return null;
+  const at = finiteNum(v.at);
+  if (at === null || typeof v.method !== "string" || !RESOLUTION_METHODS.has(v.method) || typeof v.note !== "string") return null;
+  const r: MisconceptionResolution = { at, method: v.method as ResolutionMethod, note: v.note };
+  const rung = finiteNum(v.rung);
+  if (rung !== null) r.rung = rung;
+  return r;
+}
 
-const ConceptEdgeSchema = z.object({
-  from: z.string(),
-  to: z.string(),
-  type: z.enum(["prerequisite", "related"]),
-  weight: z.number(),
-});
+function parseMisconception(v: unknown): Misconception | null {
+  if (!isObj(v)) return null;
+  const firstSeenAt = finiteNum(v.firstSeenAt), lastSeenAt = finiteNum(v.lastSeenAt), occurrences = finiteNum(v.occurrences);
+  if (typeof v.id !== "string" || typeof v.concept !== "string" || typeof v.belief !== "string" || firstSeenAt === null || lastSeenAt === null || occurrences === null) return null;
+  const m: Misconception = { id: v.id, concept: v.concept, belief: v.belief, status: "active", firstSeenAt, lastSeenAt, occurrences };
+  if (typeof v.evidence === "string") m.evidence = v.evidence;
+  const resolution = parseResolution(v.resolution);
+  if (resolution) m.resolution = resolution;
+  m.status = deriveStatus(m); // derive, never trust the stored status
+  return m;
+}
 
-export const GraphSnapshotSchema = z.object({
-  version: z.literal(1),
-  nodes: z.array(ConceptNodeSchema),
-  edges: z.array(ConceptEdgeSchema),
-  updatedAt: z.number(),
-});
+function parseNode(v: unknown): ConceptNode | null {
+  if (!isObj(v)) return null;
+  const state = parseState(v.state);
+  if (typeof v.id !== "string" || typeof v.label !== "string" || !Array.isArray(v.aliases) || !state) return null;
+  const node: ConceptNode = {
+    id: v.id,
+    label: v.label,
+    aliases: v.aliases.filter((a): a is string => typeof a === "string"),
+    state,
+    sources: Array.isArray(v.sources) ? v.sources.map(parseSource).filter((s): s is ConceptSource => s !== null) : [],
+    misconceptions: Array.isArray(v.misconceptions) ? v.misconceptions.map(parseMisconception).filter((m): m is Misconception => m !== null) : [],
+  };
+  if (typeof v.domain === "string") node.domain = v.domain;
+  return node;
+}
+
+function parseEdge(v: unknown): ConceptEdge | null {
+  if (!isObj(v)) return null;
+  const weight = finiteNum(v.weight);
+  if (typeof v.from !== "string" || typeof v.to !== "string" || typeof v.type !== "string" || !EDGE_TYPES.has(v.type) || weight === null) return null;
+  return { from: v.from, to: v.to, type: v.type as EdgeType, weight };
+}
+
+/** Validate a persisted snapshot envelope; returns null for anything that isn't a v1 graph. */
+function parseSnapshot(raw: unknown): GraphSnapshot | null {
+  if (!isObj(raw) || raw.version !== 1 || !Array.isArray(raw.nodes) || !Array.isArray(raw.edges)) return null;
+  return {
+    version: 1,
+    nodes: raw.nodes.map(parseNode).filter((n): n is ConceptNode => n !== null),
+    edges: raw.edges.map(parseEdge).filter((e): e is ConceptEdge => e !== null),
+    updatedAt: finiteNum(raw.updatedAt) ?? 0,
+  };
+}
 
 /** Persistence boundary. Content-script RAM now; background + chrome.storage later. */
 export interface GraphStore {
@@ -523,16 +543,14 @@ export class KnowledgeGraph {
   /** Rebuild from a persisted snapshot, tolerating a corrupt/stale blob (returns an empty graph). */
   static fromJSON(raw: unknown): KnowledgeGraph {
     const g = new KnowledgeGraph();
-    const parsed = GraphSnapshotSchema.safeParse(raw);
-    if (!parsed.success) return g;
-    for (const raw of parsed.data.nodes) {
-      const misconceptions = (raw.misconceptions ?? []).map((m) => ({ ...m, status: deriveStatus(m) }));
-      const node: ConceptNode = { ...raw, misconceptions };
+    const snap = parseSnapshot(raw);
+    if (!snap) return g;
+    for (const node of snap.nodes) {
       g.nodes.set(node.id, node);
       g.aliasIndex.set(node.id, node.id);
       for (const alias of node.aliases) g.aliasIndex.set(slugify(alias), node.id);
     }
-    g.edges = parsed.data.edges;
+    g.edges = snap.edges;
     g.rebuildEdgeKeys();
     return g;
   }
