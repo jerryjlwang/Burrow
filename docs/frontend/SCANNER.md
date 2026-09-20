@@ -107,5 +107,9 @@ other half, is a different drawing rather than the same one improved. Mirroring 
 two, because it took the nose and the mouth with it and left a blank face. `--face` and `--mirror`
 turn them back on for a rushed sketch that lost its eyes, or a shape that really is symmetric.
 
-Still open: the cheek patches do not paint when `--face` is used. The coordinates come back and the
-accent colour is in the palette, so the placement test is what rejects them.
+The cheeks were solved by dropping the whole idea of placing them. They are already closed shapes on
+the page, so they are the same problem the body was: `colour_holes` finds every region the pen closed
+inside the silhouette and fills it, and the model's coordinates only say which is a cheek, which is an
+eye and which is the mouth. Cheeks take the accent colour, eyes and a mouth are left as drawn because
+the pen already made them dark, and any other hole takes the body colour so nothing stays see through.
+Nothing is moved or redrawn.

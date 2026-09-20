@@ -480,6 +480,63 @@ def body_at(im, x, y):
     return px[x, y]
 
 
+def colour_holes(im, facts):
+    """
+    Colour the shapes the pen closed, without moving any of them.
+
+    The body was filled by flooding what the outline encloses. A face has more closed shapes inside
+    that one: the cheek patches, the eyes, the mouth. They come out of the shrink as holes, so the
+    same idea does for them, and the model already said where each is and what colour it should be.
+    Nothing is repositioned or redrawn: a hole is found where the hand put it and painted.
+    """
+    w, h = im.size
+    px = im.load()
+    pal = {q.get("role"): q.get("hex") for q in facts.get("palette", []) if q.get("hex")}
+    accent = pal.get("accent") or pal.get("detail")
+    body = pal.get("body")
+    marks = []
+    for role, pts in (("cheek", facts.get("cheeks") or []), ("eye", facts.get("eyes") or []), ("mouth", [facts.get("mouth")] if facts.get("mouth") else [])):
+        for pt in pts:
+            try:
+                marks.append((role, int(round(float(pt[0]) * w)), int(round(float(pt[1]) * h))))
+            except (TypeError, ValueError, IndexError):
+                pass
+    seen = [[False] * w for _ in range(h)]
+    for sy in range(h):
+        for sx in range(w):
+            if seen[sy][sx] or px[sx, sy][3]:
+                continue
+            q = [(sx, sy)]
+            seen[sy][sx] = True
+            hole, touches_edge = [], False
+            while q:
+                x, y = q.pop()
+                hole.append((x, y))
+                if x in (0, w - 1) or y in (0, h - 1):
+                    touches_edge = True
+                for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+                    if 0 <= nx < w and 0 <= ny < h and not seen[ny][nx] and not px[nx, ny][3]:
+                        seen[ny][nx] = True
+                        q.append((nx, ny))
+            if touches_edge or len(hole) > w * h * 0.3:
+                continue  # that is the world around the drawing, not a shape inside it
+            cells = set(hole)
+            role = next((r for r, mx, my in marks if (mx, my) in cells), None)
+            if role is None:
+                # Near enough counts: a coordinate can land a pixel off at this size.
+                role = next((r for r, mx, my in marks
+                             if any((mx + dx, my + dy) in cells for dx in (-1, 0, 1) for dy in (-1, 0, 1))), None)
+            hexcol = accent if role == "cheek" else body if role is None else None
+            if role in ("eye", "mouth"):
+                continue  # the pen already made these dark; a hole in them is a highlight
+            if not hexcol:
+                continue
+            col = hexrgb(hexcol) + (255,)
+            for x, y in hole:
+                px[x, y] = col
+    return im
+
+
 def clean(im, drop_strays=True):
     """Strays go, one pixel holes close. Pixel art wants a solid shape, not photo noise."""
     w, h = im.size
@@ -591,6 +648,7 @@ def main():
     # with a colour that comes from knowing the character rather than from the page.
     art_is_lines = bool(facts.get("line_art")) or args.line_art
     art = rasterise(im, mask, pal, line_art=art_is_lines)
+    art = colour_holes(art, facts)
     art = clean(art)
     # Mirroring is a rewrite too: it copies one half of the drawing over the other and the nose,
     # the mouth and anything else the hand put slightly off centre go with it. Off unless asked for.
