@@ -134,6 +134,25 @@ describe("misconceptions", () => {
     expect(g.misconceptionCallback("Seasons")?.resolution?.rung).toBe(2);
   });
 
+  it("keeps provenance over repeated fixes: every resolution retained, latest wins", () => {
+    const g = new KnowledgeGraph();
+    g.recordMisconception("Seasons", BELIEF, T0);
+    g.resolveMisconception("Seasons", BELIEF, T0 + 1000, { method: "hint", rung: 2, note: "tilt, not distance" });
+    g.recordMisconception("Seasons", BELIEF, T0 + 10_000); // came back
+    g.resolveMisconception("Seasons", BELIEF, T0 + 20_000, { method: "self", note: "opposite hemispheres" });
+    const m = g.get("seasons")!.misconceptions[0]!;
+    expect(m.resolution?.note).toBe("opposite hemispheres"); // latest in the single slot
+    expect(m.resolutionHistory?.map((r) => r.rung ?? null)).toEqual([2, null]); // both fixes retained
+    // Survives persistence and merge.
+    const restored = KnowledgeGraph.fromJSON(g.toJSON());
+    expect(restored.get("seasons")!.misconceptions[0]!.resolutionHistory).toHaveLength(2);
+    const other = new KnowledgeGraph();
+    other.recordMisconception("Seasons", BELIEF, T0 + 30_000);
+    other.resolveMisconception("Seasons", BELIEF, T0 + 40_000, { method: "hint", rung: 1, note: "third time" });
+    restored.merge(other, T0 + 50_000);
+    expect(restored.get("seasons")!.misconceptions[0]!.resolutionHistory?.map((r) => r.at)).toEqual([T0 + 1000, T0 + 20_000, T0 + 40_000]);
+  });
+
   it("activeMisconceptions excludes resolved ones", () => {
     const g = new KnowledgeGraph();
     g.recordMisconception("Seasons", BELIEF, T0);
