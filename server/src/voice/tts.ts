@@ -42,6 +42,47 @@ export function attachTtsSession(client: WebSocket, cfg: Config): void {
   let current: { id: string } | null = null;
   let chain: Promise<void> = Promise.resolve();
   let closed = false;
+  /** Last utterance, for one transparent resend when the upstream dies mid-speech. */
+  let lastSpoken: { id: string; text: string; retried: boolean } | null = null;
+  let redialTimer: NodeJS.Timeout | null = null;
+
+  // Flux closes the speak socket after 60s without a message and offers no keepalive, so keep a
+  // warm one dialled at all times; the idle-death becomes invisible instead of taxing the next reply.
+  const scheduleRedial = () => {
+    if (closed || redialTimer) return;
+    redialTimer = setTimeout(() => {
+      redialTimer = null;
+      if (!closed) void ensureUpstream();
+    }, 250);
+  };
+
+  /** Resend the in-flight utterance on a fresh socket (once), then fall back to REST. */
+  const retryCurrent = async (): Promise<void> => {
+    const utterance = lastSpoken;
+    if (!utterance || utterance.retried || current?.id !== utterance.id) return;
+    utterance.retried = true;
+    upstream = null;
+    const conn = await ensureUpstream();
+    if (current?.id !== utterance.id) return;
+    if (conn) {
+      try {
+        conn.sendSpeak({ type: "Speak", text: utterance.text });
+        conn.sendFlush({ type: "Flush" });
+        logger.info("speak (retried on fresh socket)", { id: utterance.id });
+        return;
+      } catch {
+        /* fall through to REST */
+      }
+    }
+    try {
+      await speakViaRest(utterance.id, utterance.text);
+    } catch (e) {
+      if (current?.id === utterance.id) {
+        sendJson(client, { type: "error", id: utterance.id, message: e instanceof Error ? e.message : String(e) });
+        current = null;
+      }
+    }
+  };
 
   const audioChunk = (blob: Blob) => {
     const forId = current?.id;
@@ -94,7 +135,10 @@ export function attachTtsSession(client: WebSocket, cfg: Config): void {
               break;
             case "Error":
               logger.warn("flux tts error", { code: m.code, description: m.description });
-              if (current) {
+              // Mid-utterance: retry once on a fresh socket before surfacing anything to the UI.
+              if (current && lastSpoken?.id === current.id && !lastSpoken.retried) {
+                void retryCurrent();
+              } else if (current) {
                 sendJson(client, { type: "error", id: current.id, message: m.description });
                 current = null;
               }
@@ -109,10 +153,13 @@ export function attachTtsSession(client: WebSocket, cfg: Config): void {
         conn.on("error", (e) => logger.warn("flux tts socket error", { error: e.message }));
         conn.on("close", () => {
           if (upstream === conn) upstream = null;
-          if (current && !closed) {
+          if (current && !closed && lastSpoken?.id === current.id && !lastSpoken.retried) {
+            void retryCurrent();
+          } else if (current && !closed) {
             sendJson(client, { type: "error", id: current.id, message: "voice connection closed" });
             current = null;
           }
+          scheduleRedial();
         });
         conn.connect();
         await withTimeout(conn.waitForOpen(), 6000, "deepgram tts connect");
@@ -176,6 +223,7 @@ export function attachTtsSession(client: WebSocket, cfg: Config): void {
           sendJson(client, { type: "cancelled", id: current.id });
         }
         current = { id };
+        lastSpoken = { id, text, retried: false };
         if (!text) {
           sendJson(client, { type: "done", id });
           current = null;
@@ -219,6 +267,8 @@ export function attachTtsSession(client: WebSocket, cfg: Config): void {
 
   client.on("close", () => {
     closed = true;
+    if (redialTimer) clearTimeout(redialTimer);
+    redialTimer = null;
     try {
       upstream?.sendClose({ type: "Close" });
     } catch {
@@ -227,4 +277,7 @@ export function attachTtsSession(client: WebSocket, cfg: Config): void {
     upstream?.close();
     upstream = null;
   });
+
+  // Dial eagerly so the first utterance doesn't pay the connect handshake.
+  void ensureUpstream();
 }

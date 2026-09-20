@@ -367,12 +367,16 @@ export function extractPage(doc: Document, opts: ExtractOptions): PageSummary {
         if (c.el.tagName === "SELECT") {
           const sel = c.el as HTMLSelectElement;
           value = collapse(sel.options[sel.selectedIndex]?.text ?? "");
-        } else if (c.el.tagName === "INPUT" || c.el.tagName === "TEXTAREA") {
+        } else if (c.el.tagName === "TEXTAREA") {
+          // Written working is line-structured: keep newlines so step-judging and line anchors
+          // (1-based lines) survive into the page model the agent reasons over.
+          value = (c.el as HTMLTextAreaElement).value.split("\n").map((l) => collapse(l)).join("\n").replace(/\n+$/, "");
+        } else if (c.el.tagName === "INPUT") {
           value = collapse((c.el as HTMLInputElement).value);
         } else if ((c.el as HTMLElement).isContentEditable) {
           value = textOfNode(c.el, 80);
         }
-        if (value) item.value = value.slice(0, 80);
+        if (value) item.value = value.slice(0, 200);
       }
     }
     const ctx = nearbyContext(c.el, headings, name);

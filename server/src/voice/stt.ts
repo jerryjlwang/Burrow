@@ -64,47 +64,76 @@ export async function attachSttSession(client: WebSocket, cfg: Config): Promise<
   const useFlux = cfg.sttModel.startsWith("flux");
   try {
     if (useFlux) {
-      const conn = await dg.listen.v2.connect({
-        model: cfg.sttModel,
-        encoding: "linear16",
-        sample_rate: 16000,
-        eot_threshold: 0.7,
-        eot_timeout_ms: 5000,
-        reconnectAttempts: 0,
-      });
-      conn.on("message", (m) => {
-        if (m.type === "TurnInfo") {
-          const isFinal = m.event === "EndOfTurn";
-          send(client, { type: "transcript", text: m.transcript, final: isFinal, event: m.event, turnIndex: m.turn_index });
-        } else if (m.type === "Error") {
-          logger.warn("flux error", { code: m.code, description: m.description });
-          send(client, { type: "error", message: m.description });
+      // Flux offers no keepalive and closes on quiet streams, so a dead upstream is re-dialled
+      // transparently (mic frames buffer meanwhile) instead of killing the browser's session —
+      // otherwise the mic silently dies until the student toggles it.
+      let redialing = false;
+      const dialFlux = async (): Promise<void> => {
+        const conn = await dg.listen.v2.connect({
+          model: cfg.sttModel,
+          encoding: "linear16",
+          sample_rate: 16000,
+          eot_threshold: 0.7,
+          eot_timeout_ms: 5000,
+          reconnectAttempts: 0,
+        });
+        conn.on("message", (m) => {
+          if (m.type === "TurnInfo") {
+            const isFinal = m.event === "EndOfTurn";
+            send(client, { type: "transcript", text: m.transcript, final: isFinal, event: m.event, turnIndex: m.turn_index });
+          } else if (m.type === "Error") {
+            // Usually precedes a close; the redial handles it. Surface nothing unless we give up.
+            logger.warn("flux error", { code: m.code, description: m.description });
+          }
+        });
+        conn.on("error", (e) => logger.warn("flux socket error", { error: e.message }));
+        conn.on("close", () => {
+          if (closed || redialing) return;
+          sendMedia = null; // buffer frames into `pending` while we re-dial
+          redialing = true;
+          void (async () => {
+            for (const delayMs of [300, 1000, 3000]) {
+              await new Promise((r) => setTimeout(r, delayMs));
+              if (closed) return;
+              try {
+                await dialFlux();
+                redialing = false;
+                logger.info("flux session re-dialled");
+                return;
+              } catch (e) {
+                logger.warn("flux re-dial failed", { error: e instanceof Error ? e.message : String(e) });
+              }
+            }
+            if (!closed) {
+              send(client, { type: "error", message: "Voice connection dropped—tap the mic to restart." });
+              client.close(1011, "upstream closed");
+            }
+          })();
+        });
+        conn.connect();
+        await withTimeout(conn.waitForOpen(), 8000, "deepgram flux connect");
+        if (closed) {
+          conn.close();
+          throw new Error("client session closed during dial");
         }
-      });
-      conn.on("error", (e) => {
-        logger.warn("flux socket error", { error: e.message });
-        send(client, { type: "error", message: e.message });
-      });
-      conn.on("close", () => {
-        if (!closed) client.close(1011, "upstream closed");
-      });
-      conn.connect();
-      await withTimeout(conn.waitForOpen(), 8000, "deepgram flux connect");
-      sendMedia = (b) => {
-        try {
-          conn.sendMedia(b);
-        } catch {
-          /* socket closing */
-        }
+        sendMedia = (b) => {
+          try {
+            conn.sendMedia(b);
+          } catch {
+            /* socket closing */
+          }
+        };
+        for (const b of pending.splice(0)) sendMedia(b);
+        closeUpstream = () => {
+          try {
+            conn.sendCloseStream({ type: "CloseStream" });
+          } catch {
+            /* ignore */
+          }
+          conn.close();
+        };
       };
-      closeUpstream = () => {
-        try {
-          conn.sendCloseStream({ type: "CloseStream" });
-        } catch {
-          /* ignore */
-        }
-        conn.close();
-      };
+      await dialFlux();
       logger.info("flux session open", { model: cfg.sttModel });
     } else {
       const conn = await dg.listen.v1.connect({

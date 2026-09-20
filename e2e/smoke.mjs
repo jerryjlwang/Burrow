@@ -47,7 +47,14 @@ function envFileKey() {
 const realDeepgramKey = process.env.DEEPGRAM_API_KEY || envFileKey();
 let serverProc = null;
 if (await portInUse(PORT)) {
-  console.log(`server already running on :${PORT} — using it`);
+  // The suite's assertions are calibrated for the deterministic demo-mode agent. Running them
+  // against a live-LLM server produces variance failures that look like product bugs.
+  const health = await fetch(`http://localhost:${PORT}/health`).then((r) => r.json()).catch(() => null);
+  if (!health?.demoMode && !process.env.E2E_LIVE) {
+    console.error(`server on :${PORT} is not in demo mode (llm: ${health?.llm ?? "unknown"}). Free the port, or set E2E_LIVE=1 to run against it deliberately.`);
+    process.exit(1);
+  }
+  console.log(`server already running on :${PORT} — using it${health?.demoMode ? "" : " (LIVE mode: expect model variance)"}`);
 } else {
   serverProc = spawn(process.execPath, [resolve(root, "node_modules/tsx/dist/cli.mjs"), resolve(root, "server/src/index.ts")], {
     env: { ...process.env, DEMO_MODE: "1", PORT: String(PORT), DEEPGRAM_API_KEY: realDeepgramKey || "e2e-placeholder-key" },
@@ -286,7 +293,7 @@ try {
     const stepBubble = wp.locator(".pip-bubble");
     await stepBubble.waitFor({ timeout: 25000 }).catch(() => null);
     const stepText = (await stepBubble.count()) ? await stepBubble.first().textContent() : "";
-    check("wrong working step earns a bubble naming the step", /step 2/i.test(stepText ?? ""), stepText || "(no bubble)");
+    check("wrong working step earns a bubble naming the step", /second line/i.test(stepText ?? "") && /3x\s*=\s*25/.test(stepText ?? ""), stepText || "(no bubble)");
     check("step bubble never contains the correction", !/15|x\s*=\s*5/.test(stepText ?? ""), stepText ?? "");
     await wp.screenshot({ path: resolve(shots, "14-step-judge.png") });
 
@@ -314,6 +321,17 @@ try {
     await wp.click("#check-working");
     const fixed = await wp.locator("#working-feedback.success.show").waitFor({ timeout: 5000 }).then(() => true).catch(() => false);
     check("corrected working passes the page's final check", fixed);
+    // Path consumer: with the seasons misconception recurring in the persistent graph, the win
+    // here should draw a cross-topic "circle back" suggestion a beat after the celebration.
+    const pathBubble = wp.locator(".pip-bubble");
+    let pathText = "";
+    for (const t0 = Date.now(); Date.now() - t0 < 15000; ) {
+      pathText = (await pathBubble.count()) ? (await pathBubble.first().textContent()) ?? "" : "";
+      if (/circle back/i.test(pathText)) break;
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    check("after the win, the rabbit suggests revisiting the shaky topic (path consumer)", /circle back/i.test(pathText) && /seasons/i.test(pathText), pathText || "(no bubble)");
+    await wp.screenshot({ path: resolve(shots, "17-path-suggestion.png") });
     await wp.close();
   }
 
