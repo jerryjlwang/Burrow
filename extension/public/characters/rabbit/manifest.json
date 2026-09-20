@@ -8,18 +8,42 @@
   "display": "whole-number scale only, image-rendering: pixelated",
   "jump_sequence": {
     "sending": [
-      "hole_open",
-      "dive",
-      "hole_only reversed"
+      {
+        "state": "hole_open"
+      },
+      {
+        "state": "dive"
+      },
+      {
+        "state": "hole_only",
+        "reverse": true
+      }
     ],
     "receiving": [
-      "hole_only",
-      "hole_wait (loop)",
-      "dive reversed",
-      "hole_open reversed",
-      "idle"
+      {
+        "state": "hole_only"
+      },
+      {
+        "state": "hole_wait",
+        "loop": true
+      },
+      {
+        "state": "dive",
+        "reverse": true
+      },
+      {
+        "state": "hole_open",
+        "reverse": true
+      },
+      {
+        "state": "idle"
+      }
     ]
   },
+  "idle_variant_gap": [
+    4,
+    9
+  ],
   "body": [
     19,
     2,
@@ -39,7 +63,12 @@
         0,
         1,
         1
-      ]
+      ],
+      "overlays": [
+        "blink",
+        "mouth"
+      ],
+      "variants": []
     },
     "listening": {
       "file": "rabbit_listening.png",
@@ -51,6 +80,10 @@
         0,
         0,
         0
+      ],
+      "hold": true,
+      "overlays": [
+        "blink"
       ]
     },
     "thinking": {
@@ -58,7 +91,8 @@
       "frames": 4,
       "fps": 3,
       "loop": true,
-      "notes": "He glances at his watch while a pocket watch ticks in a thought bubble. Loop while the model works."
+      "notes": "He glances at his watch while a pocket watch ticks in a thought bubble. Loop while the model works.",
+      "exit": "aha"
     },
     "aha": {
       "file": "rabbit_aha.png",

@@ -377,10 +377,12 @@ def patch(rows, a, b, draw):
 def build():
     S = {}
     a, b = rabbit(), rabbit(twitch=True)
-    S["idle"] = dict(frames=[a, b, bob(a), bob(a)], fps=3, loop=True, head_dy=[0, 0, 1, 1])
+    S["idle"] = dict(frames=[a, b, bob(a), bob(a)], fps=3, loop=True, head_dy=[0, 0, 1, 1],
+                     overlays=["blink", "mouth"], variants=[])
     S["listening"] = dict(frames=[a, rabbit(perk=True, eyes="wide"), rabbit(perk=True, eyes="wide")], fps=8, loop=False,
-                          head_dy=[0, 0, 0])
-    S["thinking"] = dict(frames=[thought(rabbit(look=True, mouth="flat"), clock(i)) for i in range(4)], fps=3, loop=True)
+                          head_dy=[0, 0, 0], hold=True, overlays=["blink"])
+    S["thinking"] = dict(frames=[thought(rabbit(look=True, mouth="flat"), clock(i)) for i in range(4)], fps=3, loop=True,
+                         exit="aha")
     S["aha"] = dict(frames=[thought(rabbit(look=True, mouth="flat"), bulb(False)),
                             thought(rabbit(mouth="flat"), bulb(True)),
                             thought(rabbit(eyes="wide", mouth="open"), bulb(True, sparks=True)),
@@ -457,8 +459,11 @@ def export(S, out=OUT):
     os.makedirs(out, exist_ok=True)
     man = {"character": "rabbit", "cell": [W, H], "anchor": "bottom center, feet end at row 53",
            "display": "whole-number scale only, image-rendering: pixelated",
-           "jump_sequence": {"sending": ["hole_open", "dive", "hole_only reversed"],
-                             "receiving": ["hole_only", "hole_wait (loop)", "dive reversed", "hole_open reversed", "idle"]},
+           "jump_sequence": {
+               "sending": [{"state": "hole_open"}, {"state": "dive"}, {"state": "hole_only", "reverse": True}],
+               "receiving": [{"state": "hole_only"}, {"state": "hole_wait", "loop": True}, {"state": "dive", "reverse": True},
+                             {"state": "hole_open", "reverse": True}, {"state": "idle"}]},
+           "idle_variant_gap": [4, 9],
            "body": list(image(S["idle"]["frames"][0]).getbbox()),
            "body_note": "left, top, right, bottom of the rabbit in idle frame 0, rim included, right and bottom exclusive",
            "states": {}}
@@ -471,8 +476,9 @@ def export(S, out=OUT):
             strip.save(path)
         entry = {"file": f"rabbit_{name}.png", "frames": len(st["frames"]), "fps": st["fps"], "loop": st["loop"],
                  "notes": NOTES[name]}
-        if "head_dy" in st:
-            entry["head_dy"] = st["head_dy"]
+        for key in ("head_dy", "enter", "exit", "hold", "overlays", "variants"):
+            if key in st:
+                entry[key] = st[key]
         man["states"][name] = entry
     with open(os.path.join(out, "manifest.json"), "w", newline="\n") as fh:
         json.dump(man, fh, indent=2)
