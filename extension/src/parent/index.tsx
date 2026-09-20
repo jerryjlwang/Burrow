@@ -120,6 +120,7 @@ function Parent() {
   const fixed = spots.filter((m) => m.status === "resolved" && m.resolution);
   const here = jump?.to === "parent" && jump.stage === "arrived";
   const notes = learningNotes(graph, kid, now);
+  const plans = [...(graph.profile?.plans ?? [])].sort((a, b) => b.updatedAt - a.updatedAt);
 
   return (
     <main>
@@ -205,6 +206,33 @@ function Parent() {
           ))}
         </div>
       </section>
+
+      {plans.length > 0 && (
+        <section aria-labelledby="plans-h">
+          <h2 id="plans-h">Learning plans</h2>
+          <p className="lede plain">Things {kid} asked to learn about. The rabbit mapped each one out and takes {kid} to a lesson or video for every step.</p>
+          <div className="spots">
+            {plans.map((p) => {
+              const next = p.steps.findIndex((s) => !s.done);
+              return (
+                <article key={p.key} className="spot px-frame">
+                  <h3>
+                    {p.goal}
+                    <span className="tag">{next < 0 ? "finished" : `${p.steps.filter((s) => s.done).length} of ${p.steps.length}`}</span>
+                  </h3>
+                  {p.steps.map((s, i) => (
+                    <p key={s.title} className="plain">
+                      <span className="k">{s.done ? "Done: " : i === next ? "Next: " : "Later: "}</span>
+                      {s.title}
+                    </p>
+                  ))}
+                  <p className="meta plain">Last worked on {ago(p.updatedAt, now)}</p>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {notes.length > 0 && (
         <section aria-labelledby="learns-h">

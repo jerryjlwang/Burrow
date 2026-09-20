@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { suggestNext } from "./path";
+import { planStepSuggestion, suggestNext } from "./path";
 import { KnowledgeGraph } from "./graph";
 
 const T0 = 1_700_000_000_000;
@@ -117,5 +117,17 @@ describe("actionable suggestions", () => {
     const reloaded = KnowledgeGraph.fromJSON(JSON.parse(JSON.stringify(g.toJSON())));
     expect(suggestNext(reloaded, { kinds: ["explore"], now: T0 + 3_600_000 })).toBeNull();
     expect(suggestNext(reloaded, { kinds: ["explore"], now: T0 + DAY })?.kind).toBe("explore");
+  });
+});
+
+describe("planStepSuggestion", () => {
+  it("builds the same playbook for any step a learner taps, not just the next one", () => {
+    const g = new KnowledgeGraph();
+    const plan = g.savePlan({ key: "topic:geology", goal: "geology", steps: [{ title: "Rocks", concept: "Rock types", query: "rock types for kids" }, { title: "Plates", concept: "Plate tectonics" }] }, T0);
+    const s = planStepSuggestion(g, plan, 1)!;
+    expect(s).toMatchObject({ kind: "plan", conceptId: "plate-tectonics", resource: { query: "Plate tectonics for kids", prefer: "lesson" } });
+    expect(s.goal).toContain("step 2 of 2");
+    expect(s.goal).toContain('look_up "Plate tectonics for kids"');
+    expect(planStepSuggestion(g, plan, 5)).toBeNull();
   });
 });

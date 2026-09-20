@@ -173,6 +173,11 @@ export function decideMock(input: AgentInput): AgentDecision {
     return d({ action: "make_plan", text: learnGoal[1].trim(), say: "Ooh, let's map that out.", taskType: "learning", reason: "learning goal → plan" });
   }
 
+  // ---- "What's my plan?" → show it, don't recite it ----
+  if (/\b(plans?|steps)\b/.test(u) && /(what s|whats|what is|what are|show|see|open|where am i|how far|what s next|whats next)/.test(u) && /\b(my|our|the|we)\b/.test(u)) {
+    return d({ action: "show_plan", say: "Here's the map.", done: true, taskType: "learning", reason: "plans are shown, not recited" });
+  }
+
   // ---- Greetings ----
   if (/^(hi|hello|hey|yo|hiya|good (morning|afternoon|evening))( pip)?$/.test(u)) {
     return d({ action: "speak", say: "Hey! I'm here. Ask me where something is, or say 'what's on this page'.", done: true, taskType: "chat" });

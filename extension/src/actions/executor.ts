@@ -401,7 +401,7 @@ export async function executeAction(decision: AgentDecision, deps: ExecutorDeps)
       }
 
       case "show_plan": {
-        return deps.showPlan() ? { ok: true, message: "plan map is showing" } : { ok: false, message: "there is no plan yet — offer to make one with make_plan", elementFound: true };
+        return deps.showPlan() ? { ok: true, message: "plan map is showing" } : { ok: false, message: "We don't have a plan yet. Tell me something you want to learn about and I'll map it out.", elementFound: true };
       }
 
       case "sketch": {

@@ -74,12 +74,15 @@ export class AgentService {
     return { decision, provider: this.primary === this.fallback ? "mock" : "mock-fallback", degraded: this.primary !== this.fallback, latencyMs: Date.now() - started, taskType: decision.taskType };
   }
 
-  /** A visible, honest miss: the rabbit admits the hiccup instead of impersonating itself. */
+  /**
+   * Failure is presented as failure: provider "error" tells the client to show the confused
+   * rabbit with an error bubble. The decision is a silent no-op so no client can mistake it
+   * for dialogue — nothing but the OpenAI client ever speaks in a live session.
+   */
   private honestFailure(started: number, reason: string): AgentOutput {
     const decision = {
-      action: "speak" as const,
-      say: "Hm, my head went fuzzy for a second—say that again?",
-      elementId: null, text: null, url: null, direction: null, amount: null, value: null,
+      action: "finish" as const,
+      say: null, elementId: null, text: null, url: null, direction: null, amount: null, value: null,
       quote: null, line: null, tabId: null, pendingAction: null,
       taskType: "chat" as const, reason, done: true,
     };
@@ -123,9 +126,12 @@ export class AgentService {
           logger.info("intervene", { provider: this.primary.name, intervene: v.decision.intervene, type: v.decision.type });
           return { decision: v.decision, provider: this.primary.name, degraded: false };
         }
-        logger.warn("primary intervention invalid; falling back", { error: v.error });
+        logger.warn("primary intervention invalid; staying quiet", { error: v.error });
+        return { decision: { intervene: false, confidence: 0, type: "none", message: null, elementId: null, reason: "invalid" }, provider: "error", degraded: true };
       } catch (e) {
-        logger.warn("primary intervention failed; falling back", { error: e instanceof Error ? e.message : String(e) });
+        // A proactive offer nobody asked for is the one thing that can fail silently.
+        logger.warn("primary intervention failed; staying quiet", { error: e instanceof Error ? e.message : String(e) });
+        return { decision: { intervene: false, confidence: 0, type: "none", message: null, elementId: null, reason: "unavailable" }, provider: "error", degraded: true };
       }
     }
     const raw = await this.fallback.intervene(input);

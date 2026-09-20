@@ -1,6 +1,6 @@
 // Storage contract for the parent view (docs/frontend/HANDOFF.md), the skill list, a relative time
 // helper and the sample graph the page falls back to so a demo always has rooms to show.
-import { KnowledgeGraph, emptyConceptState, type ConceptNode, type GraphSnapshot, type LearnerConceptState, type Misconception } from "@shared/graph";
+import { KnowledgeGraph, emptyConceptState, emptyProfile, type ConceptNode, type GraphSnapshot, type LearnerConceptState, type Misconception } from "@shared/graph";
 import { diagnose, preferredModality } from "@shared/diagnostics";
 
 export const GRANTS_KEY = "burrow.grants";
@@ -139,6 +139,23 @@ export function sampleGraph(now = Date.now()): GraphSnapshot {
         },
       ], { attempts: 4, correct: 1, hinted: 2, recallOpportunities: 1, recallSuccesses: 0, lastPracticedAt: now - 6 * D }),
     ],
+    profile: {
+      ...emptyProfile(),
+      plans: [
+        {
+          key: "topic:castles",
+          goal: "castles",
+          createdAt: now - 5 * D,
+          updatedAt: now - D,
+          steps: [
+            { title: "Why castles were built where they were", concept: "Castle walls", done: true },
+            { title: "How a moat keeps attackers out", concept: "Moats", done: true },
+            { title: "How attackers tried to get in anyway", concept: "Siege towers", done: false },
+            { title: "What life was like inside the walls", concept: "Castle life", done: false },
+          ],
+        },
+      ],
+    },
     edges: [
       { from: "halves-and-quarters", to: "comparing-fractions", type: "prerequisite", weight: 0.8 },
       { from: "moats", to: "castle-walls", type: "related", weight: 0.6 },

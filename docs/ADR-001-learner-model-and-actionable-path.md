@@ -67,6 +67,19 @@ Making chains actually complete needed two loop changes:
 
 Suggestions are deduped across tabs and days through the profile (`RESUGGEST_MS`), ambient kinds (`plan`, `review`, `explore`) are rate-limited globally and suppressed right after a resource is opened, and the next plan step waits `PLAN_STEP_GAP_MS`.
 
+### Plans are shown, not recited (`extension/src/components/PlanMap.tsx`)
+
+Where plans live and how they surface:
+
+| Plan | Stored | Progress comes from |
+| --- | --- | --- |
+| Topic plan ("learn about geology") | `profile.plans` in the persisted graph (cap 5), so it survives tabs, restarts and days, and travels to the parent view with the graph | Evidence: the step's resource was opened, or a correct attempt landed on its concept. Never from chat. |
+| Problem plan (the question on screen) | Engine RAM, keyed by problem; reproducible from the server's plan cache. Only per-step outcomes persist, as attempts/struggles on the step's concept. | The step judge's `planStep`. |
+
+A plan is a structure, so answering "what's my plan?" in chat is the wrong medium. The agent's `show_plan` action opens the **plan map** (same pattern as the chalkboard: store slot + component + action): the problem route with a "you are here" marker, then every learning plan with done/current/todo. `make_plan` opens it too, and it refreshes live off `Session.onRecord` and the engine's `onPlanProgress`. It is a control, not a readout: tapping a step runs `planStepSuggestion`, the same playbook the ambient "ready for step N?" offer uses. The prompt's learner block lists plan progress so the model knows what exists; the parent view renders the same plans from the carried graph.
+
+Showing step titles is safe because titles name moves, never results — the same property that makes plans usable in hints.
+
 ## Consequences
 
 - Extra model calls: one planner call per problem page with quiz UI (prefetched, so hints don't wait on it), judge calls only while multi-line working is being written, one extractor call per learner utterance. All degrade to deterministic behaviour with no server.

@@ -4,7 +4,7 @@ import type { InterventionDecision } from "@shared/actions";
 import type { Misconception } from "@shared/graph";
 import { composeMisconceptionNudge } from "@shared/nudge";
 import { suggestNext, suggestionKey, type PathKind } from "@shared/path";
-import { interveneMock, findAnswerInput } from "@shared/mock-agent";
+import { findAnswerInput } from "@shared/mock-agent";
 import { detectProblem, problemKey } from "@shared/hints";
 import { judgeWorking, parseJudgement, splitWorking, type WorkingJudgement } from "@shared/steps";
 import { linearPlan, parsePlan, type StepPlan } from "@shared/plan";
@@ -544,11 +544,12 @@ export class ProactiveEngine {
       const out = await sendToBackground({ type: "agent.intervene", input }, 15_000);
       const v = validateIntervention(out.decision);
       if (v.ok) return v.decision;
-      logger.warn("invalid intervention from server; using local", { error: v.error });
+      logger.warn("invalid intervention from server; staying quiet", { error: v.error });
     } catch (e) {
-      logger.warn("intervention request failed; using local", { error: String(e) });
+      logger.warn("intervention request failed; staying quiet", { error: String(e) });
     }
-    return interveneMock(input);
+    // Proactive offers nobody asked for fail silently — never with a stand-in brain.
+    return { intervene: false, confidence: 0, type: "none", message: null, elementId: null, reason: "unavailable" };
   }
 
   offerResolved(outcome: "accepted" | "declined" | "dismissed"): void {

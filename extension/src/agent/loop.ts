@@ -5,7 +5,6 @@ import type { StepPlan } from "@shared/plan";
 import { diagnose, formatDiagnostics } from "@shared/diagnostics";
 import { resourceKindOf } from "@shared/events";
 import { pickLookupResult } from "@shared/mock-agent";
-import { decideMock } from "@shared/mock-agent";
 import { detectProblem, problemKey } from "@shared/hints";
 import { isAffirmative, isNegative, truncate } from "@shared/text";
 import { executeAction, type ExecutorDeps } from "../actions/executor";
@@ -33,6 +32,8 @@ export interface LoopDeps {
   /** Called when a decision references an element, so the UI knows what "it" means. */
   onReference?: (elementId: number, name: string) => void;
   onIdle?: () => void;
+  /** Presents a hard failure: confused character + error bubble. No dialogue, no speech. */
+  onError?: (message: string) => void;
   /** Step plan for the problem on screen (if one is ready) and how far the student's working has got. */
   getPlan?: () => { plan: StepPlan | null; planStep: number | null };
 }
@@ -50,6 +51,14 @@ class Cancelled extends Error {
   constructor() {
     super("cancelled");
     this.name = "Cancelled";
+  }
+}
+
+/** The brain is unreachable or erroring: the rabbit visibly breaks instead of improvising. */
+class BrainDown extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "BrainDown";
   }
 }
 
@@ -296,9 +305,10 @@ export class AgentLoop {
       if (e instanceof Cancelled) {
         logger.debug("loop cancelled");
       } else {
+        // Failure looks like failure: the confused rabbit and an error bubble — never dialogue
+        // improvised by anything that isn't the model.
         logger.error("loop failed", { error: String(e) });
-        store.setState({ characterState: "error" });
-        this.say("Hmm, something went wrong on my side. Try me again in a moment.");
+        this.deps.onError?.(e instanceof BrainDown ? "I can't reach my brain right now. Give me a moment, then ask again." : "Something broke on my side. Try that again in a moment.");
       }
     } finally {
       if (this.abort === abort) {
@@ -359,39 +369,32 @@ export class AgentLoop {
     try {
       const out = await sendToBackground({ type: "agent.decide", input }, 40_000);
       if (signal.aborted) throw new Cancelled();
+      if (out.provider === "error") throw new BrainDown(out.decision.reason || "provider error");
       const v = validateDecision(out.decision);
       if (!v.ok) {
-        logger.warn("server returned an invalid decision; using local fallback", { error: v.error });
-        return { decision: this.localDecision(input), provider: "local-mock", degraded: true, latencyMs: Date.now() - started };
+        logger.warn("server returned an invalid decision", { error: v.error });
+        throw new BrainDown(v.error);
       }
       return { ...out, decision: v.decision };
     } catch (e) {
-      if (e instanceof Cancelled) throw e;
+      if (e instanceof Cancelled || e instanceof BrainDown) throw e;
       const reason = e instanceof BgUnavailableError ? "background unavailable" : String(e);
       // One immediate retry rides out a service-worker restart or a request that died mid-flight.
       logger.warn("decide failed; retrying once", { reason });
       try {
         const out = await sendToBackground({ type: "agent.decide", input }, 40_000);
         if (signal.aborted) throw new Cancelled();
-        const v = validateDecision(out.decision);
-        if (v.ok) return { ...out, decision: v.decision };
+        if (out.provider !== "error") {
+          const v = validateDecision(out.decision);
+          if (v.ok) return { ...out, decision: v.decision };
+        }
       } catch (e2) {
         if (e2 instanceof Cancelled) throw e2;
         logger.warn("decide retry failed too", { error: String(e2) });
       }
-      // The regex agent never silently stands in for the model in a live session: admit it.
-      return { decision: this.localDecision(input), provider: "local-mock", degraded: true, latencyMs: Date.now() - started };
+      // Nothing but the OpenAI client ever answers in a live session: break visibly instead.
+      throw new BrainDown(reason);
     }
-  }
-
-  private localDecision(input: AgentInput): AgentDecision {
-    // Demo mode keeps the deterministic agent (it IS the configured brain there); live sessions
-    // get an honest miss instead of a different brain impersonating the model.
-    if (input.demoMode) {
-      const v = validateDecision(decideMock(input));
-      if (v.ok) return v.decision;
-    }
-    return { action: "speak", say: "I can't reach my brain right now—give me a moment and ask again.", elementId: null, text: null, url: null, direction: null, amount: null, value: null, quote: null, line: null, tabId: null, pendingAction: null, taskType: "chat", reason: "unreachable", done: true };
   }
 
   private async captureScreenshot(): Promise<string | null> {

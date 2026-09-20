@@ -41,6 +41,7 @@ export class CompanionController {
   private pendingOffer: PendingOffer | null = null;
   private bubbleTimer: number | null = null;
   private celebrateTimer: number | null = null;
+  private errorTimer: number | null = null;
   private lastMutationSeen = 0;
   private disposed = false;
 
@@ -107,6 +108,7 @@ export class CompanionController {
       stopSpeaking: () => this.voice.stopSpeaking(),
       confirm: (message) => this.confirm(message),
       onIdle: () => this.afterLoopIdle(),
+      onError: (message) => this.showAgentError(message),
       getPlan: () => this.engine.planContext,
     });
     this.engine = new ProactiveEngine({
@@ -401,7 +403,16 @@ export class CompanionController {
   }
 
   private afterLoopIdle(): void {
-    store.setState((s) => ({ characterState: s.characterState === "speaking" ? "speaking" : s.voice.mode === "listening" ? "listening" : "idle" }));
+    // "error" outlives the loop's finally: showAgentError owns its reset.
+    store.setState((s) => ({ characterState: s.characterState === "error" ? "error" : s.characterState === "speaking" ? "speaking" : s.voice.mode === "listening" ? "listening" : "idle" }));
+  }
+
+  /** Hard failure presentation: confused rabbit + error bubble. Nothing is spoken — no brain, no words. */
+  private showAgentError(message: string): void {
+    store.setState({ characterState: "error", busy: false });
+    this.showBubble({ id: `agent-error-${Date.now()}`, text: message, kind: "error", expiresAt: Date.now() + 8000 });
+    if (this.errorTimer) window.clearTimeout(this.errorTimer);
+    this.errorTimer = window.setTimeout(() => store.setState((s) => (s.characterState === "error" ? { characterState: s.voice.mode === "listening" ? "listening" : "idle" } : {})), 8000);
   }
 
   // ---------- Offers & confirmations ----------

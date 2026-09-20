@@ -149,3 +149,17 @@ describe("path playbook and learning plans", () => {
     expect(decideMock(input("help me, I'm stuck")).action).not.toBe("make_plan");
   });
 });
+
+describe("asking about plans", () => {
+  it("opens the plan map instead of reciting, for the ways a kid might ask", () => {
+    for (const q of ["what's my plan?", "what are my plans", "show me our plan", "what's next in my plan?", "where am I in the plan", "what are the steps"]) {
+      expect(decideMock(input(q)), q).toMatchObject({ action: "show_plan", done: true });
+    }
+    expect(validateDecision(decideMock(input("what's my plan?"))).ok).toBe(true);
+  });
+
+  it("does not hijack unrelated requests", () => {
+    expect(decideMock(input("where is the sign in button")).action).not.toBe("show_plan");
+    expect(decideMock(input("give me a hint")).action).not.toBe("show_plan");
+  });
+});

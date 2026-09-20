@@ -27,6 +27,8 @@ const wrap: React.CSSProperties = {
   fontSize: 16,
   lineHeight: 1.4,
   zIndex: 2147483000,
+  // The companion host ignores pointer events so pages stay clickable; interactive surfaces opt back in.
+  pointerEvents: "auto",
 };
 
 const marker = (state: "done" | "current" | "todo"): React.CSSProperties => ({

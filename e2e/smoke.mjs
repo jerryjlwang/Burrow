@@ -463,6 +463,28 @@ try {
       check("the loop resumes on the tab it opened, with the conversation carried over (cross-tab handoff)", !!handoff && handoff.pendingLoop === null && handoff.turns.some((t) => /volcanoes/i.test(t)), JSON.stringify(handoff)?.slice(0, 300) ?? "(no resumed session)");
       await planTab.close().catch(() => undefined);
     }
+
+    // The plan is SHOWN, not recited: make_plan opened the map, and it stayed live while step 1 completed.
+    await lp.bringToFront();
+    const mapState = () => lp.evaluate(() => [...(document.getElementById("pip-companion-host")?.shadowRoot?.querySelectorAll(".pip-plan .pip-plan-step") ?? [])].map((li) => li.className.replace("pip-plan-step ", "")));
+    const afterMake = await mapState();
+    check("making a plan opens the plan map, live-updated as step 1 completed", afterMake.length >= 3 && afterMake[0] === "done" && afterMake[1] === "current", JSON.stringify(afterMake));
+    await lp.screenshot({ path: resolve(shots, "19-plan-map.png") });
+
+    // Asking about it later reopens the map from long-term memory rather than answering in chat.
+    await lp.locator(".pip-plan button[aria-label='Close the plan']").click();
+    await lp.locator(".pip-input").fill("what's my plan?");
+    await lp.locator(".pip-send").click();
+    await lp.locator(".pip-plan").waitFor({ timeout: 8000 }).catch(() => null);
+    const goal = (await lp.locator(".pip-plan .pip-plan-goal").first().textContent().catch(() => "")) ?? "";
+    check("'what's my plan?' opens the plan map instead of reciting it", /volcanoes/i.test(goal) && (await mapState()).length >= 3, goal || "(no map)");
+
+    // The map is a control: tapping the current step runs its playbook and opens that step's resource.
+    const stepTab = context.waitForEvent("page", { timeout: 30000 }).catch(() => null);
+    await lp.locator(".pip-plan .pip-plan-start").first().click();
+    const stepUrl = decodeURIComponent((await stepTab)?.url() ?? "");
+    check("tapping a step on the map starts it (look_up → open_tab for that step)", /volcanoes explained with examples/i.test(stepUrl), stepUrl || "(no new tab)");
+    await (await stepTab)?.close().catch(() => undefined);
     await lp.close();
   }
 

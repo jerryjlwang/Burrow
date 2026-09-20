@@ -154,3 +154,14 @@ describe("formatDiagnostics", () => {
     expect(text).toContain("curious about: Volcanoes");
   });
 });
+
+describe("plans in diagnostics", () => {
+  it("summarises plan progress for the prompt, so the agent knows what exists before showing it", () => {
+    const g = new KnowledgeGraph();
+    g.savePlan({ key: "topic:geology", goal: "geology", steps: [{ title: "Rocks", concept: "Rock types" }, { title: "Plates", concept: "Plate tectonics" }] }, T0);
+    g.recordAttempt("Rock types", T0 + 1, { correct: true });
+    const d = diagnose(g, T0 + 2);
+    expect(d.plans).toEqual([{ goal: "geology", done: 1, total: 2, next: "Plates" }]);
+    expect(formatDiagnostics(d)).toContain('learning plan "geology": 1/2 steps done; next: Plates');
+  });
+});
