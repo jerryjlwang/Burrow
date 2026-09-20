@@ -53,6 +53,11 @@ Updated: 2026-09-19
 2. The teach loop in the kid UI: "Did I get that right?" cards, once the backend persona teaches instead of tutors.
 3. If time: the burrow diorama on the new tab page.
 
+## Verification as of the design round
+
+- `npx tsc -p tsconfig.json --noEmit`: clean. `npx vitest run`: 153 tests. `node tools/pet/check.mjs`: 69 of 69 on light and dark pages plus the new tab (four hours of the day), parent and popup pages. `npm run e2e` (teammates' smoke test, mock server): 30 of 30, including their quote anchor and step judge checks.
+- A typewriter bug found by the smoke test is fixed: bubbles now finish typing in background tabs, and buttons never wait more than 2.2 s.
+
 ## Notes
 
 - `python tools/sprites/contact_sheet.py --states idle,thinking --frames 0,2 --scale 8 --out sheet.png` renders any states at any scale on light and dark. `python tools/sprites/audit.py` runs the pixel rules. Neither writes to the shipped strips.
