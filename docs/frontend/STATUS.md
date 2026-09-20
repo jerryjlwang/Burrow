@@ -33,9 +33,14 @@ Updated: 2026-09-19
 - Parent view: `extension/src/parent` (`parent.html`, `index.tsx`, `data.ts`). Header band with the last visit and count, one room per concept with a whole-pixel mastery bar and a faded "forgotten" tag under 0.3, shaky spots with the belief, the evidence and a dinner-table question, five grant cards that write `burrow.grants`, and the "Call the rabbit here" and "Send him back" buttons that write `burrow.jump`. Reads `burrow.graph` and falls back to a sample. The rabbit lives on the page at 4x. Opened from the popup's "Parent view" button. Two-tab rehearsal (grant, call over, send back) passes 8 of 8; `tools/pet/check.mjs` passes 61 of 61.
 - Sound: `extension/src/components/sounds.ts` plays tiny WebAudio square-wave cues on aha, hole, dive, celebrate, land, panic and wave, unlocked by the first click, off when "Speak replies out loud" is off.
 
+- Typewriter speech with voice blips in the bubble, VT323 for numerals, chiptune cues, escorted searches (he dives before a page leaves and pops out on the next one through `burrow.arrive`), page events `burrow:goto`, `burrow:play` and `burrow:leave` so the extension's own pages can direct him.
+- `extension/src/fx/index.ts` (built as `fx.js`, included by the pages): a WebGL overlay with `ogl` that draws 3 px scanlines and a faint animated dither over the page, and a Bayer dither dissolve on load and on `burrow:leave`. Sits under the companion so the rabbit stays crisp.
+
 ## In progress
 
-- Nothing.
+- The new tab meadow scene (hand-placed layers, time of day, clouds, grass, shrubs, fireflies, pixel clock, signpost search that calls the rabbit over), by a subagent in `extension/src/newtab` and `tools/sprites/scene_px.py`.
+- The live knowledge graph on the parent page with `d3-force`, by a subagent in `extension/src/parent`.
+- After both land: include `fx.js` on the new tab and parent pages, run every check, merge main, push.
 
 ## Blocked
 
