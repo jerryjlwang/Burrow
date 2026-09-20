@@ -4,8 +4,8 @@ import { HeuristicConceptExtractor, pageToExtractionInput, type ConceptExtractio
 import { slugify } from "@shared/graph";
 import { parsePlan, topicPlanKey } from "@shared/plan";
 import { describeSketch, eraseFromSketch, parseSketch } from "@shared/sketch";
-import { isVideoQuestion, pickRelated, videoQuery } from "@shared/related";
 import { validateInkJudgement } from "@shared/ink";
+import { isVideoQuestion, pickRelated, videoQuery } from "@shared/related";
 import { planStepSuggestion } from "@shared/path";
 import type { PlanRoute } from "./store";
 import { classifyTask } from "../actions/policy";
