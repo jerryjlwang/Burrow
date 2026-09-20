@@ -21,6 +21,22 @@ import type { SignalTracker } from "../proactive/signals";
 
 const logger = log("agent");
 export const MAX_STEPS = 6;
+
+/**
+ * Spoken while a slow first decision is still in flight, so thinking never sounds like a hang.
+ * On a video the rabbit is already watching, so "looking" phrasing would be a lie there — those
+ * turns draw from the thinking pool only.
+ */
+const LOOK_FILLERS = ["Let me take a look.", "Let me see…", "One sec, looking now.", "Ooh, let me check.", "Okay, looking…"];
+const THINK_FILLERS = ["Hmm, good question.", "Hmm, let me think.", "Give me a second.", "Ooh, hang on."];
+let lastFiller = "";
+function pickFiller(pool: string[]): string {
+  const options = pool.filter((f) => f !== lastFiller);
+  lastFiller = options[Math.floor(Math.random() * options.length)];
+  return lastFiller;
+}
+/** The first decision must be slower than this before a filler speaks; fast answers stay clean. */
+const FILLER_DELAY_MS = 800;
 /** Hard ceiling across navigations and new tabs, so a resumed chain can't run away. */
 export const MAX_TOTAL_STEPS = 14;
 
@@ -178,7 +194,20 @@ export class AgentLoop {
         this.pendingPlan = null;
         this.pendingReadout = null;
 
-        const output = await this.decide(input, signal);
+        // Latency mask: a student-initiated turn whose first decision runs long gets a short
+        // spoken filler. The latest-wins speech queue drops it again if the real reply beats it.
+        let fillerTimer: number | null = null;
+        if (step === (opts.resume?.step ?? 0) && !opts.resume && (opts.source === "voice" || opts.source === "text") && store.getState().settings.ttsEnabled) {
+          fillerTimer = window.setTimeout(() => {
+            if (!signal.aborted) void this.deps.speak(pickFiller(video ? THINK_FILLERS : [...THINK_FILLERS, ...LOOK_FILLERS]));
+          }, FILLER_DELAY_MS);
+        }
+        let output: AgentOutput;
+        try {
+          output = await this.decide(input, signal);
+        } finally {
+          if (fillerTimer !== null) window.clearTimeout(fillerTimer);
+        }
         check();
         // This page lived long enough to get a decision: the handoff is consumed.
         if (opts.resume && step === opts.resume.step) await session.setPendingLoop(null);
