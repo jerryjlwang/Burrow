@@ -1,5 +1,6 @@
 import type { AgentDecision, InterventionDecision, TaskType } from "./actions";
 import type { StepPlan } from "./plan";
+import type { VideoContext } from "./video";
 
 export interface Rect {
   x: number;
@@ -170,6 +171,8 @@ export interface AgentInput {
   planResults?: string | null;
   /** Longitudinal learner diagnostics, pre-formatted (see formatDiagnostics). */
   learner?: string | null;
+  /** The video the student is watching, as the rabbit has followed it so far. With it, `screenshot` is the exact video frame. */
+  video?: VideoContext | null;
 }
 
 export interface AgentOutput {

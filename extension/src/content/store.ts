@@ -29,6 +29,8 @@ export interface Bubble {
   kind: "offer" | "confirmation" | "info" | "error" | "reply";
   actions?: BubbleAction[];
   expiresAt?: number;
+  /** Handles this bubble's buttons itself instead of the offer/confirmation flows. */
+  onAction?: (value: BubbleAction["value"]) => void;
 }
 
 /** One plan as the plan map draws it: the problem on screen, or a learning plan from long-term memory. */

@@ -4,6 +4,7 @@ import type { GraphSnapshot } from "@shared/graph";
 import type { LearnerEvent } from "@shared/events";
 import type { StepPlan } from "@shared/plan";
 import type { WorkingJudgement } from "@shared/steps";
+import type { TranscriptSegment, WatchNote } from "@shared/video";
 import type { Settings } from "./settings";
 
 /**
@@ -83,6 +84,7 @@ export type BgRequest =
   | { type: "lookup"; query: string; prefer?: string }
   | { type: "steps.plan"; request: { key?: string; topic?: string; url?: string; title?: string; headings?: string[]; text?: string } }
   | { type: "steps.judge"; request: { plan: StepPlan; text?: string; working: string } }
+  | { type: "video.analyze"; request: { url: string; title?: string; segments?: TranscriptSegment[] } }
   | { type: "screenshot" }
   | { type: "open.onboarding" }
   | { type: "open.demo" }
@@ -121,6 +123,7 @@ export type BgResponseMap = {
   lookup: { ok: boolean; results: string };
   "steps.plan": { plan: StepPlan | null };
   "steps.judge": WorkingJudgement;
+  "video.analyze": { segments: TranscriptSegment[]; notes: WatchNote[]; transcript: "page" | "service" | "none"; notesBy: "llm" | "heuristic" | "none" };
   screenshot: { ok: boolean; dataUrl?: string; error?: string };
   "open.onboarding": { ok: boolean };
   "open.demo": { ok: boolean };

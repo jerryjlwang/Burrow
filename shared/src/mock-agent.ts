@@ -167,6 +167,14 @@ export function decideMock(input: AgentInput): AgentDecision {
   }
   if (isStopCommand(u)) return d({ action: "finish", say: null, done: true });
 
+  // ---- Watching a video: answer from what was just said — never "let me look at the frame" ----
+  if (input.video && input.step === 0 && /\b(video|he|she|just (said|say|did)|mean|explain|don t (get|understand)|didn t (get|understand)|say that again|what did)\b/.test(u)) {
+    if (!input.video.hasTranscript) return d({ action: "speak", say: "I can see the picture, but I can't hear this one.", done: true, taskType: "learning", reason: "video without transcript" });
+    const sentences = input.video.heard.split(/(?<=[.!?])\s+/).filter((sentence) => sentence.trim().length > 8);
+    const lastSaid = sentences[sentences.length - 1];
+    return d({ action: "speak", say: lastSaid ? `The bit just now: "${truncate(lastSaid.trim(), 140)}" Want me to break that down?` : "Nothing's been said in this part yet.", done: true, taskType: "learning", reason: "video question answered from the transcript" });
+  }
+
   // ---- "I want to learn about X" → a learning plan the path consumer then walks ----
   const learnGoal = /\b(learn|study|teach me|understand more)\b/.test(u) ? u.match(LEARN_GOAL_RE) : null;
   if (learnGoal && input.step === 0) {

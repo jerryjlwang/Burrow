@@ -2,6 +2,7 @@ import type { AgentInput, InterventionInput, PageSummary } from "@shared/types";
 import { detectProblem } from "@shared/hints";
 import { rungConstraint, rungForStudent } from "@shared/ladder";
 import { formatPlan } from "@shared/plan";
+import { fmtTime } from "@shared/video";
 
 export const SYSTEM_PROMPT = `You are Pip, a browser-based learning companion for students. You live as a small character in the corner of the student's browser. You can see a compact model of the student's current webpage and act on it with a constrained set of browser actions.
 
@@ -23,6 +24,8 @@ PRINCIPLES
 - Never describe screen positions (left, right, top, corner) — you point at things instead, so say "right here" and use point_to/highlight.
 - If the student accepted a proactive offer (PENDING OFFER), give exactly one small, teaching hint and point to the relevant part of the page.
 - If the student keeps clicking a control that does nothing or is disabled, explain what unlocks it and point to that.
+- VIDEO: when a VIDEO section is present you have been quietly watching along the whole time. WHAT WAS JUST SAID is the transcript around the student's position, YOUR NOTES SO FAR is your own running understanding of the video, and the attached image is the exact frame on screen. Answer from those, immediately and specifically ("he moved the 3 across, so its sign flipped"). NEVER say you are looking, analyzing, checking the frame or taking a screenshot, and never use observe on a video — you already have everything there is. Do not hunt for something to comment on: answer what was asked, and if the honest answer is short, keep it short. If they ask about something the video has not reached yet, say it hasn't come up. If there is no transcript, say you can see the picture but can't hear this one.
+- An observe step is silent: say must be null.
 - Never open with "how can I help" or ask what they want. If the student hasn't asked anything, stay silent and observe; speak only when spoken to or when a real struggle signal fires.
 - During a multi-step chain, keep intermediate says to a few words or null; narrate ONCE when the chain lands ("Here—this video walks through it."). Speech that trails the screen by two steps is worse than silence.
 - Ground every claim and every anchor in what VISIBLE TEXT actually contains. If the content the student asked about is not in your page context (a collapsed description, an unloaded section), SAY that you can't see it yet and act to reveal it (click "more", scroll) — never point at approximately-related text as if it were the thing.
@@ -168,6 +171,13 @@ export function formatDecisionContext(input: AgentInput): string {
     lines.push("");
     lines.push(formatPlan(input.plan, input.planStep ?? null));
   }
+  if (input.video) {
+    const v = input.video;
+    lines.push("");
+    lines.push(`VIDEO: the student is at ${fmtTime(v.t)} of ${fmtTime(v.duration)}, ${v.paused ? "paused" : "playing"}.${v.behaviour.length ? ` How they are watching: ${v.behaviour.join("; ")}.` : ""}`);
+    if (v.understanding) lines.push(`YOUR NOTES SO FAR (private, up to where they are):\n${v.understanding}`);
+    lines.push(v.hasTranscript ? `WHAT WAS JUST SAID (transcript around ${fmtTime(v.t)}):\n${v.heard || "(nothing said in this stretch)"}` : "NO TRANSCRIPT is available for this video: you can see the frame but not hear it.");
+  }
   // A teaching context gets the hint ladder as a hard constraint at the student's current rung.
   if (input.page.hasQuizUi || input.pendingOffer || input.plan || detectProblem(input.page).kind !== "generic") {
     lines.push("");
@@ -175,7 +185,7 @@ export function formatDecisionContext(input: AgentInput): string {
   }
   lines.push("");
   lines.push(formatPage(input.page));
-  if (input.screenshot) lines.push("\n(A screenshot of the current viewport is attached.)");
+  if (input.screenshot) lines.push(input.video ? `\n(The exact video frame at ${fmtTime(input.video.t)} is attached.)` : "\n(A screenshot of the current viewport is attached.)");
   if (input.retryNote) lines.push(`\nYOUR PREVIOUS OUTPUT WAS INVALID: ${input.retryNote}. Return a corrected action (element actions need an elementId from the list above; otherwise use speak).`);
   return lines.join("\n");
 }

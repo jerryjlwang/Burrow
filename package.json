@@ -17,6 +17,7 @@
     "e2e": "node e2e/smoke.mjs",
     "icons": "node scripts/make-icons.mjs",
     "e2e:headed": "HEADED=1 node e2e/smoke.mjs",
+    "e2e:video": "node e2e/video.mjs",
     "e2e:install": "playwright install chromium"
   },
   "engines": {

@@ -163,3 +163,20 @@ describe("asking about plans", () => {
     expect(decideMock(input("give me a hint")).action).not.toBe("show_plan");
   });
 });
+
+describe("watching a video", () => {
+  const video = { t: 22, duration: 48, paused: false, heard: "An equation is like a balance scale. Whatever you do to one side, you must do to the other side too.", understanding: "", behaviour: [], hasTranscript: true };
+
+  it("answers from what was just said instead of asking to look at the frame", () => {
+    const dec = decideMock(input("what did he just mean", { video }));
+    expect(validateDecision(dec).ok).toBe(true);
+    expect(dec.action).toBe("speak");
+    expect(dec.say).toContain("Whatever you do to one side");
+    expect(dec.say).not.toMatch(/analy|look|frame|screenshot/i);
+  });
+
+  it("is honest when the video has no transcript, and stays out of the way of page requests", () => {
+    expect(decideMock(input("can you explain that", { video: { ...video, heard: "", hasTranscript: false } })).say).toMatch(/can't hear/);
+    expect(decideMock(input("where is the sign in button", { video })).action).not.toBe("speak");
+  });
+});

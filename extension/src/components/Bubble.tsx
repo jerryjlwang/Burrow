@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Bubble as BubbleModel, BubbleAction } from "../content/store";
+import { TYPE_CHARS_PER_SECOND } from "../content/bubbles";
 import { voiceBlip } from "./sounds";
-
-/** Characters revealed per second while the rabbit "talks". */
-const CHARS_PER_SECOND = 42;
 
 /**
  * Types the text out with a small voice blip every other letter, the way game characters talk.
@@ -18,7 +16,7 @@ function useTypewriter(text: string, id: string): { shown: number; done: boolean
     const start = performance.now();
     let last = 0;
     const tick = (t: number) => {
-      const n = Math.min(text.length, Math.floor(((t - start) / 1000) * CHARS_PER_SECOND));
+      const n = Math.min(text.length, Math.floor(((t - start) / 1000) * TYPE_CHARS_PER_SECOND));
       if (n !== last) {
         for (let i = last; i < n; i++) {
           const ch = text[i];
