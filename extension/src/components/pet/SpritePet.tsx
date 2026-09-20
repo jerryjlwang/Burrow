@@ -130,7 +130,7 @@ function clamp(v: number, min: number, max: number): number {
 function clampFor(g: Geometry, left: number, top: number): PetBox {
   return {
     left: Math.round(clamp(left, 0, window.innerWidth - g.bodyW)),
-    top: Math.round(clamp(top, -g.bodyTop, window.innerHeight - (g.bodyTop + g.bodyH))),
+    top: Math.round(clamp(top, 0, window.innerHeight - (g.bodyTop + g.bodyH))),
     width: g.bodyW,
     height: g.H,
   };
@@ -350,7 +350,7 @@ export function SpritePet({ character = DEFAULT_CHARACTER, state, speaking = fal
     const g = geoRef.current;
     const r = rootRef.current?.getBoundingClientRect();
     const l = latest.current;
-    const onScreen = !!g && !!r && r.left >= 0 && r.top + g.bodyTop >= 0 && r.left + g.bodyW <= window.innerWidth && r.top + g.bodyTop + g.bodyH <= window.innerHeight;
+    const onScreen = !!g && !!r && r.left >= 0 && r.top >= 0 && r.left + g.bodyW <= window.innerWidth && r.top + g.bodyTop + g.bodyH <= window.innerHeight;
     return {
       quiet: l.quiet,
       reducedMotion: l.reducedMotion,
@@ -431,7 +431,7 @@ export function SpritePet({ character = DEFAULT_CHARACTER, state, speaking = fal
           return;
         }
         const r = root.getBoundingClientRect();
-        const bounds: FlightBounds = { minX: 0, maxX: window.innerWidth - g.bodyW, minY: -g.bodyTop, floorY: window.innerHeight - DOCK_EDGE - g.H };
+        const bounds: FlightBounds = { minX: 0, maxX: window.innerWidth - g.bodyW, minY: 0, floorY: window.innerHeight - DOCK_EDGE - g.H };
         p.override(DRAG_STATE);
         flightRef.current = { state: { x: r.left, y: Math.min(r.top, bounds.floorY), vx, vy, t: 0 }, bounds, resolve };
         setPhase("fly");

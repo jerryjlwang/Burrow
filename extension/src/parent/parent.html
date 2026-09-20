@@ -34,7 +34,7 @@
       .room.faded { opacity: 0.55; }
       .room.flash { outline: 6px solid var(--gold); outline-offset: -3px; animation: room-flash 0.5s steps(1, end) 3; }
       @keyframes room-flash { 50% { outline-color: transparent; } }
-      .room-top { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; min-height: 30px; }
+      .room-top { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-bottom: 9px; min-height: 30px; }
       .door { width: 15px; height: 27px; background: var(--ink); position: relative; flex-shrink: 0; }
       .door::after { content: ""; position: absolute; right: 3px; top: 12px; width: 3px; height: 3px; background: var(--gold); }
       .room h3 { font-size: 20px; flex: 1; min-width: 0; }

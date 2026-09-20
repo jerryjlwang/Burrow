@@ -30,7 +30,7 @@ npm ci && npm run e2e:install        # once per machine; also pip install pillow
 npx tsc -p tsconfig.json --noEmit
 npx vitest run
 node extension/build.mjs
-node tools/pet/check.mjs             # 86 checks on light and dark pages, new tab, parent, popup, onboarding; screenshots in tools/pet/shots
+node tools/pet/check.mjs             # 95 checks on light and dark pages, demo pages, new tab, parent, popup, onboarding; screenshots in tools/pet/shots
 npm run e2e                          # the teammates' smoke test with the mock server, 35 checks
 ```
 

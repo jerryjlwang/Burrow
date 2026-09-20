@@ -211,7 +211,7 @@ function Parent() {
                   </p>
                 )}
                 <p className="plain ask">
-                  Ask them: why is {c.toLowerCase()} not "{m.belief}"?
+                  Ask them at dinner: is it true that "{m.belief}"? What makes you sure?
                 </p>
                 <p className="meta plain">
                   Came up {times(m.occurrences)}, last {ago(m.lastSeenAt, now)}
