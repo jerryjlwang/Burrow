@@ -1,6 +1,8 @@
 import type { BgRequest, BgResponseMap, ContentBroadcast, OffscreenCommand, OffscreenEvent, ServerHealth, TabSession, VoiceState } from "../shared/messages";
 import { getSettings, setSettings, DEFAULT_SETTINGS } from "../shared/settings";
 import { emptyStudentState } from "@shared/types";
+import type { GraphSnapshot } from "@shared/graph";
+import { GraphHost } from "./graph-host";
 import { log } from "../shared/logger";
 
 const logger = log("bg");
@@ -95,6 +97,18 @@ async function postJson<T>(path: string, body: unknown, timeoutMs: number): Prom
   return (await r.json()) as T;
 }
 
+// ---------------- Learner knowledge graph (canonical, persisted) ----------------
+const GRAPH_KEY = "pip.graph";
+const graphHost = new GraphHost({
+  async load() {
+    const raw = await chrome.storage.local.get(GRAPH_KEY);
+    return (raw?.[GRAPH_KEY] as GraphSnapshot | undefined) ?? null;
+  },
+  async save(snapshot) {
+    await chrome.storage.local.set({ [GRAPH_KEY]: snapshot });
+  },
+});
+
 // ---------------- Tab sessions ----------------
 function emptySession(): TabSession {
   return { conversation: [], student: emptyStudentState(), panelOpen: false, minimized: false, pendingLoop: null, proactiveCooldownUntil: 0, urlTrail: [], updatedAt: Date.now() };
@@ -187,6 +201,14 @@ async function handle(msg: BgRequest, sender: chrome.runtime.MessageSender): Pro
       return (await postJson("/api/agent/intervene", msg.input, 15_000));
     case "extract":
       return (await postJson("/api/extract", msg.input, 20_000));
+    case "graph.get":
+      return (await graphHost.snapshot());
+    case "graph.event":
+      await graphHost.apply(msg.event);
+      return { ok: true };
+    case "graph.clear":
+      await graphHost.clear();
+      return { ok: true };
     case "tts.speak": {
       if (!settings.ttsEnabled) return { ok: false, error: "tts disabled" };
       ttsOwnerTab = tabId;

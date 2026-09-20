@@ -10,7 +10,7 @@
  */
 import { chromium } from "playwright";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import net from "node:net";
@@ -68,6 +68,9 @@ const check = (name, ok, detail = "") => {
 };
 
 const profileDir = resolve(here, ".profile");
+// A reused profile can run a STALE cached service worker (older than extension/dist), which
+// silently breaks newer background messages. Fresh profile every run; fake-media flags re-grant mic.
+rmSync(profileDir, { recursive: true, force: true });
 // Google Chrome 137+ ignores --load-extension, so this uses Playwright's Chromium
 // (npx playwright install chromium). channel "chromium" = new headless mode with extension support.
 const context = await chromium.launchPersistentContext(profileDir, {
@@ -91,6 +94,10 @@ try {
   let sw = context.serviceWorkers()[0];
   if (!sw) sw = await context.waitForEvent("serviceworker", { timeout: 15000 }).catch(() => null);
   check("extension service worker started", !!sw, sw?.url() ?? "no worker");
+
+  // Reset the persisted learner graph BEFORE anything hydrates it, so reruns on a reused
+  // profile start from a blank memory and the recurrence check below stays deterministic.
+  if (sw) await sw.evaluate(() => chrome.storage.local.remove("pip.graph"));
 
   // Close the onboarding tab the extension opens on first install.
   await new Promise((r) => setTimeout(r, 1200));
@@ -230,7 +237,25 @@ try {
     const noteOk = await sp.locator("#notes-feedback.success.show").waitFor({ timeout: 5000 }).then(() => true).catch(() => false);
     check("correct note is confirmed by the answer key (success signal for resolution)", noteOk);
     await sp.screenshot({ path: resolve(shots, "12-misconception-resolved.png") });
+    // Let the resolve event reach the background's canonical graph before the next tab hydrates.
+    await new Promise((r) => setTimeout(r, 1800));
     await sp.close();
+
+    // Longitudinal memory: a NEW tab (fresh TabSession, hydrated from the persisted canonical
+    // graph) re-encounters the same belief → recurring → the bubble recalls their own past fix.
+    const sp2 = await context.newPage();
+    await sp2.goto(`http://localhost:${PORT}/demo/seasons.html`, { waitUntil: "load" });
+    await sp2.locator("#pip-companion-host").waitFor({ state: "attached", timeout: 10000 });
+    const recall = sp2.locator(".pip-bubble");
+    await recall.waitFor({ timeout: 20000 }).catch(() => null);
+    const recallText = (await recall.count()) ? await recall.first().textContent() : "";
+    check(
+      "recurring misconception recalls the learner's own past fix (cross-tab persistence)",
+      /untangled this one before/i.test(recallText ?? "") && /australia/i.test(recallText ?? ""),
+      recallText || "(no bubble)",
+    );
+    await sp2.screenshot({ path: resolve(shots, "13-recurring-callback.png") });
+    await sp2.close();
   }
 
   // Consequential action asks for confirmation.

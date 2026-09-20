@@ -16,14 +16,24 @@ export class Session {
   pendingOffer: PendingOffer | null = null;
   pendingLoop: PendingLoop | null = null;
   proactiveCooldownUntil = 0;
-  /** Session-scoped learner knowledge graph (RAM only for the MVP; not synced to background). */
-  readonly graph = new KnowledgeGraph();
+  /**
+   * The learner knowledge graph: hydrated from the background's persisted canonical copy on load,
+   * then read synchronously in this tab. Writes also go to the background as GraphEvents (see
+   * controller/engine), which owns persistence — this copy is a fast local mirror.
+   */
+  graph = new KnowledgeGraph();
   private syncTimer: number | null = null;
   private loaded = false;
 
   async load(): Promise<TabSession | null> {
+    // Hydrate the learner graph alongside the tab session; failure just means a fresh RAM graph.
+    const hydrate = sendToBackground({ type: "graph.get" }, 4000)
+      .then((snap) => {
+        this.graph = KnowledgeGraph.fromJSON(snap);
+      })
+      .catch((e) => logger.debug("graph hydration skipped", { error: String(e) }));
     try {
-      const s = await sendToBackground({ type: "tab.session.get" }, 4000);
+      const [, s] = await Promise.all([hydrate, sendToBackground({ type: "tab.session.get" }, 4000)]);
       if (s) {
         this.student = { ...emptyStudentState(), ...(s.student ?? {}) };
         this.pendingLoop = s.pendingLoop ?? null;
