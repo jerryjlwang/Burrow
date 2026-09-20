@@ -148,6 +148,8 @@ function drawGap([min, max]: [number, number]): number {
 export function SpritePet({ character = DEFAULT_CHARACTER, state, speaking = false, level = 0, reducedMotion = false, scale, size, quiet = false, onPosition, onAnchor, onController, onShown, startHidden = false }: SpritePetProps) {
   const [loaded, setLoaded] = useState<LoadedCharacter | null>(null);
   const [gone, setGone] = useState(false);
+  /** The strip showing right now, exposed as data-strip for tests and page effects. */
+  const [strip, setStrip] = useState("");
   const [dragging, setDragging] = useState(false);
   const [phase, setPhase] = useState<Phase>("");
   const [scaleOverride, setScaleOverride] = useState<number | null>(null);
@@ -219,6 +221,8 @@ export function SpritePet({ character = DEFAULT_CHARACTER, state, speaking = fal
     if (startHiddenRef.current || (firstPlayer.current && latest.current.startHidden)) {
       startHiddenRef.current = false;
       player.setHidden(true);
+      // Down the hole until a jump brings him out: nothing of his dock shows meanwhile.
+      setGone(true);
     }
     firstPlayer.current = false;
     if (wanderRef.current.timer < 0 && loaded.manifest.wander_gap) wanderRef.current.timer = drawGap(loaded.manifest.wander_gap);
@@ -234,6 +238,7 @@ export function SpritePet({ character = DEFAULT_CHARACTER, state, speaking = fal
       frameRef.current(player, dt);
       if (player.current !== lastShown.current) {
         lastShown.current = player.current;
+        setStrip(player.current);
         latest.current.onShown?.(player.current);
       }
       if (player.dirty) {
@@ -457,8 +462,9 @@ export function SpritePet({ character = DEFAULT_CHARACTER, state, speaking = fal
       const p = playerRef.current;
       if (!p) return;
       cancelMotion();
-      setGone(false);
       await p.runSequence(seq.receiving ?? [], ready);
+      // Out of the hole and standing: only now is he here (his dock shows, he may wander).
+      setGone(false);
     };
     const moveTo = async (x: number, y: number) => {
       await jumpOut();
@@ -582,6 +588,7 @@ export function SpritePet({ character = DEFAULT_CHARACTER, state, speaking = fal
       data-character={character}
       data-scale={S}
       data-phase={phase}
+      data-strip={strip}
     >
       <canvas ref={canvasRef} className="pet-canvas" width={geo.W} height={geo.H} style={{ left: -geo.bodyLeft, width: geo.W, height: geo.H }} aria-hidden="true" />
       <div

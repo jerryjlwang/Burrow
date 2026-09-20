@@ -216,6 +216,8 @@ export function Board() {
   // Writing: one entry at a time, a squeak as each starts, letter by letter for text.
   const [pos, setPos] = useState({ id: "", at: 0, chars: 0 });
   const finishRef = useRef<() => void>(() => undefined);
+  /** How far the writing of which board has got, so a changed board (same id) is not rewritten from the top. */
+  const written = useRef({ id: "", at: 0, total: 0 });
   useEffect(() => {
     if (!shown) return;
     const id = shown.id;
@@ -223,10 +225,19 @@ export function Board() {
     const total = entries.length;
     let live = true;
     let timer = 0;
+    const mark = (at: number, chars: number) => {
+      written.current = { id, at, total };
+      setPos({ id, at, chars });
+    };
     const settle = () => {
-      setPos({ id, at: total, chars: 0 });
+      mark(total, 0);
       backToIdle();
     };
+    // Same board with changed items — an `add`, or part of it erased: what is written stays written.
+    // A finished board picks up at its old end (new entries write in; after an erase nothing is left to
+    // write); one still being written carries on from where it was.
+    const prev = written.current;
+    const from = prev.id !== id ? 0 : prev.at >= prev.total ? Math.min(prev.total, total) : Math.min(prev.at, total);
     if (reduced) {
       settle();
       return;
@@ -243,13 +254,13 @@ export function Board() {
       const e = entries[at];
       if (e.kind === "stroke") {
         playCue("chalk");
-        setPos({ id, at, chars: 0 });
+        mark(at, 0);
         later(() => step(at + 1, 0), STROKE_MS);
         return;
       }
       if (chars === 0 && e.text.length) playCue("chalk");
       const next = Math.min(e.text.length, chars + 1);
-      setPos({ id, at, chars: next });
+      mark(at, next);
       if (next >= e.text.length) later(() => step(at + 1, 0), LINE_PAUSE_MS);
       else later(() => step(at, next), 1000 / CHARS_PER_SECOND);
     };
@@ -258,8 +269,12 @@ export function Board() {
       window.clearTimeout(timer);
       settle();
     };
-    setPos({ id, at: 0, chars: 0 });
-    later(() => step(0, 0), FIRST_LINE_DELAY_MS);
+    if (from >= total) {
+      settle();
+      return;
+    }
+    mark(from, 0);
+    later(() => step(from, 0), from ? LINE_PAUSE_MS : FIRST_LINE_DELAY_MS);
     return () => {
       live = false;
       window.clearTimeout(timer);

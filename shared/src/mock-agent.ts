@@ -261,7 +261,15 @@ export function decideMock(input: AgentInput): AgentDecision {
   if (/^(go|take me|head) back$/.test(u) || /^back$/.test(u)) return d({ action: "go_back", say: "Going back.", taskType: "navigation" });
 
   // ---- Clicking / navigating ----
-  // ---- Sketch: draw a worked example or a diagram, extend it, or wrap it onto the page ----
+  // ---- Sketch: draw a worked example or a diagram, extend it, erase from it, or wrap it onto the page ----
+  if (/\b(erase|clear|remove|wipe|get rid of|delete)\b/.test(u) && (input.board || /\b(drawing|sketch|board|diagram|picture)\b/.test(u))) {
+    if (!input.board) return d({ action: "speak", say: "There's nothing drawn right now.", done: true, taskType: "chat", reason: "nothing to erase" });
+    // A named kind ("the labels", "the lines") erases just those; otherwise the whole drawing goes.
+    const kind = u.match(/\b(label|line|arrow|circle|rect|dot)s?\b/)?.[1];
+    const numbers = kind ? input.board.split("\n").filter((l) => new RegExp(`^\\d+\\. ${kind}\\b`).test(l)).map((l) => l.split(".")[0]) : [];
+    if (kind && !numbers.length) return d({ action: "speak", say: `I don't see any ${kind}s on the drawing.`, done: true, taskType: "chat", reason: "no such part" });
+    return d({ action: "sketch", value: "erase", text: kind ? numbers.join(" ") : "all", say: kind ? "Gone." : "Cleared.", done: true, taskType: "chat", reason: kind ? `erase the ${kind}s` : "erase the drawing" });
+  }
   if (/\b(add|also)\b.*\b(mark|corner|angle|label|arrow|line|dot|square)\b/.test(u)) {
     // Only the new shape rides in an "add" sketch; what's drawn stays drawn.
     return d({ action: "sketch", value: "add", text: "rect 20 72 8 8\nlabel 30 72 90°", say: "Added the square corner.", done: true, taskType: "learning", reason: "extend the drawing" });

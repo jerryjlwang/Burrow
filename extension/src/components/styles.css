@@ -116,6 +116,8 @@
 .pip-talk.starting { opacity: 0.7; }
 .pip-talk.on { border-image-source: var(--ui-btn-primary); color: var(--paper); animation: pip-talk-pulse 1s steps(2) infinite; }
 .pip-talk.on:hover { transform: none; }
+/* Down the hole, nothing of his dock shows: the hold to talk pill, the mic dot and the unread count go with him. */
+.pip-dock:has(.pet.gone) .pip-talk, .pip-dock:has(.pet.gone) .pip-mic-badge, .pip-dock:has(.pet.gone) .pip-unread { visibility: hidden; }
 /* The loudness meter rises behind the glyph as a tint. */
 .pip-talk-meter { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: var(--gold); opacity: 0.5; }
 @keyframes pip-talk-pulse { 0%, 100% { box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.2); } 50% { box-shadow: 3px 3px 0 rgba(59, 42, 35, 0.2), 0 0 0 3px var(--gold); } }

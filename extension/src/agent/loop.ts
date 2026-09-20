@@ -41,6 +41,8 @@ export interface LoopDeps {
   onError?: (message: string) => void;
   /** Step plan for the problem on screen (if one is ready) and how far the student's working has got. */
   getPlan?: () => { plan: StepPlan | null; planStep: number | null };
+  /** The drawing on screen as a numbered list, so the model can extend it or erase parts of it. */
+  getBoard?: () => string | null;
   /** The video being watched, as the rabbit has followed it, and a way to grab the exact frame on screen. */
   getVideo?: () => { context: VideoContext; frame: () => string | null } | null;
   /** A learning hint was just given on the problem on screen. */
@@ -408,6 +410,7 @@ export class AgentLoop {
       screenshot: this.pendingScreenshot ?? frame,
       screenshotIsVideoFrame: !this.pendingScreenshot && !!frame,
       video: video?.context ?? null,
+      board: this.deps.getBoard?.() ?? null,
       lookupResults: this.pendingLookup,
       planResults: this.pendingPlan,
       readout: this.pendingReadout,

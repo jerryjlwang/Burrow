@@ -173,6 +173,8 @@ export interface AgentInput {
   readout?: string | null;
   /** Longitudinal learner diagnostics, pre-formatted (see formatDiagnostics). */
   learner?: string | null;
+  /** The drawing on screen right now, as a numbered list (see describeSketch); null when nothing is drawn. */
+  board?: string | null;
   /** The video the student is watching, as the rabbit has followed it so far. */
   video?: VideoContext | null;
   /** `screenshot` is the frame read off the video element, not a viewport capture — its pixels are NOT click coordinates. */

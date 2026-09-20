@@ -67,3 +67,36 @@ export function parseSketch(spec: string): Sketch {
   }
   return { title, items };
 }
+
+/** One item as the spec line that would draw it — what the model wrote, and what it reads back. */
+function itemLine(item: SketchItem): string {
+  if (item.kind === "text") return item.text;
+  const { kind, n, text } = item.stroke;
+  return `${kind} ${n.join(" ")}${text ? ` ${text}` : ""}`;
+}
+
+/**
+ * The drawing on screen as a numbered list, for the agent's context. Without it the model cannot
+ * know what is there, so it can neither extend a drawing sensibly nor erase part of one; the
+ * numbers are what an erase refers to.
+ */
+export function describeSketch(sketch: Sketch): string {
+  return sketch.items.map((item, i) => `${i + 1}. ${itemLine(item)}`).join("\n");
+}
+
+/**
+ * Erase by number: "all", or item numbers from {@link describeSketch} in any mix of "2 5", "2,5"
+ * and "3-6". Numbers that are not on the board are ignored; `erased` says how many items went.
+ */
+export function eraseFromSketch(items: SketchItem[], spec: string): { items: SketchItem[]; erased: number } {
+  if (/^\s*(all|everything)\s*$/i.test(spec)) return { items: [], erased: items.length };
+  const doomed = new Set<number>();
+  for (const part of spec.split(/[\s,]+/).filter(Boolean)) {
+    const range = /^(\d+)(?:-(\d+))?$/.exec(part);
+    if (!range) continue;
+    const from = Number(range[1]);
+    const to = range[2] ? Number(range[2]) : from;
+    for (let n = Math.min(from, to); n <= Math.max(from, to) && n <= items.length; n++) if (n >= 1) doomed.add(n);
+  }
+  return { items: items.filter((_, i) => !doomed.has(i + 1)), erased: doomed.size };
+}

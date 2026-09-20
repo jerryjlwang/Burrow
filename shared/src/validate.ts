@@ -117,10 +117,11 @@ export function validateDecision(raw: unknown): DecisionValidation {
     if ((d.action === "navigate" || d.action === "open_tab") && (!d.url || !/^https?:\/\//i.test(d.url))) return { ok: false, error: `${d.action} requires an absolute http(s) url` };
     if (d.action === "switch_tab" && d.tabId === null) return { ok: false, error: "switch_tab requires a tabId from the open tabs list" };
     if (d.action === "look_up" && (!d.text || !d.text.trim())) return { ok: false, error: "look_up requires text (the query)" };
-    if (d.action === "sketch" && (!d.text || !d.text.trim())) return { ok: false, error: "sketch requires text (the lines to draw)" };
+    if (d.action === "sketch" && (!d.text || !d.text.trim())) return { ok: false, error: d.value === "erase" ? 'sketch erase requires text: "all", or the item numbers from DRAWING ON SCREEN' : "sketch requires text (the lines to draw)" };
+    if (d.action === "sketch" && d.value === "erase" && !/^\s*(all|everything|[\d\s,-]+)\s*$/i.test(d.text!)) return { ok: false, error: 'sketch erase text must be "all" or item numbers like "2 5" or "3-6"' };
     if (d.action === "sketch" && d.text!.length > 1200) return { ok: false, error: "sketch text too long" };
-    // sketch's value is a mode switch: "add" extends the drawing on screen; anything else means a fresh one.
-    if (d.action === "sketch" && d.value !== null && d.value !== "add") d.value = null;
+    // sketch's value is a mode switch: "add" extends the drawing on screen, "erase" removes from it; anything else means a fresh one.
+    if (d.action === "sketch" && d.value !== null && d.value !== "add" && d.value !== "erase") d.value = null;
     if (d.action === "look_up" && d.text!.length > 200) return { ok: false, error: "look_up query too long" };
     if (d.action === "make_plan" && (!d.text || !d.text.trim())) return { ok: false, error: "make_plan requires text (what the student wants to learn)" };
     if (d.action === "make_plan" && d.text!.length > 200) return { ok: false, error: "make_plan goal too long" };
