@@ -1,4 +1,4 @@
-# Bunny — a learning companion that lives in your browser
+# Bunny — HackMIT Education Hack Winner
 
 Bunny is a Chrome extension: a small animated character in the bottom‑right corner of every page. It **sees the page you're on**, **talks with you by voice**, **points at things**, **clicks and types when you ask**, and — the part that matters most — **notices when you're stuck and offers a hint** instead of doing your work for you.
 
